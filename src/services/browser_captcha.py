@@ -4,10 +4,35 @@
 """
 import asyncio
 import time
-from typing import Optional
+import re
+from typing import Optional, Dict
 from playwright.async_api import async_playwright, Browser, BrowserContext
 
 from ..core.logger import debug_logger
+
+
+def parse_proxy_url(proxy_url: str) -> Optional[Dict[str, str]]:
+    """解析代理URL，分离协议、主机、端口、认证信息
+
+    Args:
+        proxy_url: 代理URL，格式：protocol://[username:password@]host:port
+
+    Returns:
+        代理配置字典，包含server、username、password（如果有认证）
+    """
+    proxy_pattern = r'^(socks5|http|https)://(?:([^:]+):([^@]+)@)?([^:]+):(\d+)$'
+    match = re.match(proxy_pattern, proxy_url)
+
+    if match:
+        protocol, username, password, host, port = match.groups()
+        proxy_config = {'server': f'{protocol}://{host}:{port}'}
+
+        if username and password:
+            proxy_config['username'] = username
+            proxy_config['password'] = password
+
+        return proxy_config
+    return None
 
 
 class BrowserCaptchaService:
@@ -60,9 +85,15 @@ class BrowserCaptchaService:
                 ]
             }
 
-            # 如果有代理，添加代理配置
+            # 如果有代理，解析并添加代理配置
             if proxy_url:
-                launch_options['proxy'] = {'server': proxy_url}
+                proxy_config = parse_proxy_url(proxy_url)
+                if proxy_config:
+                    launch_options['proxy'] = proxy_config
+                    auth_info = "auth=yes" if 'username' in proxy_config else "auth=no"
+                    debug_logger.log_info(f"[BrowserCaptcha] 代理配置: {proxy_config['server']} ({auth_info})")
+                else:
+                    debug_logger.log_warning(f"[BrowserCaptcha] 代理URL格式错误: {proxy_url}")
 
             self.browser = await self.playwright.chromium.launch(**launch_options)
             self._initialized = True
