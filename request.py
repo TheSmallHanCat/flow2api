@@ -1,3 +1,9 @@
+# CLI test for backend image generation API
+# Independent script to test the image generation functionality
+
+# Author: DAntyNoel
+# Date: 2025-12-18
+
 import os
 import json
 import re
@@ -5,26 +11,33 @@ import base64
 import aiohttp # Async test. Need to install
 import asyncio
 
+class Flow2APIRequestError(Exception):
+    """Custom exception for Flow2API request errors."""
+    pass
 
 # --- 配置区域 ---
 BASE_URL = os.getenv('GEMINI_FLOW2API_URL', 'http://127.0.0.1:8000')
 BACKEND_URL = BASE_URL + "/v1/chat/completions"
 API_KEY = os.getenv('GEMINI_FLOW2API_APIKEY', 'Bearer han1234')
-if API_KEY is None:
-    raise ValueError('[gemini flow2api] api key not set')
 MODEL_LANDSCAPE = "gemini-3.0-pro-image-landscape"
 MODEL_PORTRAIT = "gemini-3.0-pro-image-portrait"
+
+async def auto_create_token():
+    """模拟自动创建Token的逻辑（示例）"""
+    from src.services.token_manager import TokenManager
 
 # 修改: 增加 model 参数，默认为 None
 async def request_backend_generation(
         prompt: str,
         images: list[bytes] = None,
-        model: str = None) -> bytes | None:
+        model: str = None,
+        auto_create_st: bool = False) -> bytes | None:
     """
     请求后端生成图片。
     :param prompt: 提示词
     :param images: 图片二进制列表
     :param model: 指定模型名称 (可选)
+    :param auto_create_st: 是否在所有token均失效时自动创建新的Token (可选)
     :return: 成功返回图片bytes，失败返回None
     """
     # 更新token
@@ -79,7 +92,14 @@ async def request_backend_generation(
                             msg += '\nAccess Token 已失效，需重新配置。'
                         elif '400' in msg:
                             msg += '\n返回内容被拦截。'
-                        raise Exception(msg)
+                        elif '403' in msg:
+                            msg += '\nreCaptcha 验证失败。'
+                        elif '所有Token' in msg:
+                            # 没有可用Token，自动获取一个新的token
+                            pass
+                        
+                        print(f"[Backend Error] {chunk}")
+                        raise Flow2APIRequestError(msg)
 
                     if not line_str or not line_str.startswith('data: '):
                         continue
@@ -92,7 +112,7 @@ async def request_backend_generation(
                         chunk = json.loads(data_str)
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
                         
-                        # 打印思考过程
+                        # 输出流式内容
                         if "reasoning_content" in delta:
                             print(delta['reasoning_content'], end="", flush=True)
 
@@ -114,8 +134,10 @@ async def request_backend_generation(
                         return image_bytes
                     else:
                         print(f"[Backend Error] 图片下载失败: {img_resp.status}")
+    except Flow2APIRequestError as e:
+        raise e
     except Exception as e:
-        print(f"[Backend Exception] {e}")
+        print(f"[Backend Exception] Unexpected error: {e}")
         raise e 
         
     return None
@@ -148,3 +170,15 @@ if __name__ == '__main__':
     if os.name == 'nt':  # Windows 兼容性
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
+
+    
+# if __name__ == '__main__':
+#     from src.services.browser_captcha_personal import BrowserCaptchaService
+#     async def test():
+#         service = await BrowserCaptchaService.get_instance()
+#         await service.open_login_window()
+#         cookies = await service.get_flow_cookies()
+#         print(cookies)
+#         await asyncio.sleep(60)
+    
+#     asyncio.run(test())

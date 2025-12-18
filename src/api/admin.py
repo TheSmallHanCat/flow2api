@@ -878,3 +878,152 @@ async def get_captcha_config(token: str = Depends(verify_admin_token)):
         "browser_proxy_enabled": captcha_config.browser_proxy_enabled,
         "browser_proxy_url": captcha_config.browser_proxy_url or ""
     }
+
+# ========== Browser Cookie 获取接口 ==========
+# 警告，这个获取接口会创建一个新的st，请谨慎使用，避免滥用导致账号异常。
+
+@router.post("/api/browser/get-flow-cookies")
+async def get_flow_cookies_api(token: str = Depends(verify_admin_token)):
+    """
+    调用内置浏览器访问 Google Flow 并获取 cookies
+    
+    Returns:
+        {
+            "success": bool,
+            "cookies": {
+                "simple": {cookie_name: cookie_value},
+                "detailed": [full_cookie_objects]
+            },
+            "message": str
+        }
+    """
+    try:
+        # 获取浏览器服务
+        from ..services.browser_captcha_personal import BrowserCaptchaService
+        browser_service = await BrowserCaptchaService.get_instance(db)
+        
+        if not browser_service:
+            return {
+                "success": False,
+                "message": "浏览器服务未初始化"
+            }
+        
+        # 获取 cookies
+        cookie_result = await browser_service.get_flow_cookies()
+        
+        if not cookie_result:
+            return {
+                "success": False,
+                "message": "获取 cookies 失败"
+            }
+        
+        return {
+            "success": True,
+            "cookies": cookie_result,
+            "message": "成功获取 cookies"
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"获取 cookies 时出错: {str(e)}"
+        }
+
+
+@router.post("/api/browser/auto-add-token")
+async def auto_add_token_from_browser(token: str = Depends(verify_admin_token)):
+    """
+    自动从浏览器获取 cookies 并添加 Token
+    
+    该接口会：
+    1. 访问 Google Flow 并获取 cookies
+    2. 从 cookies 中提取 session token
+    3. 自动添加到 token 管理器
+    
+    Returns:
+        {
+            "success": bool,
+            "token": Token 对象 (如果成功),
+            "message": str
+        }
+    """
+    try:
+        # 获取浏览器服务
+        from ..services.browser_captcha_personal import BrowserCaptchaService
+        browser_service = await BrowserCaptchaService.get_instance(db)
+        
+        if not browser_service:
+            return {
+                "success": False,
+                "message": "浏览器服务未初始化"
+            }
+        
+        # 获取 cookies
+        cookie_result = await browser_service.get_flow_cookies()
+        
+        if not cookie_result:
+            return {
+                "success": False,
+                "message": "获取 cookies 失败"
+            }
+        
+        cookies_simple = cookie_result.get('simple', {})
+        
+        # 查找 session token
+        st = None
+        possible_keys = [
+            '__Secure-next-auth.session-token',
+            'next-auth.session-token',
+            '__Secure-session-token',
+            'session-token'
+        ]
+        
+        for key in possible_keys:
+            if key in cookies_simple:
+                st = cookies_simple[key]
+                break
+        
+        if not st:
+            return {
+                "success": False,
+                "message": f"未找到有效的 session token。可用的 cookies: {list(cookies_simple.keys())}"
+            }
+        
+        # 添加 token
+        try:
+            new_token = await token_manager.add_token(
+                st=st,
+                remark="Auto-generated from browser (API)",
+                image_enabled=True,
+                video_enabled=True
+            )
+            
+            return {
+                "success": True,
+                "token": {
+                    "id": new_token.id,
+                    "email": new_token.email,
+                    "name": new_token.name,
+                    "credits": new_token.credits,
+                    "is_active": new_token.is_active
+                },
+                "message": f"成功添加 Token: {new_token.email}"
+            }
+            
+        except ValueError as e:
+            # Token 可能已存在
+            if "已存在" in str(e):
+                return {
+                    "success": False,
+                    "message": f"Token 已存在: {str(e)}"
+                }
+            else:
+                raise
+                
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "message": f"添加 Token 时出错: {str(e)}",
+            "traceback": traceback.format_exc()
+        }
