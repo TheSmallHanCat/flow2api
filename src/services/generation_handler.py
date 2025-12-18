@@ -8,6 +8,7 @@ from ..core.logger import debug_logger
 from ..core.config import config
 from ..core.models import Task, RequestLog
 from .file_cache import FileCache
+from .browser_captcha_personal import BrowserCaptchaService
 
 
 # Model configuration
@@ -193,12 +194,13 @@ MODEL_CONFIG = {
 class GenerationHandler:
     """统一生成处理器"""
 
-    def __init__(self, flow_client, token_manager, load_balancer, db, concurrency_manager, proxy_manager):
+    def __init__(self, flow_client, token_manager, load_balancer, db, concurrency_manager, proxy_manager, browser_service=None):
         self.flow_client = flow_client
         self.token_manager = token_manager
         self.load_balancer = load_balancer
         self.db = db
         self.concurrency_manager = concurrency_manager
+        self.browser_service = browser_service
         self.file_cache = FileCache(
             cache_dir="tmp",
             default_timeout=config.cache_timeout,
@@ -286,12 +288,32 @@ class GenerationHandler:
             token = await self.load_balancer.select_token(for_video_generation=True, model=model)
 
         if not token:
-            error_msg = self._get_no_token_error_message(generation_type)
-            debug_logger.log_error(f"[GENERATION] {error_msg}")
+            # 尝试通过浏览器自动获取新 token
+            debug_logger.log_info(f"[GENERATION] 未找到可用Token，尝试通过浏览器自动获取...")
             if stream:
-                yield self._create_stream_chunk(f"❌ {error_msg}\n")
-            yield self._create_error_response(error_msg)
-            return
+                yield self._create_stream_chunk("🔄 未找到可用Token，正在尝试自动获取新Token...\n")
+            
+            auto_token_success = await self._try_auto_get_token()
+            
+            if auto_token_success:
+                debug_logger.log_info(f"[GENERATION] 自动获取Token成功，重新选择Token...")
+                if stream:
+                    yield self._create_stream_chunk("✅ 新Token已添加，重新尝试生成...\n")
+                
+                # 重新选择 token
+                if generation_type == "image":
+                    token = await self.load_balancer.select_token(for_image_generation=True, model=model)
+                else:
+                    token = await self.load_balancer.select_token(for_video_generation=True, model=model)
+            
+            # 如果还是没有 token，返回错误
+            if not token:
+                error_msg = self._get_no_token_error_message(generation_type)
+                debug_logger.log_error(f"[GENERATION] {error_msg}")
+                if stream:
+                    yield self._create_stream_chunk(f"❌ {error_msg}\n")
+                yield self._create_error_response(error_msg)
+                return
 
         debug_logger.log_info(f"[GENERATION] 已选择Token: {token.id} ({token.email})")
 
@@ -872,4 +894,80 @@ class GenerationHandler:
         except Exception as e:
             # 日志记录失败不影响主流程
             debug_logger.log_error(f"Failed to log request: {e}")
+
+    async def _try_auto_get_token(self) -> bool:
+        """
+        尝试通过浏览器自动获取新 token
+        
+        Returns:
+            bool: 成功返回 True，失败返回 False
+        """
+        try:
+            # 检查是否配置了浏览器服务
+            if not self.browser_service:
+                debug_logger.log_warning("[AUTO_TOKEN] 浏览器服务未配置，无法自动获取Token")
+                return False
+            
+            debug_logger.log_info("[AUTO_TOKEN] 开始通过浏览器获取 cookies...")
+            
+            # 获取 cookies
+            cookie_result = await self.browser_service.get_flow_cookies()
+            
+            if not cookie_result:
+                debug_logger.log_error("[AUTO_TOKEN] 获取 cookies 失败")
+                return False
+            
+            cookies_simple = cookie_result.get('simple', {})
+            
+            # 查找 session token (可能的 cookie 名称)
+            st = None
+            possible_keys = [
+                '__Secure-next-auth.session-token',
+                'next-auth.session-token',
+                '__Secure-session-token',
+                'session-token'
+            ]
+            
+            for key in possible_keys:
+                if key in cookies_simple:
+                    st = cookies_simple[key]
+                    debug_logger.log_info(f"[AUTO_TOKEN] 找到 session token (key: {key})")
+                    break
+            
+            if not st:
+                debug_logger.log_error(f"[AUTO_TOKEN] 未找到有效的 session token。可用的 cookies: {list(cookies_simple.keys())}")
+                return False
+            
+            # 添加 token
+            debug_logger.log_info(f"[AUTO_TOKEN] 尝试添加新 Token (ST: {st[:20]}...)")
+            
+            try:
+                new_token = await self.token_manager.add_token(
+                    st=st,
+                    remark="Auto-generated from browser",
+                    image_enabled=True,
+                    video_enabled=True
+                )
+                debug_logger.log_info(f"[AUTO_TOKEN] ✅ 成功添加新 Token (ID: {new_token.id}, Email: {new_token.email})")
+                return True
+                
+            except ValueError as e:
+                # Token 可能已存在
+                if "已存在" in str(e):
+                    debug_logger.log_warning(f"[AUTO_TOKEN] Token 已存在: {str(e)}")
+                    # 尝试启用该 token
+                    existing_token = await self.db.get_token_by_st(st)
+                    if existing_token and not existing_token.is_active:
+                        await self.token_manager.enable_token(existing_token.id)
+                        debug_logger.log_info(f"[AUTO_TOKEN] 已启用现有 Token (ID: {existing_token.id})")
+                        return True
+                    return False
+                else:
+                    raise
+                    
+        except Exception as e:
+            debug_logger.log_error(f"[AUTO_TOKEN] 自动获取Token失败: {str(e)}")
+            import traceback
+            debug_logger.log_error(f"[AUTO_TOKEN] 错误详情: {traceback.format_exc()}")
+            return False
 

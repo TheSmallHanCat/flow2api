@@ -84,6 +84,21 @@ async def lifespan(app: FastAPI):
         browser_service = await BrowserCaptchaService.get_instance(db)
         print("✓ Browser captcha service initialized (headless mode)")
 
+    # Initialize generation_handler with browser_service
+    global generation_handler
+    generation_handler = GenerationHandler(
+        flow_client,
+        token_manager,
+        load_balancer,
+        db,
+        concurrency_manager,
+        proxy_manager,
+        browser_service  # 传入 browser_service
+    )
+    
+    # Set generation_handler for routes
+    routes.set_generation_handler(generation_handler)
+
     # Initialize concurrency manager
     tokens = await token_manager.get_all_tokens()
     await concurrency_manager.initialize(tokens)
@@ -132,24 +147,18 @@ async def lifespan(app: FastAPI):
     print("✓ 429 auto-unban task stopped")
 
 
-# Initialize components
+# Initialize components (generation_handler will be created in lifespan after browser_service is ready)
 db = Database()
 proxy_manager = ProxyManager(db)
 flow_client = FlowClient(proxy_manager)
 token_manager = TokenManager(db, flow_client)
 concurrency_manager = ConcurrencyManager()
 load_balancer = LoadBalancer(token_manager, concurrency_manager)
-generation_handler = GenerationHandler(
-    flow_client,
-    token_manager,
-    load_balancer,
-    db,
-    concurrency_manager,
-    proxy_manager  # 添加 proxy_manager 参数
-)
 
-# Set dependencies
-routes.set_generation_handler(generation_handler)
+# These will be set later in lifespan
+generation_handler = None
+
+# Set dependencies (will be updated in lifespan)
 admin.set_dependencies(token_manager, proxy_manager, db)
 
 # Create FastAPI app
