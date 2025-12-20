@@ -256,6 +256,13 @@ class Database:
                 captcha_columns_to_add = [
                     ("browser_proxy_enabled", "BOOLEAN DEFAULT 0"),
                     ("browser_proxy_url", "TEXT"),
+                    ("refresh_enabled", "BOOLEAN DEFAULT 1"),
+                    ("refresh_min_interval", "INTEGER DEFAULT 300"),
+                    ("refresh_max_interval", "INTEGER DEFAULT 7200"),
+                    ("refresh_visit_duration_min", "INTEGER DEFAULT 10"),
+                    ("refresh_visit_duration_max", "INTEGER DEFAULT 30"),
+                    ("refresh_scroll_probability", "REAL DEFAULT 0.7"),
+                    ("refresh_mouse_move_probability", "REAL DEFAULT 0.5"),
                 ]
 
                 for col_name, col_type in captcha_columns_to_add:
@@ -458,6 +465,13 @@ class Database:
                     page_action TEXT DEFAULT 'FLOW_GENERATION',
                     browser_proxy_enabled BOOLEAN DEFAULT 0,
                     browser_proxy_url TEXT,
+                    refresh_enabled BOOLEAN DEFAULT 1,
+                    refresh_min_interval INTEGER DEFAULT 300,
+                    refresh_max_interval INTEGER DEFAULT 7200,
+                    refresh_visit_duration_min INTEGER DEFAULT 10,
+                    refresh_visit_duration_max INTEGER DEFAULT 30,
+                    refresh_scroll_probability REAL DEFAULT 0.7,
+                    refresh_mouse_move_probability REAL DEFAULT 0.5,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -1139,7 +1153,14 @@ class Database:
         yescaptcha_api_key: str = None,
         yescaptcha_base_url: str = None,
         browser_proxy_enabled: bool = None,
-        browser_proxy_url: str = None
+        browser_proxy_url: str = None,
+        refresh_enabled: bool = None,
+        refresh_min_interval: int = None,
+        refresh_max_interval: int = None,
+        refresh_visit_duration_min: int = None,
+        refresh_visit_duration_max: int = None,
+        refresh_scroll_probability: float = None,
+        refresh_mouse_move_probability: float = None
     ):
         """Update captcha configuration"""
         async with aiosqlite.connect(self.db_path) as db:
@@ -1154,23 +1175,49 @@ class Database:
                 new_base_url = yescaptcha_base_url if yescaptcha_base_url is not None else current.get("yescaptcha_base_url", "https://api.yescaptcha.com")
                 new_proxy_enabled = browser_proxy_enabled if browser_proxy_enabled is not None else current.get("browser_proxy_enabled", False)
                 new_proxy_url = browser_proxy_url if browser_proxy_url is not None else current.get("browser_proxy_url")
+                new_refresh_enabled = refresh_enabled if refresh_enabled is not None else current.get("refresh_enabled", True)
+                new_refresh_min = refresh_min_interval if refresh_min_interval is not None else current.get("refresh_min_interval", 300)
+                new_refresh_max = refresh_max_interval if refresh_max_interval is not None else current.get("refresh_max_interval", 7200)
+                new_visit_min = refresh_visit_duration_min if refresh_visit_duration_min is not None else current.get("refresh_visit_duration_min", 10)
+                new_visit_max = refresh_visit_duration_max if refresh_visit_duration_max is not None else current.get("refresh_visit_duration_max", 30)
+                new_scroll_prob = refresh_scroll_probability if refresh_scroll_probability is not None else current.get("refresh_scroll_probability", 0.7)
+                new_mouse_prob = refresh_mouse_move_probability if refresh_mouse_move_probability is not None else current.get("refresh_mouse_move_probability", 0.5)
 
                 await db.execute("""
                     UPDATE captcha_config
                     SET captcha_method = ?, yescaptcha_api_key = ?, yescaptcha_base_url = ?,
-                        browser_proxy_enabled = ?, browser_proxy_url = ?, updated_at = CURRENT_TIMESTAMP
+                        browser_proxy_enabled = ?, browser_proxy_url = ?,
+                        refresh_enabled = ?, refresh_min_interval = ?, refresh_max_interval = ?,
+                        refresh_visit_duration_min = ?, refresh_visit_duration_max = ?,
+                        refresh_scroll_probability = ?, refresh_mouse_move_probability = ?,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE id = 1
-                """, (new_method, new_api_key, new_base_url, new_proxy_enabled, new_proxy_url))
+                """, (new_method, new_api_key, new_base_url, new_proxy_enabled, new_proxy_url,
+                      new_refresh_enabled, new_refresh_min, new_refresh_max,
+                      new_visit_min, new_visit_max, new_scroll_prob, new_mouse_prob))
             else:
                 new_method = captcha_method if captcha_method is not None else "yescaptcha"
                 new_api_key = yescaptcha_api_key if yescaptcha_api_key is not None else ""
                 new_base_url = yescaptcha_base_url if yescaptcha_base_url is not None else "https://api.yescaptcha.com"
                 new_proxy_enabled = browser_proxy_enabled if browser_proxy_enabled is not None else False
                 new_proxy_url = browser_proxy_url
+                new_refresh_enabled = refresh_enabled if refresh_enabled is not None else True
+                new_refresh_min = refresh_min_interval if refresh_min_interval is not None else 300
+                new_refresh_max = refresh_max_interval if refresh_max_interval is not None else 7200
+                new_visit_min = refresh_visit_duration_min if refresh_visit_duration_min is not None else 10
+                new_visit_max = refresh_visit_duration_max if refresh_visit_duration_max is not None else 30
+                new_scroll_prob = refresh_scroll_probability if refresh_scroll_probability is not None else 0.7
+                new_mouse_prob = refresh_mouse_move_probability if refresh_mouse_move_probability is not None else 0.5
 
                 await db.execute("""
-                    INSERT INTO captcha_config (id, captcha_method, yescaptcha_api_key, yescaptcha_base_url, browser_proxy_enabled, browser_proxy_url)
-                    VALUES (1, ?, ?, ?, ?, ?)
-                """, (new_method, new_api_key, new_base_url, new_proxy_enabled, new_proxy_url))
+                    INSERT INTO captcha_config (id, captcha_method, yescaptcha_api_key, yescaptcha_base_url, 
+                                              browser_proxy_enabled, browser_proxy_url,
+                                              refresh_enabled, refresh_min_interval, refresh_max_interval,
+                                              refresh_visit_duration_min, refresh_visit_duration_max,
+                                              refresh_scroll_probability, refresh_mouse_move_probability)
+                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (new_method, new_api_key, new_base_url, new_proxy_enabled, new_proxy_url,
+                      new_refresh_enabled, new_refresh_min, new_refresh_max,
+                      new_visit_min, new_visit_max, new_scroll_prob, new_mouse_prob))
 
             await db.commit()

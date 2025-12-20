@@ -213,6 +213,83 @@ class Config:
             self._config["captcha"] = {}
         self._config["captcha"]["yescaptcha_base_url"] = base_url
 
+    # Browser refresh configuration (for personal mode)
+    @property
+    def refresh_enabled(self) -> bool:
+        """Get refresh enabled status"""
+        return self._config.get("captcha", {}).get("refresh_enabled", True)
+
+    def set_refresh_enabled(self, enabled: bool):
+        """Set refresh enabled status"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["refresh_enabled"] = enabled
+
+    @property
+    def refresh_min_interval(self) -> int:
+        """Get refresh min interval in seconds"""
+        return self._config.get("captcha", {}).get("refresh_min_interval", 300)
+
+    def set_refresh_min_interval(self, interval: int):
+        """Set refresh min interval in seconds"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["refresh_min_interval"] = interval
+
+    @property
+    def refresh_max_interval(self) -> int:
+        """Get refresh max interval in seconds"""
+        return self._config.get("captcha", {}).get("refresh_max_interval", 7200)
+
+    def set_refresh_max_interval(self, interval: int):
+        """Set refresh max interval in seconds"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["refresh_max_interval"] = interval
+
+    @property
+    def refresh_visit_duration_min(self) -> int:
+        """Get refresh visit duration min in seconds"""
+        return self._config.get("captcha", {}).get("refresh_visit_duration_min", 10)
+
+    def set_refresh_visit_duration_min(self, duration: int):
+        """Set refresh visit duration min in seconds"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["refresh_visit_duration_min"] = duration
+
+    @property
+    def refresh_visit_duration_max(self) -> int:
+        """Get refresh visit duration max in seconds"""
+        return self._config.get("captcha", {}).get("refresh_visit_duration_max", 30)
+
+    def set_refresh_visit_duration_max(self, duration: int):
+        """Set refresh visit duration max in seconds"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["refresh_visit_duration_max"] = duration
+
+    @property
+    def refresh_scroll_probability(self) -> float:
+        """Get refresh scroll probability (0-1)"""
+        return self._config.get("captcha", {}).get("refresh_scroll_probability", 0.7)
+
+    def set_refresh_scroll_probability(self, probability: float):
+        """Set refresh scroll probability (0-1)"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["refresh_scroll_probability"] = probability
+
+    @property
+    def refresh_mouse_move_probability(self) -> float:
+        """Get refresh mouse move probability (0-1)"""
+        return self._config.get("captcha", {}).get("refresh_mouse_move_probability", 0.5)
+
+    def set_refresh_mouse_move_probability(self, probability: float):
+        """Set refresh mouse move probability (0-1)"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["refresh_mouse_move_probability"] = probability
 
 # Global config instance
 config = Config()
