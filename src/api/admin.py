@@ -887,6 +887,7 @@ async def update_captcha_config(
             await main.browser_service.reload_config()
         except Exception as e:
             print(f"⚠️ Failed to reload browser service config: {e}")
+            return {"success": False, "message": f"验证码配置更新成功，但重载浏览器服务配置失败: {e}"}
 
     return {"success": True, "message": "验证码配置更新成功"}
 

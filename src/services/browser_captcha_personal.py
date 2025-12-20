@@ -175,8 +175,11 @@ class BrowserCaptchaService:
                 if page:
                     try:
                         await page.close()
-                    except:
-                        pass
+                    except Exception as e:
+                        # 忽略页面关闭时的常见错误，但记录意外情况以便排查
+                        msg = str(e)
+                        if "Target page, context or browser has been closed" not in msg and "Connection closed" not in msg:
+                            debug_logger.log_warning(f"[BrowserCaptcha] 页面关闭警告: {msg}")
         finally:
             if was_refreshing and self._initialized:
                 await self.start_background_refresh()
