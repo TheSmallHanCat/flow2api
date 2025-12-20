@@ -154,6 +154,14 @@ class CaptchaConfig(BaseModel):
     page_action: str = "FLOW_GENERATION"
     browser_proxy_enabled: bool = False  # 浏览器打码是否启用代理
     browser_proxy_url: Optional[str] = None  # 浏览器打码代理URL
+    # Browser refresh configuration (for personal mode)
+    refresh_enabled: bool = True  # 是否启用后台刷新
+    refresh_min_interval: int = 300  # 最小间隔(秒) - 5分钟
+    refresh_max_interval: int = 7200  # 最大间隔(秒) - 2小时
+    refresh_visit_duration_min: int = 10  # 每次访问停留时间最小值(秒)
+    refresh_visit_duration_max: int = 30  # 每次访问停留时间最大值(秒)
+    refresh_scroll_probability: float = 0.7  # 滚动页面的概率 (0-1)
+    refresh_mouse_move_probability: float = 0.5  # 移动鼠标的概率 (0-1)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

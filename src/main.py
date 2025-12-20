@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
     config.set_yescaptcha_base_url(captcha_config.yescaptcha_base_url)
 
     # Initialize browser captcha service if needed
-    browser_service = None
+    global browser_service
     if captcha_config.captcha_method == "personal":
         from .services.browser_captcha_personal import BrowserCaptchaService
         browser_service = await BrowserCaptchaService.get_instance(db)
@@ -147,6 +147,7 @@ generation_handler = GenerationHandler(
     concurrency_manager,
     proxy_manager  # 添加 proxy_manager 参数
 )
+browser_service = None  # Global browser service instance
 
 # Set dependencies
 routes.set_generation_handler(generation_handler)

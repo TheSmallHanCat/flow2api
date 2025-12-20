@@ -43,7 +43,7 @@ class BrowserCaptchaService:
         self.refresh_config = {
             'enabled': True,  # 是否启用后台刷新
             'min_interval': 300,  # 最小间隔(秒) - 5分钟
-            'max_interval': 900,  # 最大间隔(秒) - 15分钟
+            'max_interval': 7200,  # 最大间隔(秒) - 2小时
             'visit_duration': (10, 30),  # 每次访问停留时间范围(秒)
             'scroll_probability': 0.7,  # 滚动页面的概率
             'mouse_move_probability': 0.5,  # 移动鼠标的概率
@@ -68,6 +68,20 @@ class BrowserCaptchaService:
                 captcha_config = await self.db.get_captcha_config()
                 if captcha_config.browser_proxy_enabled and captcha_config.browser_proxy_url:
                     proxy_url = captcha_config.browser_proxy_url
+                
+                # 从数据库加载refresh配置
+                self.refresh_config['enabled'] = captcha_config.refresh_enabled
+                self.refresh_config['min_interval'] = captcha_config.refresh_min_interval
+                self.refresh_config['max_interval'] = captcha_config.refresh_max_interval
+                self.refresh_config['visit_duration'] = (
+                    captcha_config.refresh_visit_duration_min,
+                    captcha_config.refresh_visit_duration_max
+                )
+                self.refresh_config['scroll_probability'] = captcha_config.refresh_scroll_probability
+                self.refresh_config['mouse_move_probability'] = captcha_config.refresh_mouse_move_probability
+                
+                debug_logger.log_info(f"[BrowserCaptcha] 已加载refresh配置: enabled={self.refresh_config['enabled']}, "
+                                    f"interval={self.refresh_config['min_interval']}-{self.refresh_config['max_interval']}s")
 
             debug_logger.log_info(f"[BrowserCaptcha] 正在启动浏览器 (用户数据目录: {self.user_data_dir})...")
             self.playwright = await async_playwright().start()
@@ -173,17 +187,30 @@ class BrowserCaptchaService:
             await self.stop_background_refresh()
             
             if self.context:
-                await self.context.close()
-                self.context = None
+                try:
+                    await self.context.close()
+                except Exception as e:
+                    # 忽略关闭时的连接错误（程序退出时正常现象）
+                    if "Connection closed" not in str(e) and "Target page, context or browser has been closed" not in str(e):
+                        debug_logger.log_warning(f"[BrowserCaptcha] Context关闭警告: {str(e)}")
+                finally:
+                    self.context = None
             
             if self.playwright:
-                await self.playwright.stop()
-                self.playwright = None
+                try:
+                    await self.playwright.stop()
+                except Exception as e:
+                    # 忽略 playwright 停止时的错误
+                    if "Connection closed" not in str(e):
+                        debug_logger.log_warning(f"[BrowserCaptcha] Playwright停止警告: {str(e)}")
+                finally:
+                    self.playwright = None
                 
             self._initialized = False
             debug_logger.log_info("[BrowserCaptcha] 浏览器服务已关闭")
         except Exception as e:
-            debug_logger.log_error(f"[BrowserCaptcha] 关闭异常: {str(e)}")
+            # 只记录意外的错误
+            debug_logger.log_warning(f"[BrowserCaptcha] 关闭时发生异常: {str(e)}")
 
     async def start_background_refresh(self):
         """启动后台刷新任务"""
@@ -246,6 +273,9 @@ class BrowserCaptchaService:
                 "https://www.google.com",
                 "https://labs.google/fx/tools/flow",
                 "https://www.google.com/search?q=google+gemini",
+                "https://www.google.com/search?q=deepseek",
+                "https://www.google.com/search?q=claude+ai",
+                "https://www.google.com/search?q=openai+gpt-5",
                 "https://www.google.com/search?q=openai+chatgpt",
                 "https://www.wikipedia.org",
             ]
@@ -253,9 +283,15 @@ class BrowserCaptchaService:
             
             debug_logger.log_info(f"[BrowserRefresh] 🌐 模拟访问: {target_url}")
             await page.goto(target_url, wait_until="domcontentloaded")
-            visit_duration = random.uniform(*self.refresh_config['visit_duration'])
-            await self._simulate_human_behavior(page, visit_duration)
-            debug_logger.log_info(f"[BrowserRefresh] ✅ 访问完成,停留时长: {visit_duration:.1f}秒")
+            
+            # 在主页面停留并执行行为
+            main_visit_duration = random.uniform(*self.refresh_config['visit_duration']) * 0.6  # 60%的时间在主页面
+            await self._simulate_human_behavior(page, main_visit_duration)
+            
+            # 提取页面中的所有链接并随机访问1-3个
+            await self._visit_random_links(page)
+            
+            debug_logger.log_info(f"[BrowserRefresh] ✅ 访问完成")
             
         except Exception as e:
             debug_logger.log_error(f"[BrowserRefresh] 模拟访问异常: {str(e)}")
@@ -265,6 +301,63 @@ class BrowserCaptchaService:
                     await page.close()
                 except:
                     pass
+
+    async def _visit_random_links(self, page: Page):
+        """提取页面链接并随机访问1-3个"""
+        try:
+            # 提取页面中所有的链接
+            links = await page.evaluate("""
+                () => {
+                    const anchors = Array.from(document.querySelectorAll('a[href]'));
+                    return anchors
+                        .map(a => a.href)
+                        .filter(href => {
+                            // 过滤掉无效链接和特殊协议
+                            return href && 
+                                   href.startsWith('http') && 
+                                   !href.includes('javascript:') &&
+                                   !href.includes('mailto:') &&
+                                   !href.includes('#') &&
+                                   href.length < 200;  // 避免过长的URL
+                        })
+                        .slice(0, 50);  // 最多取前50个
+                }
+            """)
+            
+            if not links or len(links) == 0:
+                debug_logger.log_info("[BrowserRefresh] 未找到可访问的链接")
+                return
+            
+            # 随机选择访问1-3个链接
+            num_links = random.randint(1, min(3, len(links)))
+            selected_links = random.sample(links, num_links)
+            
+            debug_logger.log_info(f"[BrowserRefresh] 📎 从 {len(links)} 个链接中选择访问 {num_links} 个")
+            
+            for i, link in enumerate(selected_links, 1):
+                try:
+                    # 显示简短的URL用于日志
+                    short_url = link if len(link) < 60 else link[:57] + "..."
+                    debug_logger.log_info(f"[BrowserRefresh] 🔗 访问链接 {i}/{num_links}: {short_url}")
+                    
+                    # 访问链接
+                    await page.goto(link, wait_until="domcontentloaded", timeout=15000)
+                    
+                    # 在每个链接页面停留一小段时间并执行简单行为
+                    link_duration = random.uniform(3, 8)
+                    await self._simulate_human_behavior(page, link_duration)
+                    
+                    # 链接之间的间隔
+                    if i < num_links:
+                        await asyncio.sleep(random.uniform(1, 3))
+                        
+                except Exception as e:
+                    debug_logger.log_warning(f"[BrowserRefresh] 访问链接失败: {str(e)[:100]}")
+                    # 继续访问下一个链接
+                    continue
+                    
+        except Exception as e:
+            debug_logger.log_warning(f"[BrowserRefresh] 提取链接异常: {str(e)}")
 
     async def _simulate_human_behavior(self, page: Page, duration: float):
         """在页面上模拟人类行为"""
@@ -279,8 +372,14 @@ class BrowserCaptchaService:
             action = random.choice([
                 'scroll',
                 'mouse_move', 
+                'click_element',
+                'scroll',
+                'mouse_move', 
+                'click_element',
+                'scroll',
+                'mouse_move', 
+                'click_element',
                 'wait',
-                'click_element'
             ])
             
             try:
@@ -341,6 +440,55 @@ class BrowserCaptchaService:
             if key in self.refresh_config:
                 self.refresh_config[key] = value
                 debug_logger.log_info(f"[BrowserRefresh] 配置已更新: {key}={value}")
+
+    async def reload_config(self):
+        """
+        从数据库重新加载配置并重启服务
+        用于管理员修改配置后热重载
+        """
+        if not self.db:
+            debug_logger.log_warning("[BrowserCaptcha] 无法重载配置: 数据库未初始化")
+            return
+        
+        try:
+            # 停止当前的后台刷新任务
+            was_running = self._refresh_running
+            if was_running:
+                await self.stop_background_refresh()
+                debug_logger.log_info("[BrowserCaptcha] 已停止后台刷新任务以重载配置")
+            
+            # 从数据库重新加载配置
+            captcha_config = await self.db.get_captcha_config()
+            self.refresh_config['enabled'] = captcha_config.refresh_enabled
+            self.refresh_config['min_interval'] = captcha_config.refresh_min_interval
+            self.refresh_config['max_interval'] = captcha_config.refresh_max_interval
+            self.refresh_config['visit_duration'] = (
+                captcha_config.refresh_visit_duration_min,
+                captcha_config.refresh_visit_duration_max
+            )
+            self.refresh_config['scroll_probability'] = captcha_config.refresh_scroll_probability
+            self.refresh_config['mouse_move_probability'] = captcha_config.refresh_mouse_move_probability
+            
+            debug_logger.log_info(f"[BrowserCaptcha] ✅ 配置已重载: enabled={self.refresh_config['enabled']}, "
+                                f"interval={self.refresh_config['min_interval']}-{self.refresh_config['max_interval']}s, "
+                                f"scroll_prob={self.refresh_config['scroll_probability']}, "
+                                f"mouse_prob={self.refresh_config['mouse_move_probability']}")
+            
+            # 如果配置启用了后台刷新，重新启动
+            if self.refresh_config['enabled'] and self._initialized:
+                await self.start_background_refresh()
+                debug_logger.log_info("[BrowserCaptcha] ✅ 后台刷新任务已使用新配置重启")
+            elif not self.refresh_config['enabled'] and was_running:
+                debug_logger.log_info("[BrowserCaptcha] ℹ️ 后台刷新已被禁用，任务不会重启")
+            
+        except Exception as e:
+            debug_logger.log_error(f"[BrowserCaptcha] ❌ 配置重载失败: {str(e)}")
+            # 如果之前在运行，尝试恢复
+            if was_running and self._initialized:
+                try:
+                    await self.start_background_refresh()
+                except:
+                    pass
 
     async def get_flow_cookies(self) -> Optional[Dict]:
         """

@@ -840,12 +840,22 @@ async def update_captcha_config(
 ):
     """Update captcha configuration"""
     from ..services.browser_captcha import validate_browser_proxy_url
+    from .. import main
 
     captcha_method = request.get("captcha_method")
     yescaptcha_api_key = request.get("yescaptcha_api_key")
     yescaptcha_base_url = request.get("yescaptcha_base_url")
     browser_proxy_enabled = request.get("browser_proxy_enabled", False)
     browser_proxy_url = request.get("browser_proxy_url", "")
+    
+    # Refresh configuration parameters
+    refresh_enabled = request.get("refresh_enabled")
+    refresh_min_interval = request.get("refresh_min_interval")
+    refresh_max_interval = request.get("refresh_max_interval")
+    refresh_visit_duration_min = request.get("refresh_visit_duration_min")
+    refresh_visit_duration_max = request.get("refresh_visit_duration_max")
+    refresh_scroll_probability = request.get("refresh_scroll_probability")
+    refresh_mouse_move_probability = request.get("refresh_mouse_move_probability")
 
     # 验证浏览器代理URL格式
     if browser_proxy_enabled and browser_proxy_url:
@@ -858,11 +868,25 @@ async def update_captcha_config(
         yescaptcha_api_key=yescaptcha_api_key,
         yescaptcha_base_url=yescaptcha_base_url,
         browser_proxy_enabled=browser_proxy_enabled,
-        browser_proxy_url=browser_proxy_url if browser_proxy_enabled else None
+        browser_proxy_url=browser_proxy_url if browser_proxy_enabled else None,
+        refresh_enabled=refresh_enabled,
+        refresh_min_interval=refresh_min_interval,
+        refresh_max_interval=refresh_max_interval,
+        refresh_visit_duration_min=refresh_visit_duration_min,
+        refresh_visit_duration_max=refresh_visit_duration_max,
+        refresh_scroll_probability=refresh_scroll_probability,
+        refresh_mouse_move_probability=refresh_mouse_move_probability
     )
 
     # 🔥 Hot reload: sync database config to memory
     await db.reload_config_to_memory()
+    
+    # 🔥 Hot reload: reload browser service config if personal mode is active
+    if main.browser_service is not None:
+        try:
+            await main.browser_service.reload_config()
+        except Exception as e:
+            print(f"⚠️ Failed to reload browser service config: {e}")
 
     return {"success": True, "message": "验证码配置更新成功"}
 
@@ -876,5 +900,12 @@ async def get_captcha_config(token: str = Depends(verify_admin_token)):
         "yescaptcha_api_key": captcha_config.yescaptcha_api_key,
         "yescaptcha_base_url": captcha_config.yescaptcha_base_url,
         "browser_proxy_enabled": captcha_config.browser_proxy_enabled,
-        "browser_proxy_url": captcha_config.browser_proxy_url or ""
+        "browser_proxy_url": captcha_config.browser_proxy_url or "",
+        "refresh_enabled": captcha_config.refresh_enabled,
+        "refresh_min_interval": captcha_config.refresh_min_interval,
+        "refresh_max_interval": captcha_config.refresh_max_interval,
+        "refresh_visit_duration_min": captcha_config.refresh_visit_duration_min,
+        "refresh_visit_duration_max": captcha_config.refresh_visit_duration_max,
+        "refresh_scroll_probability": captcha_config.refresh_scroll_probability,
+        "refresh_mouse_move_probability": captcha_config.refresh_mouse_move_probability
     }

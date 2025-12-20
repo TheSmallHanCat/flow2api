@@ -289,11 +289,11 @@
                             </div>
                         </div>
 
-                        <!-- 浏览器打码配置选项 -->
+                        <!-- 无头浏览器打码配置选项 -->
                         <div id="browserCaptchaOptions" class="hidden space-y-4">
                             <div class="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800">
                                 <p class="text-xs text-blue-800 dark:text-blue-200">
-                                    ℹ️ <strong>浏览器打码：</strong>使用Playwright自动化浏览器获取验证码，无需额外配置，但会占用更多系统资源
+                                    ℹ️ <strong>无头浏览器打码：</strong>使用Playwright无头模式自动化浏览器获取验证码，无需额外配置，但会占用更多系统资源
                                 </p>
                             </div>
 
@@ -312,6 +312,67 @@
                                     ⚠️ <strong>仅支持：</strong>HTTP代理（可带认证）或 SOCKS5代理（不可带认证）<br>
                                     示例：<code class="bg-muted px-1 py-0.5 rounded">http://user:pass@proxy.com:8080</code> 或 <code class="bg-muted px-1 py-0.5 rounded">socks5://proxy.com:1080</code>
                                 </p>
+                            </div>
+                        </div>
+
+                        <!-- 内置浏览器打码配置选项 (personal模式) -->
+                        <div id="personalCaptchaOptions" class="hidden space-y-4">
+                            <div class="rounded-md bg-green-50 dark:bg-green-900/20 p-3 border border-green-200 dark:border-green-800">
+                                <p class="text-xs text-green-800 dark:text-green-200">
+                                    ℹ️ <strong>内置浏览器打码：</strong>使用持久化浏览器上下文（有头模式），保留用户数据和会话，支持后台自动刷新保持活跃
+                                </p>
+                            </div>
+
+                            <!-- 后台刷新配置 -->
+                            <div class="border-t border-border pt-4">
+                                <div class="mb-3">
+                                    <label class="inline-flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="cfgRefreshEnabled" class="h-4 w-4 rounded border-input" onchange="toggleRefreshOptions()">
+                                        <span class="text-sm font-medium">启用后台刷新</span>
+                                    </label>
+                                    <p class="text-xs text-muted-foreground mt-1">定期在后台访问页面以保持浏览器会话活跃</p>
+                                </div>
+
+                                <div id="refreshOptions" class="hidden space-y-3 pl-6 border-l-2 border-green-200">
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="text-xs font-medium mb-1 block">最小间隔(秒)</label>
+                                            <input id="cfgRefreshMinInterval" type="number" min="60" max="3600" class="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="300">
+                                            <p class="text-xs text-muted-foreground mt-0.5">默认: 300 (5分钟)</p>
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-medium mb-1 block">最大间隔(秒)</label>
+                                            <input id="cfgRefreshMaxInterval" type="number" min="300" max="7200" class="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="7200">
+                                            <p class="text-xs text-muted-foreground mt-0.5">默认: 7200 (2小时)</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="text-xs font-medium mb-1 block">访问时长最小值(秒)</label>
+                                            <input id="cfgRefreshVisitMin" type="number" min="5" max="120" class="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="10">
+                                            <p class="text-xs text-muted-foreground mt-0.5">默认: 10秒</p>
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-medium mb-1 block">访问时长最大值(秒)</label>
+                                            <input id="cfgRefreshVisitMax" type="number" min="10" max="300" class="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="30">
+                                            <p class="text-xs text-muted-foreground mt-0.5">默认: 30秒</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="text-xs font-medium mb-1 block">滚动概率 (0-1)</label>
+                                            <input id="cfgRefreshScrollProb" type="number" min="0" max="1" step="0.1" class="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="0.7">
+                                            <p class="text-xs text-muted-foreground mt-0.5">默认: 0.7 (70%)</p>
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-medium mb-1 block">鼠标移动概率 (0-1)</label>
+                                            <input id="cfgRefreshMouseProb" type="number" min="0" max="1" step="0.1" class="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="0.5">
+                                            <p class="text-xs text-muted-foreground mt-0.5">默认: 0.5 (50%)</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -633,10 +694,11 @@
         loadGenerationTimeout=async()=>{try{console.log('开始加载生成超时配置...');const r=await apiRequest('/api/generation/timeout');if(!r){console.error('API请求失败');return}const d=await r.json();console.log('生成超时配置数据:',d);if(d.success&&d.config){const imageTimeout=d.config.image_timeout||300;const videoTimeout=d.config.video_timeout||1500;console.log('设置图片超时:',imageTimeout);console.log('设置视频超时:',videoTimeout);$('cfgImageTimeout').value=imageTimeout;$('cfgVideoTimeout').value=videoTimeout;console.log('生成超时配置加载成功')}else{console.error('生成超时配置数据格式错误:',d)}}catch(e){console.error('加载生成超时配置失败:',e);showToast('加载生成超时配置失败: '+e.message,'error')}},
         saveCacheConfig=async()=>{const enabled=$('cfgCacheEnabled').checked,timeout=parseInt($('cfgCacheTimeout').value)||7200,baseUrl=$('cfgCacheBaseUrl').value.trim();console.log('保存缓存配置:',{enabled,timeout,baseUrl});if(timeout<60||timeout>86400)return showToast('缓存超时时间必须在 60-86400 秒之间','error');if(baseUrl&&!baseUrl.startsWith('http://')&&!baseUrl.startsWith('https://'))return showToast('域名必须以 http:// 或 https:// 开头','error');try{console.log('保存缓存启用状态...');const r0=await apiRequest('/api/cache/enabled',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r0){console.error('保存缓存启用状态请求失败');return}const d0=await r0.json();console.log('缓存启用状态保存结果:',d0);if(!d0.success){console.error('保存缓存启用状态失败:',d0);return showToast('保存缓存启用状态失败','error')}console.log('保存超时时间...');const r1=await apiRequest('/api/cache/config',{method:'POST',body:JSON.stringify({timeout:timeout})});if(!r1){console.error('保存超时时间请求失败');return}const d1=await r1.json();console.log('超时时间保存结果:',d1);if(!d1.success){console.error('保存超时时间失败:',d1);return showToast('保存超时时间失败','error')}console.log('保存域名...');const r2=await apiRequest('/api/cache/base-url',{method:'POST',body:JSON.stringify({base_url:baseUrl})});if(!r2){console.error('保存域名请求失败');return}const d2=await r2.json();console.log('域名保存结果:',d2);if(d2.success){showToast('缓存配置保存成功','success');console.log('等待配置文件写入完成...');await new Promise(r=>setTimeout(r,200));console.log('重新加载配置...');await loadCacheConfig()}else{console.error('保存域名失败:',d2);showToast('保存域名失败','error')}}catch(e){console.error('保存失败:',e);showToast('保存失败: '+e.message,'error')}},
         saveGenerationTimeout=async()=>{const imageTimeout=parseInt($('cfgImageTimeout').value)||300,videoTimeout=parseInt($('cfgVideoTimeout').value)||1500;console.log('保存生成超时配置:',{imageTimeout,videoTimeout});if(imageTimeout<60||imageTimeout>3600)return showToast('图片超时时间必须在 60-3600 秒之间','error');if(videoTimeout<60||videoTimeout>7200)return showToast('视频超时时间必须在 60-7200 秒之间','error');try{const r=await apiRequest('/api/generation/timeout',{method:'POST',body:JSON.stringify({image_timeout:imageTimeout,video_timeout:videoTimeout})});if(!r){console.error('保存请求失败');return}const d=await r.json();console.log('保存结果:',d);if(d.success){showToast('生成超时配置保存成功','success');await new Promise(r=>setTimeout(r,200));await loadGenerationTimeout()}else{console.error('保存失败:',d);showToast('保存失败','error')}}catch(e){console.error('保存失败:',e);showToast('保存失败: '+e.message,'error')}},
-        toggleCaptchaOptions=()=>{const method=$('cfgCaptchaMethod').value;$('yescaptchaOptions').style.display=method==='yescaptcha'?'block':'none';$('browserCaptchaOptions').classList.toggle('hidden',method!=='browser')},
+        toggleCaptchaOptions=()=>{const method=$('cfgCaptchaMethod').value;$('yescaptchaOptions').style.display=method==='yescaptcha'?'block':'none';$('browserCaptchaOptions').classList.toggle('hidden',method!=='browser');$('personalCaptchaOptions').classList.toggle('hidden',method!=='personal')},
         toggleBrowserProxyInput=()=>{const enabled=$('cfgBrowserProxyEnabled').checked;$('browserProxyUrlInput').classList.toggle('hidden',!enabled)},
-        loadCaptchaConfig=async()=>{try{console.log('开始加载验证码配置...');const r=await apiRequest('/api/captcha/config');if(!r){console.error('API请求失败');return}const d=await r.json();console.log('验证码配置数据:',d);$('cfgCaptchaMethod').value=d.captcha_method||'yescaptcha';$('cfgYescaptchaApiKey').value=d.yescaptcha_api_key||'';$('cfgYescaptchaBaseUrl').value=d.yescaptcha_base_url||'https://api.yescaptcha.com';$('cfgBrowserProxyEnabled').checked=d.browser_proxy_enabled||false;$('cfgBrowserProxyUrl').value=d.browser_proxy_url||'';toggleCaptchaOptions();toggleBrowserProxyInput();console.log('验证码配置加载成功')}catch(e){console.error('加载验证码配置失败:',e);showToast('加载验证码配置失败: '+e.message,'error')}},
-        saveCaptchaConfig=async()=>{const method=$('cfgCaptchaMethod').value,apiKey=$('cfgYescaptchaApiKey').value.trim(),baseUrl=$('cfgYescaptchaBaseUrl').value.trim(),browserProxyEnabled=$('cfgBrowserProxyEnabled').checked,browserProxyUrl=$('cfgBrowserProxyUrl').value.trim();console.log('保存验证码配置:',{method,apiKey,baseUrl,browserProxyEnabled,browserProxyUrl});try{const r=await apiRequest('/api/captcha/config',{method:'POST',body:JSON.stringify({captcha_method:method,yescaptcha_api_key:apiKey,yescaptcha_base_url:baseUrl,browser_proxy_enabled:browserProxyEnabled,browser_proxy_url:browserProxyUrl})});if(!r){console.error('保存请求失败');return}const d=await r.json();console.log('保存结果:',d);if(d.success){showToast('验证码配置保存成功','success');await new Promise(r=>setTimeout(r,200));await loadCaptchaConfig()}else{console.error('保存失败:',d);showToast(d.message||'保存失败','error')}}catch(e){console.error('保存失败:',e);showToast('保存失败: '+e.message,'error')}},
+        toggleRefreshOptions=()=>{const enabled=$('cfgRefreshEnabled').checked;$('refreshOptions').classList.toggle('hidden',!enabled)},
+        loadCaptchaConfig=async()=>{try{console.log('开始加载验证码配置...');const r=await apiRequest('/api/captcha/config');if(!r){console.error('API请求失败');return}const d=await r.json();console.log('验证码配置数据:',d);$('cfgCaptchaMethod').value=d.captcha_method||'yescaptcha';$('cfgYescaptchaApiKey').value=d.yescaptcha_api_key||'';$('cfgYescaptchaBaseUrl').value=d.yescaptcha_base_url||'https://api.yescaptcha.com';$('cfgBrowserProxyEnabled').checked=d.browser_proxy_enabled||false;$('cfgBrowserProxyUrl').value=d.browser_proxy_url||'';$('cfgRefreshEnabled').checked=d.refresh_enabled!==undefined?d.refresh_enabled:true;$('cfgRefreshMinInterval').value=d.refresh_min_interval||300;$('cfgRefreshMaxInterval').value=d.refresh_max_interval||7200;$('cfgRefreshVisitMin').value=d.refresh_visit_duration_min||10;$('cfgRefreshVisitMax').value=d.refresh_visit_duration_max||30;$('cfgRefreshScrollProb').value=d.refresh_scroll_probability!==undefined?d.refresh_scroll_probability:0.7;$('cfgRefreshMouseProb').value=d.refresh_mouse_move_probability!==undefined?d.refresh_mouse_move_probability:0.5;toggleCaptchaOptions();toggleBrowserProxyInput();toggleRefreshOptions();console.log('验证码配置加载成功')}catch(e){console.error('加载验证码配置失败:',e);showToast('加载验证码配置失败: '+e.message,'error')}},
+        saveCaptchaConfig=async()=>{const method=$('cfgCaptchaMethod').value,apiKey=$('cfgYescaptchaApiKey').value.trim(),baseUrl=$('cfgYescaptchaBaseUrl').value.trim(),browserProxyEnabled=$('cfgBrowserProxyEnabled').checked,browserProxyUrl=$('cfgBrowserProxyUrl').value.trim(),refreshEnabled=$('cfgRefreshEnabled').checked,refreshMinInterval=parseInt($('cfgRefreshMinInterval').value)||300,refreshMaxInterval=parseInt($('cfgRefreshMaxInterval').value)||7200,refreshVisitMin=parseInt($('cfgRefreshVisitMin').value)||10,refreshVisitMax=parseInt($('cfgRefreshVisitMax').value)||30,refreshScrollProb=parseFloat($('cfgRefreshScrollProb').value)||0.7,refreshMouseProb=parseFloat($('cfgRefreshMouseProb').value)||0.5;console.log('保存验证码配置:',{method,apiKey,baseUrl,browserProxyEnabled,browserProxyUrl,refreshEnabled,refreshMinInterval,refreshMaxInterval,refreshVisitMin,refreshVisitMax,refreshScrollProb,refreshMouseProb});try{const r=await apiRequest('/api/captcha/config',{method:'POST',body:JSON.stringify({captcha_method:method,yescaptcha_api_key:apiKey,yescaptcha_base_url:baseUrl,browser_proxy_enabled:browserProxyEnabled,browser_proxy_url:browserProxyUrl,refresh_enabled:refreshEnabled,refresh_min_interval:refreshMinInterval,refresh_max_interval:refreshMaxInterval,refresh_visit_duration_min:refreshVisitMin,refresh_visit_duration_max:refreshVisitMax,refresh_scroll_probability:refreshScrollProb,refresh_mouse_move_probability:refreshMouseProb})});if(!r){console.error('保存请求失败');return}const d=await r.json();console.log('保存结果:',d);if(d.success){showToast('验证码配置保存成功','success');await new Promise(r=>setTimeout(r,200));await loadCaptchaConfig()}else{console.error('保存失败:',d);showToast(d.message||'保存失败','error')}}catch(e){console.error('保存失败:',e);showToast('保存失败: '+e.message,'error')}},
         toggleATAutoRefresh=async()=>{try{const enabled=$('atAutoRefreshToggle').checked;const r=await apiRequest('/api/token-refresh/enabled',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r){$('atAutoRefreshToggle').checked=!enabled;return}const d=await r.json();if(d.success){showToast(enabled?'AT自动刷新已启用':'AT自动刷新已禁用','success')}else{showToast('操作失败: '+(d.detail||'未知错误'),'error');$('atAutoRefreshToggle').checked=!enabled}}catch(e){showToast('操作失败: '+e.message,'error');$('atAutoRefreshToggle').checked=!enabled}},
         loadATAutoRefreshConfig=async()=>{try{const r=await apiRequest('/api/token-refresh/config');if(!r)return;const d=await r.json();if(d.success&&d.config){$('atAutoRefreshToggle').checked=d.config.at_auto_refresh_enabled||false}else{console.error('AT自动刷新配置数据格式错误:',d)}}catch(e){console.error('加载AT自动刷新配置失败:',e)}},
         loadLogs=async()=>{try{const r=await apiRequest('/api/logs?limit=100');if(!r)return;const logs=await r.json();const tb=$('logsTableBody');tb.innerHTML=logs.map(l=>`<tr><td class="py-2.5 px-3">${l.operation}</td><td class="py-2.5 px-3"><span class="text-xs ${l.token_email?'text-blue-600':'text-muted-foreground'}">${l.token_email||'未知'}</span></td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${l.status_code===200?'bg-green-50 text-green-700':'bg-red-50 text-red-700'}">${l.status_code}</span></td><td class="py-2.5 px-3">${l.duration.toFixed(2)}</td><td class="py-2.5 px-3 text-xs text-muted-foreground">${l.created_at?new Date(l.created_at).toLocaleString('zh-CN'):'-'}</td></tr>`).join('')}catch(e){console.error('加载日志失败:',e)}},
