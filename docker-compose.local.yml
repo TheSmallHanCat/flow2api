@@ -2,7 +2,10 @@ version: '3.8'
 
 services:
   flow2api:
-    image: thesmallhancat/flow2api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: flow2api:local
     container_name: flow2api
     ports:
       - "38000:8000"

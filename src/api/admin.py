@@ -354,17 +354,32 @@ async def refresh_at(
     token_id: int,
     token: str = Depends(verify_admin_token)
 ):
-    """手动刷新Token的AT (使用ST转换) 🆕"""
+    """手动刷新Token的AT (使用ST转换) 🆕
+    
+    如果 AT 刷新失败且处于 personal 模式，会自动尝试通过浏览器刷新 ST
+    """
+    from ..core.logger import debug_logger
+    from ..core.config import config
+    
+    debug_logger.log_info(f"[API] 手动刷新 AT 请求: token_id={token_id}, captcha_method={config.captcha_method}")
+    
     try:
-        # 调用token_manager的内部刷新方法
+        # 调用token_manager的内部刷新方法（包含 ST 自动刷新逻辑）
         success = await token_manager._refresh_at(token_id)
 
         if success:
             # 获取更新后的token信息
             updated_token = await token_manager.get_token(token_id)
+            
+            message = "AT刷新成功"
+            if config.captcha_method == "personal":
+                message += "（支持ST自动刷新）"
+            
+            debug_logger.log_info(f"[API] AT 刷新成功: token_id={token_id}")
+            
             return {
                 "success": True,
-                "message": "AT刷新成功",
+                "message": message,
                 "token": {
                     "id": updated_token.id,
                     "email": updated_token.email,
@@ -372,8 +387,17 @@ async def refresh_at(
                 }
             }
         else:
-            raise HTTPException(status_code=500, detail="AT刷新失败")
+            debug_logger.log_error(f"[API] AT 刷新失败: token_id={token_id}")
+            
+            error_detail = "AT刷新失败"
+            if config.captcha_method != "personal":
+                error_detail += f"（当前打码模式: {config.captcha_method}，ST自动刷新仅在 personal 模式下可用）"
+            
+            raise HTTPException(status_code=500, detail=error_detail)
+    except HTTPException:
+        raise
     except Exception as e:
+        debug_logger.log_error(f"[API] 刷新AT异常: {str(e)}")
         raise HTTPException(status_code=500, detail=f"刷新AT失败: {str(e)}")
 
 

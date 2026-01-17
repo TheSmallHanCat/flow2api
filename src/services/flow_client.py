@@ -12,8 +12,9 @@ from ..core.config import config
 class FlowClient:
     """VideoFX API客户端"""
 
-    def __init__(self, proxy_manager):
+    def __init__(self, proxy_manager, db=None):
         self.proxy_manager = proxy_manager
+        self.db = db  # Database instance for captcha config
         self.labs_base_url = config.flow_labs_base_url  # https://labs.google/fx/api
         self.api_base_url = config.flow_api_base_url    # https://aisandbox-pa.googleapis.com/v1
         self.timeout = config.flow_timeout
@@ -652,7 +653,7 @@ class FlowClient:
         Returns:
             同 generate_video_text
         """
-        url = f"{self.api_base_url}/video:batchAsyncGenerateVideoStartAndEndImage"
+        url = f"{self.api_base_url}/video:batchAsyncGenerateVideoStartImage"
 
         # 获取 reCAPTCHA token
         recaptcha_token = await self._get_recaptcha_token(project_id) or ""
@@ -772,7 +773,7 @@ class FlowClient:
         if captcha_method == "personal":
             try:
                 from .browser_captcha_personal import BrowserCaptchaService
-                service = await BrowserCaptchaService.get_instance(self.proxy_manager)
+                service = await BrowserCaptchaService.get_instance(self.db)
                 return await service.get_token(project_id)
             except Exception as e:
                 debug_logger.log_error(f"[reCAPTCHA Browser] error: {str(e)}")
@@ -781,7 +782,7 @@ class FlowClient:
         elif captcha_method == "browser":
             try:
                 from .browser_captcha import BrowserCaptchaService
-                service = await BrowserCaptchaService.get_instance(self.proxy_manager)
+                service = await BrowserCaptchaService.get_instance(self.db)
                 return await service.get_token(project_id)
             except Exception as e:
                 debug_logger.log_error(f"[reCAPTCHA Browser] error: {str(e)}")

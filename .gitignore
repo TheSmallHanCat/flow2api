@@ -54,3 +54,7 @@ logs.txt
 *.cache
 
 browser_data
+
+data
+config/setting.toml
+config/setting_warp.toml

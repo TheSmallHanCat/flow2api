@@ -111,7 +111,7 @@ async def create_chat_completion(
                 if item.get("type") == "text":
                     prompt = item.get("text", "")
                 elif item.get("type") == "image_url":
-                    # Extract base64 image
+                    # Extract image from URL or base64
                     image_url = item.get("image_url", {}).get("url", "")
                     if image_url.startswith("data:image"):
                         # Parse base64
@@ -120,6 +120,18 @@ async def create_chat_completion(
                             image_base64 = match.group(1)
                             image_bytes = base64.b64decode(image_base64)
                             images.append(image_bytes)
+                    elif image_url.startswith("http://") or image_url.startswith("https://"):
+                        # Download remote image URL
+                        debug_logger.log_info(f"[IMAGE_URL] 下载远程图片: {image_url}")
+                        try:
+                            downloaded_bytes = await retrieve_image_data(image_url)
+                            if downloaded_bytes and len(downloaded_bytes) > 0:
+                                images.append(downloaded_bytes)
+                                debug_logger.log_info(f"[IMAGE_URL] ✅ 远程图片下载成功: {len(downloaded_bytes)} 字节")
+                            else:
+                                debug_logger.log_warning(f"[IMAGE_URL] ⚠️ 远程图片下载失败或为空: {image_url}")
+                        except Exception as e:
+                            debug_logger.log_error(f"[IMAGE_URL] ❌ 远程图片下载异常: {str(e)}")
 
         # Fallback to deprecated image parameter
         if request.image and not images:

@@ -136,7 +136,7 @@ MODEL_CONFIG = {
     "veo_3_1_i2v_s_fast_fl_portrait": {
         "type": "video",
         "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_fl",
+        "model_key": "veo_3_1_i2v_s_fast_portrait_fl_ultra_relaxed",
         "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
         "supports_images": True,
         "min_images": 1,
@@ -145,7 +145,7 @@ MODEL_CONFIG = {
     "veo_3_1_i2v_s_fast_fl_landscape": {
         "type": "video",
         "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_fl",
+        "model_key": "veo_3_1_i2v_s_fast_fl_ultra_relaxed",
         "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
         "supports_images": True,
         "min_images": 1,
@@ -259,7 +259,7 @@ MODEL_CONFIG = {
     "veo_3_0_r2v_fast_portrait": {
         "type": "video",
         "video_type": "r2v",
-        "model_key": "veo_3_0_r2v_fast",
+        "model_key": "veo_3_0_r2v_fast_portrait_ultra_relaxed",
         "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
         "supports_images": True,
         "min_images": 0,
@@ -268,7 +268,7 @@ MODEL_CONFIG = {
     "veo_3_0_r2v_fast_landscape": {
         "type": "video",
         "video_type": "r2v",
-        "model_key": "veo_3_0_r2v_fast",
+        "model_key": "veo_3_0_r2v_fast_ultra_relaxed",
         "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
         "supports_images": True,
         "min_images": 0,
@@ -772,12 +772,16 @@ class GenerationHandler:
                         user_paygate_tier=token.user_paygate_tier or "PAYGATE_TIER_ONE"
                     )
                 else:
-                    # 只有首帧
+                    # 只有首帧 - 需要将 model_key 中的 _fl_ 替换为 _
+                    # 例如: veo_3_1_i2v_s_fast_fl_ultra_relaxed -> veo_3_1_i2v_s_fast_ultra_relaxed
+                    #       veo_3_1_i2v_s_fast_portrait_fl_ultra_relaxed -> veo_3_1_i2v_s_fast_portrait_ultra_relaxed
+                    actual_model_key = model_config["model_key"].replace("_fl_", "_")
+                    debug_logger.log_info(f"[I2V] 单帧模式，model_key: {model_config['model_key']} -> {actual_model_key}")
                     result = await self.flow_client.generate_video_start_image(
                         at=token.at,
                         project_id=project_id,
                         prompt=prompt,
-                        model_key=model_config["model_key"],
+                        model_key=actual_model_key,
                         aspect_ratio=model_config["aspect_ratio"],
                         start_media_id=start_media_id,
                         user_paygate_tier=token.user_paygate_tier or "PAYGATE_TIER_ONE"
@@ -926,8 +930,30 @@ class GenerationHandler:
                         )
                     return
 
+                elif status == "MEDIA_GENERATION_STATUS_FAILED":
+                    # 生成失败 - 提取错误信息
+                    error_info = operation.get("operation", {}).get("error", {})
+                    error_code = error_info.get("code", "unknown")
+                    error_message = error_info.get("message", "未知错误")
+                    
+                    # 更新数据库任务状态
+                    task_id = operation["operation"]["name"]
+                    await self.db.update_task(
+                        task_id,
+                        status="failed",
+                        error_message=f"{error_message} (code: {error_code})",
+                        completed_at=time.time()
+                    )
+                    
+                    # 返回友好的错误消息，提示用户重试
+                    friendly_error = f"视频生成失败: {error_message}，请重试"
+                    if stream:
+                        yield self._create_stream_chunk(f"❌ {friendly_error}\n")
+                    yield self._create_error_response(friendly_error)
+                    return
+
                 elif status.startswith("MEDIA_GENERATION_STATUS_ERROR"):
-                    # 失败
+                    # 其他错误状态
                     yield self._create_error_response(f"视频生成失败: {status}")
                     return
 

@@ -5,7 +5,7 @@ services:
     image: thesmallhancat/flow2api:latest
     container_name: flow2api
     ports:
-      - "8000:8000"
+      - "38000:8000"
     volumes:
       - ./data:/app/data
       - ./config/setting_warp.toml:/app/config/setting.toml
@@ -22,7 +22,7 @@ services:
     devices:
       - /dev/net/tun:/dev/net/tun
     ports:
-      - "1080:1080"
+      - "31080:1080"
     environment:
       - WARP_SLEEP=2
     cap_add:

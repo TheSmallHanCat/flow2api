@@ -268,8 +268,12 @@ class TokenManager:
         # AT有效
         return True
 
+
     async def _refresh_at(self, token_id: int) -> bool:
         """内部方法: 刷新AT
+
+        如果 AT 刷新失败（ST 可能过期），会尝试通过浏览器自动刷新 ST，
+        然后重试 AT 刷新。
 
         Returns:
             True if refresh successful, False otherwise
@@ -279,49 +283,132 @@ class TokenManager:
             if not token:
                 return False
 
-            try:
-                debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: 开始刷新AT...")
+            # 第一次尝试刷新 AT
+            result = await self._do_refresh_at(token_id, token.st)
+            if result:
+                return True
 
-                # 使用ST转AT
-                result = await self.flow_client.st_to_at(token.st)
-                new_at = result["access_token"]
-                expires = result.get("expires")
+            # AT 刷新失败，尝试自动更新 ST
+            debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: 第一次 AT 刷新失败，尝试自动更新 ST...")
+            
+            new_st = await self._try_refresh_st(token_id, token)
+            if new_st:
+                # ST 更新成功，重试 AT 刷新
+                debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: ST 已更新，重试 AT 刷新...")
+                result = await self._do_refresh_at(token_id, new_st)
+                if result:
+                    return True
 
-                # 解析过期时间
-                new_at_expires = None
-                if expires:
-                    try:
-                        new_at_expires = datetime.fromisoformat(expires.replace('Z', '+00:00'))
-                    except:
-                        pass
+            # 所有刷新尝试都失败，禁用 Token
+            debug_logger.log_error(f"[AT_REFRESH] Token {token_id}: 所有刷新尝试失败，禁用 Token")
+            await self.disable_token(token_id)
+            return False
 
-                # 更新数据库
-                await self.db.update_token(
-                    token_id,
-                    at=new_at,
-                    at_expires=new_at_expires
-                )
+    async def _do_refresh_at(self, token_id: int, st: str) -> bool:
+        """执行 AT 刷新的核心逻辑
 
-                debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT刷新成功")
-                debug_logger.log_info(f"  - 新过期时间: {new_at_expires}")
+        Args:
+            token_id: Token ID
+            st: Session Token
 
-                # 同时刷新credits
+        Returns:
+            True if refresh successful AND AT is valid, False otherwise
+        """
+        try:
+            debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: 开始刷新AT...")
+
+            # 使用ST转AT
+            result = await self.flow_client.st_to_at(st)
+            new_at = result["access_token"]
+            expires = result.get("expires")
+
+            # 解析过期时间
+            new_at_expires = None
+            if expires:
                 try:
-                    credits_result = await self.flow_client.get_credits(new_at)
-                    await self.db.update_token(
-                        token_id,
-                        credits=credits_result.get("credits", 0)
-                    )
+                    new_at_expires = datetime.fromisoformat(expires.replace('Z', '+00:00'))
                 except:
                     pass
 
-                return True
+            # 更新数据库
+            await self.db.update_token(
+                token_id,
+                at=new_at,
+                at_expires=new_at_expires
+            )
 
-            except Exception as e:
-                debug_logger.log_error(f"[AT_REFRESH] Token {token_id}: AT刷新失败 - {str(e)}")
-                # 刷新失败,禁用Token
-                await self.disable_token(token_id)
-                return False
+            debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT刷新成功")
+            debug_logger.log_info(f"  - 新过期时间: {new_at_expires}")
+
+            # 验证 AT 有效性：通过 get_credits 测试
+            try:
+                credits_result = await self.flow_client.get_credits(new_at)
+                await self.db.update_token(
+                    token_id,
+                    credits=credits_result.get("credits", 0)
+                )
+                debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT 验证成功（余额: {credits_result.get('credits', 0)}）")
+                return True
+            except Exception as verify_err:
+                # AT 验证失败（可能返回 401），说明 ST 已过期
+                error_msg = str(verify_err)
+                if "401" in error_msg or "UNAUTHENTICATED" in error_msg:
+                    debug_logger.log_warning(f"[AT_REFRESH] Token {token_id}: AT 验证失败 (401)，ST 可能已过期")
+                    return False
+                else:
+                    # 其他错误（如网络问题），仍视为成功
+                    debug_logger.log_warning(f"[AT_REFRESH] Token {token_id}: AT 验证时发生非认证错误: {error_msg}")
+                    return True
+
+        except Exception as e:
+            debug_logger.log_error(f"[AT_REFRESH] Token {token_id}: AT刷新失败 - {str(e)}")
+            return False
+
+    async def _try_refresh_st(self, token_id: int, token) -> Optional[str]:
+        """尝试通过浏览器刷新 Session Token
+
+        使用常驻 tab 获取新的 __Secure-next-auth.session-token
+
+        Args:
+            token_id: Token ID
+            token: Token 对象
+
+        Returns:
+            新的 ST 字符串，如果失败返回 None
+        """
+        try:
+            from ..core.config import config
+
+            # 仅在 personal 模式下支持 ST 自动刷新
+            if config.captcha_method != "personal":
+                debug_logger.log_info(f"[ST_REFRESH] 非 personal 模式，跳过 ST 自动刷新")
+                return None
+
+            if not token.current_project_id:
+                debug_logger.log_warning(f"[ST_REFRESH] Token {token_id} 没有 project_id，无法刷新 ST")
+                return None
+
+            debug_logger.log_info(f"[ST_REFRESH] Token {token_id}: 尝试通过浏览器刷新 ST...")
+
+            from .browser_captcha_personal import BrowserCaptchaService
+            service = await BrowserCaptchaService.get_instance(self.db)
+
+            new_st = await service.refresh_session_token(token.current_project_id)
+            if new_st and new_st != token.st:
+                # 更新数据库中的 ST
+                await self.db.update_token(token_id, st=new_st)
+                debug_logger.log_info(f"[ST_REFRESH] Token {token_id}: ST 已自动更新")
+                return new_st
+            elif new_st == token.st:
+                debug_logger.log_warning(f"[ST_REFRESH] Token {token_id}: 获取到的 ST 与原 ST 相同，可能登录已失效")
+                return None
+            else:
+                debug_logger.log_warning(f"[ST_REFRESH] Token {token_id}: 无法获取新 ST")
+                return None
+
+        except Exception as e:
+            debug_logger.log_error(f"[ST_REFRESH] Token {token_id}: 刷新 ST 失败 - {str(e)}")
+            return None
 
     async def ensure_project_exists(self, token_id: int) -> str:
         """确保Token有可用的Project
