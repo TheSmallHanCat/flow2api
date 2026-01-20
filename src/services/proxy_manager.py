@@ -98,3 +98,7 @@ class ProxyManager:
     async def update_pool_config(self, pool_enabled: bool = None, rotation_mode: str = None):
         """Update proxy pool configuration"""
         await self.db.update_proxy_pool_config(pool_enabled, rotation_mode)
+
+    async def batch_update_proxies(self, proxy_urls: list):
+        """Batch update proxies - clear all and add new ones"""
+        await self.db.batch_update_proxy_pool(proxy_urls)

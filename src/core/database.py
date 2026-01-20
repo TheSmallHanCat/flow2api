@@ -1424,3 +1424,19 @@ class Database:
                     VALUES (1, ?, ?)
                 """, (new_enabled, new_mode))
             await db.commit()
+
+    async def batch_update_proxy_pool(self, proxy_urls: list):
+        """Batch update proxy pool - clear all and add new proxies"""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Clear all existing proxies
+            await db.execute("DELETE FROM proxy_pool")
+            
+            # Add new proxies
+            for url in proxy_urls:
+                if url and url.strip():
+                    await db.execute("""
+                        INSERT INTO proxy_pool (proxy_url, enabled)
+                        VALUES (?, 1)
+                    """, (url.strip(),))
+            
+            await db.commit()

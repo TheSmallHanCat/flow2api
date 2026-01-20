@@ -1104,6 +1104,32 @@ class ProxyPoolConfigRequest(BaseModel):
     rotation_mode: Optional[str] = "round_robin"
 
 
+class ProxyPoolBatchUpdateRequest(BaseModel):
+    pool_enabled: bool
+    proxies: List[str]
+
+
+@router.post("/api/proxy-pool/batch-update")
+async def batch_update_proxy_pool(
+    request: ProxyPoolBatchUpdateRequest,
+    token: str = Depends(verify_admin_token)
+):
+    """Batch update proxy pool - clear and replace all proxies"""
+    try:
+        # Update pool enabled config
+        await proxy_manager.update_pool_config(request.pool_enabled, "round_robin")
+        
+        # Clear existing proxies and add new ones
+        await proxy_manager.batch_update_proxies(request.proxies)
+        
+        return {
+            "success": True,
+            "message": f"代理池配置保存成功，共 {len(request.proxies)} 个代理"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/proxy-pool/list")
 async def get_proxy_pool_list(token: str = Depends(verify_admin_token)):
     """Get all proxies in the pool"""
