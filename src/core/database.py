@@ -277,6 +277,8 @@ class Database:
                     ("current_project_name", "TEXT"),  # Project name
                     ("image_enabled", "BOOLEAN DEFAULT 1"),
                     ("video_enabled", "BOOLEAN DEFAULT 1"),
+                    ("enable_2k", "BOOLEAN DEFAULT 0"),  # 是否启用2K模型
+                    ("enable_4k", "BOOLEAN DEFAULT 0"),  # 是否启用4K模型
                     ("image_concurrency", "INTEGER DEFAULT -1"),
                     ("video_concurrency", "INTEGER DEFAULT -1"),
                     ("ban_reason", "TEXT"),  # 禁用原因
@@ -378,6 +380,8 @@ class Database:
                     current_project_name TEXT,
                     image_enabled BOOLEAN DEFAULT 1,
                     video_enabled BOOLEAN DEFAULT 1,
+                    enable_2k BOOLEAN DEFAULT 0,
+                    enable_4k BOOLEAN DEFAULT 0,
                     image_concurrency INTEGER DEFAULT -1,
                     video_concurrency INTEGER DEFAULT -1,
                     ban_reason TEXT,
@@ -631,12 +635,14 @@ class Database:
             cursor = await db.execute("""
                 INSERT INTO tokens (st, at, at_expires, email, name, remark, is_active,
                                    credits, user_paygate_tier, current_project_id, current_project_name,
-                                   image_enabled, video_enabled, image_concurrency, video_concurrency)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   image_enabled, video_enabled, enable_2k, enable_4k,
+                                   image_concurrency, video_concurrency)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (token.st, token.at, token.at_expires, token.email, token.name, token.remark,
                   token.is_active, token.credits, token.user_paygate_tier,
                   token.current_project_id, token.current_project_name,
                   token.image_enabled, token.video_enabled,
+                  token.enable_2k, token.enable_4k,
                   token.image_concurrency, token.video_concurrency))
             await db.commit()
             token_id = cursor.lastrowid

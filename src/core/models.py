@@ -33,6 +33,8 @@ class Token(BaseModel):
     # 功能开关
     image_enabled: bool = True
     video_enabled: bool = True
+    enable_2k: bool = False  # 是否启用2K模型
+    enable_4k: bool = False  # 是否启用4K模型
 
     # 并发限制
     image_concurrency: int = -1  # -1表示无限制

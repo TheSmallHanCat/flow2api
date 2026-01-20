@@ -56,6 +56,8 @@ class TokenManager:
         remark: Optional[str] = None,
         image_enabled: bool = True,
         video_enabled: bool = True,
+        enable_2k: bool = False,
+        enable_4k: bool = False,
         image_concurrency: int = -1,
         video_concurrency: int = -1
     ) -> Token:
@@ -68,6 +70,8 @@ class TokenManager:
             remark: 备注
             image_enabled: 是否启用图片生成
             video_enabled: 是否启用视频生成
+            enable_2k: 是否启用2K模型
+            enable_4k: 是否启用4K模型
             image_concurrency: 图片并发限制
             video_concurrency: 视频并发限制
 
@@ -145,6 +149,8 @@ class TokenManager:
             current_project_name=project_name,
             image_enabled=image_enabled,
             video_enabled=video_enabled,
+            enable_2k=enable_2k,
+            enable_4k=enable_4k,
             image_concurrency=image_concurrency,
             video_concurrency=video_concurrency
         )
@@ -176,6 +182,8 @@ class TokenManager:
         remark: Optional[str] = None,
         image_enabled: Optional[bool] = None,
         video_enabled: Optional[bool] = None,
+        enable_2k: Optional[bool] = None,
+        enable_4k: Optional[bool] = None,
         image_concurrency: Optional[int] = None,
         video_concurrency: Optional[int] = None
     ):
@@ -201,6 +209,10 @@ class TokenManager:
             update_fields["image_enabled"] = image_enabled
         if video_enabled is not None:
             update_fields["video_enabled"] = video_enabled
+        if enable_2k is not None:
+            update_fields["enable_2k"] = enable_2k
+        if enable_4k is not None:
+            update_fields["enable_4k"] = enable_4k
         if image_concurrency is not None:
             update_fields["image_concurrency"] = image_concurrency
         if video_concurrency is not None:

@@ -25,7 +25,7 @@ class LoadBalancer:
         Args:
             for_image_generation: If True, only select tokens with image_enabled=True
             for_video_generation: If True, only select tokens with video_enabled=True
-            model: Model name (used to filter tokens for specific models)
+            model: Model name (used to filter tokens for specific models like 2K/4K)
 
         Returns:
             Selected token or None if no available tokens
@@ -48,6 +48,15 @@ class LoadBalancer:
             if not await self.token_manager.is_at_valid(token.id):
                 filtered_reasons[token.id] = "AT无效或已过期"
                 continue
+
+            # Check 2K/4K model restrictions
+            if model:
+                if "-2k" in model.lower() and not token.enable_2k:
+                    filtered_reasons[token.id] = "未启用2K模型"
+                    continue
+                if "-4k" in model.lower() and not token.enable_4k:
+                    filtered_reasons[token.id] = "未启用4K模型"
+                    continue
 
             # Filter for image generation
             if for_image_generation:

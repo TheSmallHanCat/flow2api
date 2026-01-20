@@ -43,6 +43,8 @@ class AddTokenRequest(BaseModel):
     remark: Optional[str] = None
     image_enabled: bool = True
     video_enabled: bool = True
+    enable_2k: bool = False
+    enable_4k: bool = False
     image_concurrency: int = -1
     video_concurrency: int = -1
 
@@ -54,6 +56,8 @@ class UpdateTokenRequest(BaseModel):
     remark: Optional[str] = None
     image_enabled: Optional[bool] = None
     video_enabled: Optional[bool] = None
+    enable_2k: Optional[bool] = None
+    enable_4k: Optional[bool] = None
     image_concurrency: Optional[int] = None
     video_concurrency: Optional[int] = None
 
@@ -99,6 +103,8 @@ class ImportTokenItem(BaseModel):
     is_active: bool = True
     image_enabled: bool = True
     video_enabled: bool = True
+    enable_2k: bool = False
+    enable_4k: bool = False
     image_concurrency: int = -1
     video_concurrency: int = -1
 
@@ -212,6 +218,8 @@ async def get_tokens(token: str = Depends(verify_admin_token)):
             "current_project_name": t.current_project_name,  # 🆕 项目名称
             "image_enabled": t.image_enabled,
             "video_enabled": t.video_enabled,
+            "enable_2k": t.enable_2k,
+            "enable_4k": t.enable_4k,
             "image_concurrency": t.image_concurrency,
             "video_concurrency": t.video_concurrency,
             "image_count": stats.image_count if stats else 0,
@@ -236,6 +244,8 @@ async def add_token(
             remark=request.remark,
             image_enabled=request.image_enabled,
             video_enabled=request.video_enabled,
+            enable_2k=request.enable_2k,
+            enable_4k=request.enable_4k,
             image_concurrency=request.image_concurrency,
             video_concurrency=request.video_concurrency
         )
@@ -290,6 +300,8 @@ async def update_token(
             remark=request.remark,
             image_enabled=request.image_enabled,
             video_enabled=request.video_enabled,
+            enable_2k=request.enable_2k,
+            enable_4k=request.enable_4k,
             image_concurrency=request.image_concurrency,
             video_concurrency=request.video_concurrency
         )
@@ -476,6 +488,8 @@ async def import_tokens(
                         at_expires=at_expires,
                         image_enabled=item.image_enabled,
                         video_enabled=item.video_enabled,
+                        enable_2k=item.enable_2k,
+                        enable_4k=item.enable_4k,
                         image_concurrency=item.image_concurrency,
                         video_concurrency=item.video_concurrency
                     )
@@ -489,6 +503,8 @@ async def import_tokens(
                         st=st,
                         image_enabled=item.image_enabled,
                         video_enabled=item.video_enabled,
+                        enable_2k=item.enable_2k,
+                        enable_4k=item.enable_4k,
                         image_concurrency=item.image_concurrency,
                         video_concurrency=item.video_concurrency
                     )
