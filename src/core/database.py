@@ -232,6 +232,7 @@ class Database:
                     CREATE TABLE plugin_config (
                         id INTEGER PRIMARY KEY DEFAULT 1,
                         connection_token TEXT DEFAULT '',
+                        auto_enable_on_update BOOLEAN DEFAULT 1,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
