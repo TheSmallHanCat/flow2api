@@ -991,6 +991,90 @@ async def update_plugin_config(
     }
 
 
+@router.post("/api/plugin/check-tokens")
+async def plugin_check_tokens(request: dict, authorization: Optional[str] = Header(None)):
+    """Check token expiration status for Chrome extension
+    
+    Request body:
+        {
+            "emails": ["email1@gmail.com", "email2@gmail.com"]  // optional, if empty returns all tokens
+        }
+    
+    Returns:
+        {
+            "success": true,
+            "tokens": [
+                {
+                    "email": "email@gmail.com",
+                    "at_expires": "2025-01-20T12:00:00+00:00",
+                    "expires_in_seconds": 3600,
+                    "needs_refresh": true,
+                    "is_active": true
+                }
+            ]
+        }
+    """
+    from datetime import datetime, timezone
+    
+    # Verify connection token
+    plugin_config = await db.get_plugin_config()
+
+    provided_token = None
+    if authorization:
+        if authorization.startswith("Bearer "):
+            provided_token = authorization[7:]
+        else:
+            provided_token = authorization
+
+    if not plugin_config.connection_token or provided_token != plugin_config.connection_token:
+        raise HTTPException(status_code=401, detail="Invalid connection token")
+
+    # Get requested emails (optional filter)
+    emails = request.get("emails", [])
+    
+    # Threshold: refresh if expires within 30 minutes
+    refresh_threshold_seconds = 1800
+    
+    # Get all tokens
+    all_tokens = await token_manager.get_all_tokens()
+    
+    # Filter by emails if provided
+    if emails:
+        tokens_to_check = [t for t in all_tokens if t.email in emails]
+    else:
+        tokens_to_check = all_tokens
+    
+    now = datetime.now(timezone.utc)
+    result_tokens = []
+    
+    for token in tokens_to_check:
+        token_info = {
+            "email": token.email,
+            "at_expires": token.at_expires.isoformat() if token.at_expires else None,
+            "expires_in_seconds": None,
+            "needs_refresh": True,  # Default to true if no expiration info
+            "is_active": token.is_active
+        }
+        
+        if token.at_expires:
+            # Ensure at_expires is timezone-aware
+            at_expires = token.at_expires
+            if at_expires.tzinfo is None:
+                at_expires = at_expires.replace(tzinfo=timezone.utc)
+            
+            expires_in = (at_expires - now).total_seconds()
+            token_info["expires_in_seconds"] = int(expires_in)
+            token_info["needs_refresh"] = expires_in < refresh_threshold_seconds
+        
+        result_tokens.append(token_info)
+    
+    return {
+        "success": True,
+        "tokens": result_tokens,
+        "refresh_threshold_seconds": refresh_threshold_seconds
+    }
+
+
 @router.post("/api/plugin/update-token")
 async def plugin_update_token(request: dict, authorization: Optional[str] = Header(None)):
     """Receive token update from Chrome extension (no admin auth required, uses connection_token)"""
