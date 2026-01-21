@@ -22,6 +22,21 @@ class FlowClient:
         # 缓存每个账号的 User-Agent
         self._user_agent_cache = {}
 
+        # Default "real browser" headers (Android Chrome style) to reduce upstream 4xx/5xx instability.
+        # These will be applied as defaults (won't override caller-provided headers).
+        self._default_client_headers = {
+            "sec-ch-ua-mobile": "?1",
+            "sec-ch-ua-platform": "\"Android\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-browser-channel": "stable",
+            "x-browser-copyright": "Copyright 2026 Google LLC. All Rights reserved.",
+            "x-browser-validation": "UujAs0GAwdnCJ9nvrswZ+O+oco0=",
+            "x-browser-year": "2026",
+            "x-client-data": "CJS2yQEIpLbJAQipncoBCNj9ygEIlKHLAQiFoM0BGP6lzwE="
+        }
+
     def _generate_user_agent(self, account_id: str = None) -> str:
         """基于账号ID生成固定的 User-Agent
         
@@ -145,6 +160,10 @@ class FlowClient:
             "Content-Type": "application/json",
             "User-Agent": self._generate_user_agent(account_id)
         })
+
+        # Add default Chromium/Android client headers (do not override explicitly provided values).
+        for key, value in self._default_client_headers.items():
+            headers.setdefault(key, value)
 
         # Log request
         if config.debug_enabled:
