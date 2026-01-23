@@ -502,15 +502,18 @@ class FlowClient:
         
         for retry_attempt in range(max_retries):
             # 每次重试都重新获取 reCAPTCHA token
-            recaptcha_token = await self._get_recaptcha_token(project_id) or ""
+            recaptcha_token = await self._get_recaptcha_token(project_id, action="IMAGE_GENERATION") or ""
             session_id = self._generate_session_id()
 
-            # 构建请求
+            # 构建请求 - 使用新的请求体结构
             request_data = {
                 "clientContext": {
-                    "recaptchaToken": recaptcha_token,
-                    "projectId": project_id,
+                    "recaptchaContext": {
+                        "token": recaptcha_token,
+                        "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                    },
                     "sessionId": session_id,
+                    "projectId": project_id,
                     "tool": "PINHOLE"
                 },
                 "seed": random.randint(1, 99999),
@@ -522,8 +525,13 @@ class FlowClient:
 
             json_data = {
                 "clientContext": {
-                    "recaptchaToken": recaptcha_token,
-                    "sessionId": session_id
+                    "recaptchaContext": {
+                        "token": recaptcha_token,
+                        "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                    },
+                    "sessionId": session_id,
+                    "projectId": project_id,
+                    "tool": "PINHOLE"
                 },
                 "requests": [request_data]
             }
@@ -571,8 +579,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/flow/upsampleImage"
 
-        # 获取 reCAPTCHA token
-        recaptcha_token = await self._get_recaptcha_token(project_id) or ""
+        # 获取 reCAPTCHA token - 使用 VIDEO_GENERATION action
+        recaptcha_token = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION") or ""
         session_id = self._generate_session_id()
 
         json_data = {
@@ -640,14 +648,17 @@ class FlowClient:
         last_error = None
         
         for retry_attempt in range(max_retries):
-            # 每次重试都重新获取 reCAPTCHA token
-            recaptcha_token = await self._get_recaptcha_token(project_id) or ""
+            # 每次重试都重新获取 reCAPTCHA token - 视频使用 VIDEO_GENERATION action
+            recaptcha_token = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION") or ""
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 
             json_data = {
                 "clientContext": {
-                    "recaptchaToken": recaptcha_token,
+                    "recaptchaContext": {
+                        "token": recaptcha_token,
+                        "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                    },
                     "sessionId": session_id,
                     "projectId": project_id,
                     "tool": "PINHOLE",
@@ -720,14 +731,17 @@ class FlowClient:
         last_error = None
         
         for retry_attempt in range(max_retries):
-            # 每次重试都重新获取 reCAPTCHA token
-            recaptcha_token = await self._get_recaptcha_token(project_id) or ""
+            # 每次重试都重新获取 reCAPTCHA token - 视频使用 VIDEO_GENERATION action
+            recaptcha_token = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION") or ""
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 
             json_data = {
                 "clientContext": {
-                    "recaptchaToken": recaptcha_token,
+                    "recaptchaContext": {
+                        "token": recaptcha_token,
+                        "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                    },
                     "sessionId": session_id,
                     "projectId": project_id,
                     "tool": "PINHOLE",
@@ -803,14 +817,17 @@ class FlowClient:
         last_error = None
         
         for retry_attempt in range(max_retries):
-            # 每次重试都重新获取 reCAPTCHA token
-            recaptcha_token = await self._get_recaptcha_token(project_id) or ""
+            # 每次重试都重新获取 reCAPTCHA token - 视频使用 VIDEO_GENERATION action
+            recaptcha_token = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION") or ""
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 
             json_data = {
                 "clientContext": {
-                    "recaptchaToken": recaptcha_token,
+                    "recaptchaContext": {
+                        "token": recaptcha_token,
+                        "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                    },
                     "sessionId": session_id,
                     "projectId": project_id,
                     "tool": "PINHOLE",
@@ -889,14 +906,17 @@ class FlowClient:
         last_error = None
         
         for retry_attempt in range(max_retries):
-            # 每次重试都重新获取 reCAPTCHA token
-            recaptcha_token = await self._get_recaptcha_token(project_id) or ""
+            # 每次重试都重新获取 reCAPTCHA token - 视频使用 VIDEO_GENERATION action
+            recaptcha_token = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION") or ""
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 
             json_data = {
                 "clientContext": {
-                    "recaptchaToken": recaptcha_token,
+                    "recaptchaContext": {
+                        "token": recaptcha_token,
+                        "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                    },
                     "sessionId": session_id,
                     "projectId": project_id,
                     "tool": "PINHOLE",
@@ -1023,8 +1043,15 @@ class FlowClient:
         """生成sceneId: UUID"""
         return str(uuid.uuid4())
 
-    async def _get_recaptcha_token(self, project_id: str) -> Optional[str]:
-        """获取reCAPTCHA token - 支持两种方式"""
+    async def _get_recaptcha_token(self, project_id: str, action: str = "IMAGE_GENERATION") -> Optional[str]:
+        """获取reCAPTCHA token - 支持两种方式
+        
+        Args:
+            project_id: 项目ID
+            action: reCAPTCHA action类型
+                - IMAGE_GENERATION: 图片生成 (默认)
+                - VIDEO_GENERATION: 视频生成和2K/4K图片放大
+        """
         captcha_method = config.captcha_method
 
         # 恒定浏览器打码
@@ -1032,7 +1059,7 @@ class FlowClient:
             try:
                 from .browser_captcha_personal import BrowserCaptchaService
                 service = await BrowserCaptchaService.get_instance(self.db)
-                return await service.get_token(project_id)
+                return await service.get_token(project_id, action)
             except Exception as e:
                 debug_logger.log_error(f"[reCAPTCHA Browser] error: {str(e)}")
                 return None
@@ -1041,7 +1068,7 @@ class FlowClient:
             try:
                 from .browser_captcha import BrowserCaptchaService
                 service = await BrowserCaptchaService.get_instance(self.db)
-                return await service.get_token(project_id)
+                return await service.get_token(project_id, action)
             except Exception as e:
                 debug_logger.log_error(f"[reCAPTCHA Browser] error: {str(e)}")
                 return None
@@ -1053,9 +1080,9 @@ class FlowClient:
                 return None
 
             website_key = "6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV"
-            website_url = f"https://labs.google/fx/tools/flow/project/{project_id}"
+            website_url = "https://labs.google/"
             base_url = config.yescaptcha_base_url
-            page_action = "FLOW_GENERATION"
+            page_action = action
 
             try:
                 async with AsyncSession() as session:

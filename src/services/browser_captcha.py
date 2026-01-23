@@ -143,11 +143,14 @@ class BrowserCaptchaService:
             debug_logger.log_error(f"[BrowserCaptcha] ❌ 浏览器启动失败: {str(e)}")
             raise
 
-    async def get_token(self, project_id: str) -> Optional[str]:
+    async def get_token(self, project_id: str, action: str = "IMAGE_GENERATION") -> Optional[str]:
         """获取 reCAPTCHA token
 
         Args:
             project_id: Flow项目ID
+            action: reCAPTCHA action类型
+                - IMAGE_GENERATION: 图片生成 (默认)
+                - VIDEO_GENERATION: 视频生成和2K/4K图片放大
 
         Returns:
             reCAPTCHA token字符串，如果获取失败返回None
@@ -226,9 +229,10 @@ class BrowserCaptchaService:
             await page.wait_for_timeout(1000)
 
             # 执行reCAPTCHA并获取token
-            debug_logger.log_info("[BrowserCaptcha] 执行reCAPTCHA验证...")
+            debug_logger.log_info(f"[BrowserCaptcha] 执行reCAPTCHA验证 (action={action})...")
             token = await page.evaluate("""
-                async (websiteKey) => {
+                async (params) => {
+                    const { websiteKey, action } = params;
                     try {
                         if (!window.grecaptcha) {
                             console.error('[BrowserCaptcha] window.grecaptcha 不存在');
@@ -259,7 +263,7 @@ class BrowserCaptchaService:
 
                         // 执行reCAPTCHA v3
                         const token = await window.grecaptcha.execute(websiteKey, {
-                            action: 'FLOW_GENERATION'
+                            action: action
                         });
 
                         return token;
@@ -268,7 +272,7 @@ class BrowserCaptchaService:
                         return null;
                     }
                 }
-            """, self.website_key)
+            """, {"websiteKey": self.website_key, "action": action})
 
             duration_ms = (time.time() - start_time) * 1000
 
