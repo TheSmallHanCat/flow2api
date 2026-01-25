@@ -40,3 +40,4 @@ base_url = ""   # 缓存文件访问的基础URL, 留空则使用服务器地址
 captcha_method = "browser"  # 打码方式: yescaptcha 或 browser
 yescaptcha_api_key = ""  # YesCaptcha API密钥
 yescaptcha_base_url = "https://api.yescaptcha.com"
+browser_path = ""  # 浏览器可执行文件路径，留空则自动检测 Edge/Chrome
