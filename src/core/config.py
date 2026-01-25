@@ -224,6 +224,17 @@ class Config:
             self._config["captcha"] = {}
         self._config["captcha"]["yescaptcha_base_url"] = base_url
 
+    @property
+    def browser_path(self) -> str:
+        """Get browser executable path (empty for auto-detect)"""
+        return self._config.get("captcha", {}).get("browser_path", "")
+
+    def set_browser_path(self, path: str):
+        """Set browser executable path"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["browser_path"] = path
+
 
 # Global config instance
 config = Config()

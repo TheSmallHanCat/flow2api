@@ -1,13 +1,15 @@
 """
 浏览器自动化获取 reCAPTCHA token
-使用 Playwright 访问页面并执行 reCAPTCHA 验证
+使用本地真实浏览器 (persistent context) 访问页面并执行 reCAPTCHA 验证
 支持多标签页并发
 """
 import asyncio
 import time
 import re
+import os
+from pathlib import Path
 from typing import Optional, Dict
-from playwright.async_api import async_playwright, Browser, BrowserContext, Route
+from playwright.async_api import async_playwright, BrowserContext, Route
 
 from ..core.logger import debug_logger
 
@@ -15,6 +17,9 @@ from ..core.logger import debug_logger
 # 配置
 DEFAULT_MAX_PAGES = 5  # 默认最大并发标签页数
 DEFAULT_TAB_INTERVAL = 1.0  # 默认标签页创建间隔（秒）
+
+# 默认浏览器路径（空表示自动检测）
+DEFAULT_BROWSER_PATH = None
 
 
 def parse_proxy_url(proxy_url: str) -> Optional[Dict[str, str]]:
@@ -80,27 +85,69 @@ def validate_browser_proxy_url(proxy_url: str) -> tuple[bool, str]:
     return False, f"不支持的代理协议：{protocol}"
 
 
+def detect_browser_path() -> Optional[str]:
+    """自动检测本机浏览器路径（优先 Edge，其次 Chrome）"""
+    import platform
+    system = platform.system()
+    
+    # 常见浏览器路径
+    if system == "Windows":
+        paths = [
+            # Edge
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            # Chrome
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        ]
+    elif system == "Darwin":  # macOS
+        paths = [
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ]
+    else:  # Linux
+        paths = [
+            "/usr/bin/microsoft-edge",
+            "/usr/bin/google-chrome",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+        ]
+    
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    
+    return None
+
+
 class BrowserCaptchaService:
-    """浏览器自动化获取 reCAPTCHA token（单例模式，支持多标签并发）
+    """浏览器自动化获取 reCAPTCHA token（单例模式，使用本地真实浏览器）
     
     特点：
-    - 单个浏览器实例，多标签页并发
-    - 使用信号量控制最大并发数
-    - 支持标签页创建间隔控制
-    - 使用路由拦截优化加载速度
+    - 支持调用本机 Edge/Chrome 浏览器
+    - 可配置浏览器安装路径
+    - 使用 persistent context 复用浏览器配置
+    - 多标签页并发
     """
 
     _instance: Optional['BrowserCaptchaService'] = None
     _lock = asyncio.Lock()
 
     def __init__(self, db=None):
-        """初始化服务（默认有头模式）"""
+        """初始化服务"""
         self.headless = False  # 默认有头
         self.playwright = None
-        self.browser: Optional[Browser] = None
+        self.context: Optional[BrowserContext] = None
         self._initialized = False
         self.website_key = "6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV"
         self.db = db
+        
+        # 用户数据目录
+        self.user_data_dir = os.path.join(os.getcwd(), "browser_data")
+        
+        # 浏览器路径（空表示自动检测）
+        self.browser_path: Optional[str] = DEFAULT_BROWSER_PATH
         
         # 并发控制
         self._max_pages = DEFAULT_MAX_PAGES
@@ -136,24 +183,47 @@ class BrowserCaptchaService:
         self._tab_interval = max(0.1, seconds)
         debug_logger.log_info(f"[BrowserCaptcha] 标签页间隔设置为 {self._tab_interval} 秒")
 
+    def set_browser_path(self, path: str):
+        """设置浏览器安装路径
+        
+        Args:
+            path: 浏览器可执行文件路径，例如:
+                - Windows Edge: C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe
+                - Windows Chrome: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe
+                - macOS Edge: /Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge
+                - macOS Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+        """
+        if path and os.path.exists(path):
+            self.browser_path = path
+            debug_logger.log_info(f"[BrowserCaptcha] 浏览器路径设置为: {path}")
+        else:
+            debug_logger.log_warning(f"[BrowserCaptcha] 浏览器路径不存在: {path}")
+
     async def initialize(self):
-        """初始化浏览器（启动一次）"""
+        """初始化浏览器（使用本机 Edge/Chrome）"""
         if self._initialized:
             return
 
         try:
-            # 获取浏览器专用代理配置
-            proxy_url = None
-            if self.db:
-                captcha_config = await self.db.get_captcha_config()
-                if captcha_config.browser_proxy_enabled and captcha_config.browser_proxy_url:
-                    proxy_url = captcha_config.browser_proxy_url
-
-            debug_logger.log_info(f"[BrowserCaptcha] 正在启动浏览器... (proxy={proxy_url or 'None'}, max_pages={self._max_pages})")
+            # 确保用户数据目录存在
+            Path(self.user_data_dir).mkdir(parents=True, exist_ok=True)
+            
+            # 从配置读取浏览器路径
+            from ..core.config import config
+            config_browser_path = config.browser_path
+            
+            # 优先级：实例设置 > 配置文件 > 自动检测
+            browser_path = self.browser_path or config_browser_path or detect_browser_path()
+            if browser_path:
+                debug_logger.log_info(f"[BrowserCaptcha] 使用浏览器: {browser_path}")
+            else:
+                debug_logger.log_info(f"[BrowserCaptcha] 未检测到本地浏览器，使用 Playwright 内置 Chromium")
+            
+            debug_logger.log_info(f"[BrowserCaptcha] 正在启动浏览器... (profile={self.user_data_dir}, max_pages={self._max_pages})")
             self.playwright = await async_playwright().start()
 
-            # 配置浏览器启动参数
-            launch_options = {
+            # 构建启动参数
+            launch_args = {
                 'headless': self.headless,
                 'args': [
                     '--disable-blink-features=AutomationControlled',
@@ -163,6 +233,7 @@ class BrowserCaptchaService:
                     '--disable-gpu',
                     '--no-first-run',
                     '--no-zygote',
+                    '--window-size=1280,720',
                     '--disable-infobars',
                     '--disable-extensions',
                     '--disable-plugins-discovery',
@@ -175,22 +246,24 @@ class BrowserCaptchaService:
                     '--disable-prompt-on-repost',
                     '--disable-features=TranslateUI',
                     '--disable-ipc-flooding-protection',
-                ]
+                ],
+                'ignore_default_args': ['--enable-automation'],
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
-
-            # 如果有代理，解析并添加代理配置
-            if proxy_url:
-                proxy_config = parse_proxy_url(proxy_url)
-                if proxy_config:
-                    launch_options['proxy'] = proxy_config
-                    auth_info = "auth=yes" if 'username' in proxy_config else "auth=no"
-                    debug_logger.log_info(f"[BrowserCaptcha] 代理配置: {proxy_config['server']} ({auth_info})")
-                else:
-                    debug_logger.log_warning(f"[BrowserCaptcha] 代理URL格式错误: {proxy_url}")
-
-            self.browser = await self.playwright.chromium.launch(**launch_options)
+            
+            # 如果有指定浏览器路径，添加到参数
+            if browser_path:
+                launch_args['executable_path'] = browser_path
+            
+            # 使用 persistent context 启动浏览器
+            self.context = await self.playwright.chromium.launch_persistent_context(
+                self.user_data_dir,
+                **launch_args
+            )
+            
             self._initialized = True
-            debug_logger.log_info(f"[BrowserCaptcha] ✅ 浏览器已启动 (headless={self.headless}, proxy={proxy_url or 'None'}, max_pages={self._max_pages})")
+            browser_name = os.path.basename(browser_path) if browser_path else "Chromium"
+            debug_logger.log_info(f"[BrowserCaptcha] ✅ 浏览器已启动 (browser={browser_name}, headless={self.headless}, max_pages={self._max_pages})")
         except Exception as e:
             debug_logger.log_error(f"[BrowserCaptcha] ❌ 浏览器启动失败: {str(e)}")
             raise
@@ -227,14 +300,8 @@ class BrowserCaptchaService:
                         await asyncio.sleep(wait_time)
                     self._last_tab_time = time.time()
                 
-                # 创建新标签页
-                context = await self.browser.new_context(
-                    viewport={'width': 1280, 'height': 720},
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    locale='en-US',
-                    timezone_id='America/New_York'
-                )
-                page = await context.new_page()
+                # 直接在 persistent context 中创建新标签页
+                page = await self.context.new_page()
                 
                 # 添加反检测脚本
                 await page.add_init_script("""
@@ -369,27 +436,25 @@ class BrowserCaptchaService:
                 debug_logger.log_error(f"[BrowserCaptcha] 获取token异常: {str(e)}")
                 return None
             finally:
-                # 关闭页面和上下文
+                # 只关闭页面，不关闭 context
                 if page:
                     try:
-                        context = page.context
                         await page.close()
-                        await context.close()
                     except:
                         pass
 
     async def close(self):
         """关闭浏览器"""
         try:
-            if self.browser:
+            if self.context:
                 try:
-                    await self.browser.close()
+                    await self.context.close()
                 except Exception as e:
                     # 忽略连接关闭错误（正常关闭场景）
                     if "Connection closed" not in str(e):
                         debug_logger.log_warning(f"[BrowserCaptcha] 关闭浏览器时出现异常: {str(e)}")
                 finally:
-                    self.browser = None
+                    self.context = None
 
             if self.playwright:
                 try:
