@@ -5,7 +5,7 @@ services:
     image: thesmallhancat/flow2api:latest
     container_name: flow2api
     ports:
-      - "38000:8000"
+      - "38000:18282"
     volumes:
       - ./data:/app/data
       - ./config/setting.toml:/app/config/setting.toml
