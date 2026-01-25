@@ -307,19 +307,22 @@ class BrowserCaptchaService:
                 
                 await page.route("**/*", handle_route)
                 
-                # 访问页面
-                await page.goto(page_url, wait_until="load", timeout=30000)
+                # 访问页面并等待网络空闲
+                await page.goto(page_url, wait_until="networkidle", timeout=30000)
                 
-                # 等待 reCAPTCHA 脚本加载
+                # 等待 reCAPTCHA 脚本完全加载
                 try:
                     await page.wait_for_function(
                         "typeof grecaptcha !== 'undefined' && grecaptcha.enterprise && typeof grecaptcha.enterprise.execute === 'function'",
-                        timeout=15000
+                        timeout=20000
                     )
                 except Exception as e:
                     debug_logger.log_warning(f"[BrowserCaptcha] reCAPTCHA 脚本加载超时: {e}")
                     self._error_count += 1
                     return None
+                
+                # 额外等待确保完全初始化
+                await asyncio.sleep(0.5)
                 
                 # 执行 reCAPTCHA
                 try:
