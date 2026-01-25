@@ -94,8 +94,8 @@ class BrowserCaptchaService:
     _lock = asyncio.Lock()
 
     def __init__(self, db=None):
-        """初始化服务（始终使用无头模式）"""
-        self.headless = True  # 始终无头
+        """初始化服务（默认有头模式）"""
+        self.headless = False  # 默认有头
         self.playwright = None
         self.browser: Optional[Browser] = None
         self._initialized = False
