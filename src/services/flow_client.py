@@ -1068,7 +1068,7 @@ class FlowClient:
             try:
                 from .browser_captcha import BrowserCaptchaService
                 service = await BrowserCaptchaService.get_instance(self.db)
-                return await service.get_token(project_id, action)
+                return await service.get_token(action)
             except Exception as e:
                 debug_logger.log_error(f"[reCAPTCHA Browser] error: {str(e)}")
                 return None
