@@ -915,10 +915,11 @@ class GenerationHandler:
                         error_str = str(e)
                         debug_logger.log_error(f"[UPSAMPLE] 放大失败 (尝试 {retry_attempt + 1}/{max_retries}): {error_str}")
                         
-                        # 检查是否是403错误，需要重试
-                        if "403" in error_str and retry_attempt < max_retries - 1:
+                        # 检查是否是可重试错误（403、reCAPTCHA、超时等）
+                        retry_reason = self.flow_client._get_retry_reason(error_str)
+                        if retry_reason and retry_attempt < max_retries - 1:
                             if stream:
-                                yield self._create_stream_chunk(f"⚠️ 放大遇到403错误，正在重新获取验证码重试 ({retry_attempt + 2}/{max_retries})...\n")
+                                yield self._create_stream_chunk(f"⚠️ 放大遇到{retry_reason}，正在重试 ({retry_attempt + 2}/{max_retries})...\n")
                             # 等待一小段时间后重试
                             await asyncio.sleep(1)
                             continue
