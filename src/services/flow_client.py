@@ -996,7 +996,7 @@ class FlowClient:
         Returns:
             同 generate_video_text
         """
-        url = f"{self.api_base_url}/video:batchAsyncUpsampleVideo"
+        url = f"{self.api_base_url}/video:batchAsyncGenerateVideoUpsampleVideo"
 
         # 403/reCAPTCHA 重试逻辑 - 最多重试3次
         max_retries = 3
