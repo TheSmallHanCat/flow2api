@@ -1124,7 +1124,8 @@ class GenerationHandler:
                     # 只有首帧 - 需要将 model_key 中的 _fl_ 替换为 _
                     # 例如: veo_3_1_i2v_s_fast_fl_ultra_relaxed -> veo_3_1_i2v_s_fast_ultra_relaxed
                     #       veo_3_1_i2v_s_fast_portrait_fl_ultra_relaxed -> veo_3_1_i2v_s_fast_portrait_ultra_relaxed
-                    actual_model_key = model_config["model_key"].replace("_fl_", "_")
+                    # 当用户账号等级: PAYGATE_TIER_ONE 由于模型名，最后是_fl, 只有首帧，需要去掉尾部_fl
+                    actual_model_key = model_config["model_key"].replace("_fl_", "_").rstrip("_fl")
                     debug_logger.log_info(f"[I2V] 单帧模式，model_key: {model_config['model_key']} -> {actual_model_key}")
                     result = await self.flow_client.generate_video_start_image(
                         at=token.at,
