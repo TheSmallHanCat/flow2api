@@ -156,6 +156,62 @@ class Config:
             self._config["generation"] = {}
         self._config["generation"]["upsample_timeout"] = timeout
 
+    # Semantic probe configuration
+    @property
+    def semantic_probe_enabled(self) -> bool:
+        """Get semantic probe enabled status"""
+        return self._config.get("semantic_probe", {}).get("enabled", False)
+
+    @property
+    def semantic_probe_api_url(self) -> str:
+        """Get semantic probe Chat API URL"""
+        return self._config.get("semantic_probe", {}).get("api_url", "")
+
+    @property
+    def semantic_probe_api_key(self) -> str:
+        """Get semantic probe Chat API key"""
+        return self._config.get("semantic_probe", {}).get("api_key", "")
+
+    @property
+    def semantic_probe_model(self) -> str:
+        """Get semantic probe Chat model name"""
+        return self._config.get("semantic_probe", {}).get("model", "")
+
+    @property
+    def semantic_probe_timeout(self) -> int:
+        """Get semantic probe request timeout in seconds"""
+        return int(self._config.get("semantic_probe", {}).get("timeout", 15))
+
+    def set_semantic_probe_enabled(self, enabled: bool):
+        """Set semantic probe enabled status"""
+        if "semantic_probe" not in self._config:
+            self._config["semantic_probe"] = {}
+        self._config["semantic_probe"]["enabled"] = bool(enabled)
+
+    def set_semantic_probe_api_url(self, api_url: str):
+        """Set semantic probe Chat API URL"""
+        if "semantic_probe" not in self._config:
+            self._config["semantic_probe"] = {}
+        self._config["semantic_probe"]["api_url"] = api_url or ""
+
+    def set_semantic_probe_api_key(self, api_key: str):
+        """Set semantic probe Chat API key"""
+        if "semantic_probe" not in self._config:
+            self._config["semantic_probe"] = {}
+        self._config["semantic_probe"]["api_key"] = api_key or ""
+
+    def set_semantic_probe_model(self, model: str):
+        """Set semantic probe model name"""
+        if "semantic_probe" not in self._config:
+            self._config["semantic_probe"] = {}
+        self._config["semantic_probe"]["model"] = model or ""
+
+    def set_semantic_probe_timeout(self, timeout: int):
+        """Set semantic probe timeout in seconds"""
+        if "semantic_probe" not in self._config:
+            self._config["semantic_probe"] = {}
+        self._config["semantic_probe"]["timeout"] = int(timeout)
+
     # Cache configuration
     @property
     def cache_enabled(self) -> bool:

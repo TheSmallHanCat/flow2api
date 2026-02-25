@@ -68,6 +68,14 @@ class GenerationConfigRequest(BaseModel):
     video_timeout: int
 
 
+class SemanticProbeConfigRequest(BaseModel):
+    enabled: Optional[bool] = None
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    timeout: Optional[int] = None
+
+
 class ChangePasswordRequest(BaseModel):
     username: Optional[str] = None
     old_password: str
@@ -582,6 +590,42 @@ async def update_generation_config(
     await db.reload_config_to_memory()
 
     return {"success": True, "message": "生成配置更新成功"}
+
+
+@router.get("/api/semantic-probe/config")
+async def get_semantic_probe_config(token: str = Depends(verify_admin_token)):
+    """Get semantic probe configuration"""
+    probe_config = await db.get_semantic_probe_config()
+    return {
+        "success": True,
+        "config": {
+            "enabled": probe_config.enabled,
+            "api_url": probe_config.api_url,
+            "api_key": probe_config.api_key,
+            "model": probe_config.model,
+            "timeout": probe_config.timeout
+        }
+    }
+
+
+@router.post("/api/semantic-probe/config")
+async def update_semantic_probe_config(
+    request: SemanticProbeConfigRequest,
+    token: str = Depends(verify_admin_token)
+):
+    """Update semantic probe configuration"""
+    await db.update_semantic_probe_config(
+        enabled=request.enabled,
+        api_url=request.api_url,
+        api_key=request.api_key,
+        model=request.model,
+        timeout=request.timeout
+    )
+
+    # 🔥 Hot reload: sync database config to memory
+    await db.reload_config_to_memory()
+
+    return {"success": True, "message": "语意探查配置更新成功"}
 
 
 # ========== System Info ==========

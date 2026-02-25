@@ -3,7 +3,7 @@ import asyncio
 import base64
 import json
 import time
-from typing import Optional, AsyncGenerator, List, Dict, Any
+from typing import Optional, AsyncGenerator, List, Dict, Any, Tuple
 from ..core.logger import debug_logger
 from ..core.config import config
 from ..core.models import Task, RequestLog
@@ -591,6 +591,226 @@ class GenerationHandler:
             proxy_manager=proxy_manager
         )
 
+    @staticmethod
+    def _normalize_text(value: Optional[str]) -> str:
+        return (value or "").strip().lower().replace("_", "-")
+
+    @staticmethod
+    def _normalize_aspect_ratio(aspect_ratio: Optional[str]) -> str:
+        value = GenerationHandler._normalize_text(aspect_ratio)
+        mapping = {
+            "landscape": "landscape",
+            "horizontal": "landscape",
+            "16:9": "landscape",
+            "portrait": "portrait",
+            "vertical": "portrait",
+            "9:16": "portrait",
+            "square": "square",
+            "1:1": "square",
+            "four-three": "four-three",
+            "4:3": "four-three",
+            "three-four": "three-four",
+            "3:4": "three-four"
+        }
+        return mapping.get(value, "landscape")
+
+    @staticmethod
+    def _normalize_resolution(resolution: Optional[str]) -> Optional[str]:
+        value = GenerationHandler._normalize_text(resolution)
+        if value in ("2k", "4k", "1080p"):
+            return value
+        return None
+
+    @staticmethod
+    def _normalize_quality(quality: Optional[str]) -> str:
+        value = GenerationHandler._normalize_text(quality)
+        mapping = {
+            "standard": "standard",
+            "normal": "standard",
+            "default": "standard",
+            "ultra": "ultra",
+            "ultra-relaxed": "ultra_relaxed",
+            "ultra_relaxed": "ultra_relaxed",
+            "relaxed": "ultra_relaxed"
+        }
+        return mapping.get(value, "standard")
+
+    @staticmethod
+    def _normalize_video_type(video_type: Optional[str]) -> Optional[str]:
+        value = GenerationHandler._normalize_text(video_type)
+        if value in ("t2v", "i2v", "r2v"):
+            return value
+        return None
+
+    def resolve_model(
+        self,
+        model: str,
+        images: Optional[List[bytes]] = None,
+        aspect_ratio: Optional[str] = None,
+        resolution: Optional[str] = None,
+        quality: Optional[str] = None,
+        video_type: Optional[str] = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """解析模型：优先精确匹配，其次根据通用模型+参数推断。"""
+        if model in MODEL_CONFIG:
+            return model, MODEL_CONFIG[model]
+
+        normalized_model = self._normalize_text(model)
+        aspect = self._normalize_aspect_ratio(aspect_ratio)
+        res = self._normalize_resolution(resolution)
+        q = self._normalize_quality(quality)
+
+        image_count = len(images) if images else 0
+        inferred_video_type = self._normalize_video_type(video_type)
+        if not inferred_video_type:
+            if image_count == 0:
+                inferred_video_type = "t2v"
+            elif image_count <= 2:
+                inferred_video_type = "i2v"
+            else:
+                inferred_video_type = "r2v"
+
+        # ===== 图片通用模型 =====
+        if any(k in normalized_model for k in ["gemini-2.5", "gemini-25"]) and "image" in normalized_model:
+            suffix = "portrait" if aspect == "portrait" else "landscape"
+            resolved = f"gemini-2.5-flash-image-{suffix}"
+            if resolved in MODEL_CONFIG:
+                return resolved, MODEL_CONFIG[resolved]
+
+        if any(k in normalized_model for k in ["gemini-3.0", "gemini-30"]) and "image" in normalized_model:
+            aspect_map = {
+                "landscape": "landscape",
+                "portrait": "portrait",
+                "square": "square",
+                "four-three": "four-three",
+                "three-four": "three-four"
+            }
+            aspect_suffix = aspect_map.get(aspect, "landscape")
+            resolved = f"gemini-3.0-pro-image-{aspect_suffix}"
+            if res in ("2k", "4k"):
+                resolved = f"{resolved}-{res}"
+            if resolved in MODEL_CONFIG:
+                return resolved, MODEL_CONFIG[resolved]
+
+        if "imagen" in normalized_model and "image" in normalized_model:
+            suffix = "portrait" if aspect == "portrait" else "landscape"
+            resolved = f"imagen-4.0-generate-preview-{suffix}"
+            if resolved in MODEL_CONFIG:
+                return resolved, MODEL_CONFIG[resolved]
+
+        if normalized_model in ("flow-image", "generic-image", "image"):
+            aspect_map = {
+                "landscape": "landscape",
+                "portrait": "portrait",
+                "square": "square",
+                "four-three": "four-three",
+                "three-four": "three-four"
+            }
+            aspect_suffix = aspect_map.get(aspect, "landscape")
+            resolved = f"gemini-3.0-pro-image-{aspect_suffix}"
+            if res in ("2k", "4k"):
+                resolved = f"{resolved}-{res}"
+            if resolved in MODEL_CONFIG:
+                return resolved, MODEL_CONFIG[resolved]
+
+        # ===== 视频通用模型 =====
+        family = "veo_3_1"
+        if "veo-2.1" in normalized_model or "veo_2_1" in model:
+            family = "veo_2_1"
+        elif "veo-2.0" in normalized_model or "veo_2_0" in model:
+            family = "veo_2_0"
+
+        is_portrait = (aspect == "portrait")
+
+        def pick(*candidates):
+            for c in candidates:
+                if c in MODEL_CONFIG:
+                    return c
+            return None
+
+        if normalized_model in ("flow-video", "generic-video", "video") or "veo" in normalized_model:
+            resolved = None
+
+            if inferred_video_type == "t2v":
+                if family == "veo_3_1":
+                    if res in ("4k", "1080p"):
+                        suffix = "portrait" if is_portrait else ""
+                        if q == "ultra":
+                            resolved = pick(
+                                f"veo_3_1_t2v_fast_{suffix + '_' if suffix else ''}ultra_{res}".replace("__", "_"),
+                                f"veo_3_1_t2v_fast_{res}"
+                            )
+                        else:
+                            resolved = pick(
+                                f"veo_3_1_t2v_fast_{suffix + '_' if suffix else ''}{res}".replace("__", "_"),
+                                f"veo_3_1_t2v_fast_{res}"
+                            )
+                    else:
+                        if q == "ultra_relaxed":
+                            resolved = pick(
+                                "veo_3_1_t2v_fast_portrait_ultra_relaxed" if is_portrait else "veo_3_1_t2v_fast_ultra_relaxed"
+                            )
+                        elif q == "ultra":
+                            resolved = pick(
+                                "veo_3_1_t2v_fast_portrait_ultra" if is_portrait else "veo_3_1_t2v_fast_ultra"
+                            )
+                        else:
+                            resolved = pick(
+                                "veo_3_1_t2v_fast_portrait" if is_portrait else "veo_3_1_t2v_fast_landscape"
+                            )
+                elif family == "veo_2_1":
+                    resolved = pick("veo_2_1_fast_d_15_t2v_portrait" if is_portrait else "veo_2_1_fast_d_15_t2v_landscape")
+                else:
+                    resolved = pick("veo_2_0_t2v_portrait" if is_portrait else "veo_2_0_t2v_landscape")
+
+            elif inferred_video_type == "i2v":
+                if family == "veo_3_1":
+                    if res in ("4k", "1080p"):
+                        resolved = pick(
+                            f"veo_3_1_i2v_s_fast_portrait_ultra_fl_{res}" if is_portrait else f"veo_3_1_i2v_s_fast_ultra_fl_{res}"
+                        )
+                    else:
+                        if q == "ultra_relaxed":
+                            resolved = pick(
+                                "veo_3_1_i2v_s_fast_portrait_ultra_relaxed" if is_portrait else "veo_3_1_i2v_s_fast_ultra_relaxed"
+                            )
+                        elif q == "ultra":
+                            resolved = pick(
+                                "veo_3_1_i2v_s_fast_portrait_ultra_fl" if is_portrait else "veo_3_1_i2v_s_fast_ultra_fl"
+                            )
+                        else:
+                            resolved = pick(
+                                "veo_3_1_i2v_s_fast_portrait_fl" if is_portrait else "veo_3_1_i2v_s_fast_fl"
+                            )
+                elif family == "veo_2_1":
+                    resolved = pick("veo_2_1_fast_d_15_i2v_portrait" if is_portrait else "veo_2_1_fast_d_15_i2v_landscape")
+                else:
+                    resolved = pick("veo_2_0_i2v_portrait" if is_portrait else "veo_2_0_i2v_landscape")
+
+            elif inferred_video_type == "r2v":
+                if res in ("4k", "1080p"):
+                    resolved = pick(
+                        f"veo_3_1_r2v_fast_portrait_ultra_{res}" if is_portrait else f"veo_3_1_r2v_fast_ultra_{res}"
+                    )
+                else:
+                    if q == "ultra_relaxed":
+                        resolved = pick(
+                            "veo_3_1_r2v_fast_portrait_ultra_relaxed" if is_portrait else "veo_3_1_r2v_fast_ultra_relaxed"
+                        )
+                    elif q == "ultra":
+                        resolved = pick(
+                            "veo_3_1_r2v_fast_portrait_ultra" if is_portrait else "veo_3_1_r2v_fast_ultra"
+                        )
+                    else:
+                        resolved = pick(
+                            "veo_3_1_r2v_fast_portrait" if is_portrait else "veo_3_1_r2v_fast"
+                        )
+
+            if resolved:
+                return resolved, MODEL_CONFIG[resolved]
+
+        raise ValueError(f"不支持的模型: {model}")
+
     async def check_token_availability(self, is_image: bool, is_video: bool) -> bool:
         """检查Token可用性
 
@@ -612,7 +832,14 @@ class GenerationHandler:
         model: str,
         prompt: str,
         images: Optional[List[bytes]] = None,
-        stream: bool = False
+        stream: bool = False,
+        aspect_ratio: Optional[str] = None,
+        resolution: Optional[str] = None,
+        quality: Optional[str] = None,
+        video_type: Optional[str] = None,
+        image_count: int = 1,
+        image_style: Optional[str] = None,
+        image_seed: Optional[int] = None
     ) -> AsyncGenerator:
         """统一生成入口
 
@@ -625,16 +852,32 @@ class GenerationHandler:
         start_time = time.time()
         token = None
 
-        # 1. 验证模型
-        if model not in MODEL_CONFIG:
-            error_msg = f"不支持的模型: {model}"
+        model_config = None
+
+        # 1. 验证/推断模型
+        try:
+            resolved_model, model_config = self.resolve_model(
+                model=model,
+                images=images,
+                aspect_ratio=aspect_ratio,
+                resolution=resolution,
+                quality=quality,
+                video_type=video_type
+            )
+        except ValueError as e:
+            error_msg = str(e)
             debug_logger.log_error(error_msg)
             yield self._create_error_response(error_msg)
             return
 
-        model_config = MODEL_CONFIG[model]
         generation_type = model_config["type"]
-        debug_logger.log_info(f"[GENERATION] 开始生成 - 模型: {model}, 类型: {generation_type}, Prompt: {prompt[:50]}...")
+        if resolved_model != model:
+            debug_logger.log_info(
+                f"[GENERATION] 通用模型推断: {model} -> {resolved_model} "
+                f"(aspect_ratio={aspect_ratio}, resolution={resolution}, quality={quality}, video_type={video_type}, images={len(images) if images else 0})"
+            )
+
+        debug_logger.log_info(f"[GENERATION] 开始生成 - 模型: {resolved_model}, 类型: {generation_type}, Prompt: {prompt[:50]}...")
 
         # 非流式模式: 只检查可用性
         if not stream:
@@ -667,9 +910,9 @@ class GenerationHandler:
         debug_logger.log_info(f"[GENERATION] 正在选择可用Token...")
 
         if generation_type == "image":
-            token = await self.load_balancer.select_token(for_image_generation=True, model=model)
+            token = await self.load_balancer.select_token(for_image_generation=True, model=resolved_model)
         else:
-            token = await self.load_balancer.select_token(for_video_generation=True, model=model)
+            token = await self.load_balancer.select_token(for_video_generation=True, model=resolved_model)
 
         if not token:
             error_msg = self._get_no_token_error_message(generation_type)
@@ -705,16 +948,35 @@ class GenerationHandler:
             debug_logger.log_info(f"[GENERATION] Project ID: {project_id}")
 
             # 5. 根据类型处理
+            request_context = {
+                "generated_url": None
+            }
+
             if generation_type == "image":
                 debug_logger.log_info(f"[GENERATION] 开始图片生成流程...")
                 async for chunk in self._handle_image_generation(
-                    token, project_id, model_config, prompt, images, stream
+                    token,
+                    project_id,
+                    model_config,
+                    prompt,
+                    images,
+                    stream,
+                    image_count=image_count,
+                    image_style=image_style,
+                    image_seed=image_seed,
+                    request_context=request_context
                 ):
                     yield chunk
             else:  # video
                 debug_logger.log_info(f"[GENERATION] 开始视频生成流程...")
                 async for chunk in self._handle_video_generation(
-                    token, project_id, model_config, prompt, images, stream
+                    token,
+                    project_id,
+                    model_config,
+                    prompt,
+                    images,
+                    stream,
+                    request_context=request_context
                 ):
                     yield chunk
 
@@ -733,20 +995,31 @@ class GenerationHandler:
             # 构建响应数据，包含生成的URL
             response_data = {
                 "status": "success",
-                "model": model,
+                "model": resolved_model,
+                "requested_model": model,
                 "prompt": prompt[:100]
             }
 
             # 添加生成的URL（如果有）
-            if hasattr(self, '_last_generated_url') and self._last_generated_url:
-                response_data["url"] = self._last_generated_url
-                # 清除临时存储
-                self._last_generated_url = None
+            if request_context.get("generated_url"):
+                response_data["url"] = request_context["generated_url"]
 
             await self._log_request(
                 token.id,
                 f"generate_{generation_type}",
-                {"model": model, "prompt": prompt[:100], "has_images": images is not None and len(images) > 0},
+                {
+                    "model": resolved_model,
+                    "requested_model": model,
+                    "prompt": prompt[:100],
+                    "has_images": images is not None and len(images) > 0,
+                    "aspect_ratio": aspect_ratio,
+                    "resolution": resolution,
+                    "quality": quality,
+                    "video_type": video_type,
+                    "image_count": image_count,
+                    "image_style": image_style,
+                    "image_seed": image_seed
+                },
                 response_data,
                 200,
                 duration
@@ -767,7 +1040,18 @@ class GenerationHandler:
             await self._log_request(
                 token.id if token else None,
                 f"generate_{generation_type if model_config else 'unknown'}",
-                {"model": model, "prompt": prompt[:100], "has_images": images is not None and len(images) > 0},
+                {
+                    "model": model,
+                    "prompt": prompt[:100],
+                    "has_images": images is not None and len(images) > 0,
+                    "aspect_ratio": aspect_ratio,
+                    "resolution": resolution,
+                    "quality": quality,
+                    "video_type": video_type,
+                    "image_count": image_count,
+                    "image_style": image_style,
+                    "image_seed": image_seed
+                },
                 {"error": error_msg},
                 500,
                 duration
@@ -787,17 +1071,23 @@ class GenerationHandler:
         model_config: dict,
         prompt: str,
         images: Optional[List[bytes]],
-        stream: bool
+        stream: bool,
+        image_count: int = 1,
+        image_style: Optional[str] = None,
+        image_seed: Optional[int] = None,
+        request_context: Optional[dict] = None
     ) -> AsyncGenerator:
         """处理图片生成 (同步返回)"""
 
-        # 获取并发槽位
-        if self.concurrency_manager:
-            if not await self.concurrency_manager.acquire_image(token.id):
-                yield self._create_error_response("图片并发限制已达上限")
-                return
-
+        slot_acquired = False
         try:
+            # 获取并发槽位
+            if self.concurrency_manager:
+                if not await self.concurrency_manager.acquire_image(token.id):
+                    yield self._create_error_response("图片并发限制已达上限")
+                    return
+                slot_acquired = True
+
             # 上传图片 (如果有)
             image_inputs = []
             if images and len(images) > 0:
@@ -828,7 +1118,10 @@ class GenerationHandler:
                 prompt=prompt,
                 model_name=model_config["model_name"],
                 aspect_ratio=model_config["aspect_ratio"],
-                image_inputs=image_inputs
+                image_inputs=image_inputs,
+                image_count=image_count,
+                image_style=image_style,
+                image_seed=image_seed
             )
 
             # 提取URL和mediaId
@@ -867,7 +1160,8 @@ class GenerationHandler:
 
                             # 缓存放大后的图片 (如果启用)
                             # 日志统一记录原图URL (放大后的base64数据太大，不适合存储)
-                            self._last_generated_url = image_url
+                            if request_context is not None:
+                                request_context["generated_url"] = image_url
 
                             if config.cache_enabled:
                                 try:
@@ -949,8 +1243,9 @@ class GenerationHandler:
                     yield self._create_stream_chunk("缓存已关闭,正在返回源链接...\n")
 
             # 返回结果
-            # 存储URL用于日志记录
-            self._last_generated_url = local_url
+            # 存储URL用于日志记录（请求级上下文，避免并发覆盖）
+            if request_context is not None:
+                request_context["generated_url"] = local_url
 
             if stream:
                 yield self._create_stream_chunk(
@@ -965,7 +1260,7 @@ class GenerationHandler:
 
         finally:
             # 释放并发槽位
-            if self.concurrency_manager:
+            if self.concurrency_manager and slot_acquired:
                 await self.concurrency_manager.release_image(token.id)
 
     async def _handle_video_generation(
@@ -975,17 +1270,21 @@ class GenerationHandler:
         model_config: dict,
         prompt: str,
         images: Optional[List[bytes]],
-        stream: bool
+        stream: bool,
+        request_context: Optional[dict] = None
     ) -> AsyncGenerator:
         """处理视频生成 (异步轮询)"""
 
-        # 获取并发槽位
-        if self.concurrency_manager:
-            if not await self.concurrency_manager.acquire_video(token.id):
-                yield self._create_error_response("视频并发限制已达上限")
-                return
-
+        slot_state = {"video_slot_acquired": False}
         try:
+            # 获取并发槽位
+            if self.concurrency_manager:
+                acquired = await self.concurrency_manager.acquire_video(token.id)
+                slot_state["video_slot_acquired"] = acquired
+                if not acquired:
+                    yield self._create_error_response("视频并发限制已达上限")
+                    return
+
             # 获取模型类型和配置
             video_type = model_config.get("video_type")
             supports_images = model_config.get("supports_images", False)
@@ -1005,8 +1304,8 @@ class GenerationHandler:
                     # veo_3_1_t2v_fast -> veo_3_1_t2v_fast_ultra
                     # veo_3_1_t2v_fast_portrait -> veo_3_1_t2v_fast_portrait_ultra
                     # veo_3_0_r2v_fast -> veo_3_0_r2v_fast_ultra
-                    if "_fl" in model_key:
-                        model_key = model_key.replace("_fl", "_ultra_fl")
+                    if model_key.endswith("_fl"):
+                        model_key = model_key[:-3] + "_ultra_fl"
                     else:
                         # 直接在末尾添加 _ultra
                         model_key = model_key + "_ultra"
@@ -1189,12 +1488,19 @@ class GenerationHandler:
             # 检查是否需要放大
             upsample_config = model_config.get("upsample")
 
-            async for chunk in self._poll_video_result(token, project_id, operations, stream, upsample_config):
+            async for chunk in self._poll_video_result(
+                token,
+                project_id,
+                operations,
+                stream,
+                upsample_config,
+                slot_state=slot_state
+            ):
                 yield chunk
 
         finally:
             # 释放并发槽位
-            if self.concurrency_manager:
+            if self.concurrency_manager and slot_state.get("video_slot_acquired"):
                 await self.concurrency_manager.release_video(token.id)
 
     async def _poll_video_result(
@@ -1203,7 +1509,8 @@ class GenerationHandler:
         project_id: str,
         operations: List[Dict],
         stream: bool,
-        upsample_config: Optional[Dict] = None
+        upsample_config: Optional[Dict] = None,
+        slot_state: Optional[Dict] = None
     ) -> AsyncGenerator:
         """轮询视频生成结果
         
@@ -1272,9 +1579,19 @@ class GenerationHandler:
                                 if stream:
                                     yield self._create_stream_chunk("放大任务已提交，继续轮询...\n")
                                 
+                                # 放大阶段通常耗时更长，此处提前释放视频并发槽位
+                                if self.concurrency_manager and slot_state and slot_state.get("video_slot_acquired"):
+                                    await self.concurrency_manager.release_video(token.id)
+                                    slot_state["video_slot_acquired"] = False
+
                                 # 递归轮询放大结果（不再放大）
                                 async for chunk in self._poll_video_result(
-                                    token, project_id, upsample_operations, stream, None
+                                    token,
+                                    project_id,
+                                    upsample_operations,
+                                    stream,
+                                    None,
+                                    slot_state=slot_state
                                 ):
                                     yield chunk
                                 return
@@ -1316,8 +1633,9 @@ class GenerationHandler:
                         completed_at=time.time()
                     )
 
-                    # 存储URL用于日志记录
-                    self._last_generated_url = local_url
+                    # 存储URL用于日志记录（请求级上下文，避免并发覆盖）
+                    if request_context is not None:
+                        request_context["generated_url"] = local_url
 
                     # 返回结果
                     if stream:

@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
-from .models import Token, TokenStats, Task, RequestLog, AdminConfig, ProxyConfig, GenerationConfig, CacheConfig, Project, CaptchaConfig, PluginConfig
+from .models import Token, TokenStats, Task, RequestLog, AdminConfig, ProxyConfig, GenerationConfig, CacheConfig, Project, CaptchaConfig, PluginConfig, SemanticProbeConfig
 
 
 class Database:
@@ -39,6 +39,24 @@ class Database:
             return any(col[1] == column_name for col in columns)
         except:
             return False
+
+    async def _add_missing_columns_atomic(self, db, table_name: str, columns_to_add: list[tuple[str, str]]):
+        """Add missing columns atomically for a table.
+
+        If any ALTER TABLE fails, rollback the whole batch for this table.
+        """
+        savepoint = f"sp_add_cols_{table_name}"
+        await db.execute(f"SAVEPOINT {savepoint}")
+        try:
+            for col_name, col_type in columns_to_add:
+                if not await self._column_exists(db, table_name, col_name):
+                    await db.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
+                    print(f"  ✓ Added column '{col_name}' to {table_name} table")
+            await db.execute(f"RELEASE SAVEPOINT {savepoint}")
+        except Exception as e:
+            await db.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            await db.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise RuntimeError(f"Failed to migrate columns for table '{table_name}': {e}")
 
     async def _ensure_config_rows(self, db, config_dict: dict = None):
         """Ensure all config tables have their default rows
@@ -176,6 +194,29 @@ class Database:
                 VALUES (1, '', 1)
             """)
 
+        # Ensure semantic_probe_config has a row
+        cursor = await db.execute("SELECT COUNT(*) FROM semantic_probe_config")
+        count = await cursor.fetchone()
+        if count[0] == 0:
+            enabled = False
+            api_url = "https://api.openai.com/v1/chat/completions"
+            api_key = ""
+            model = "gpt-4o-mini"
+            timeout = 15
+
+            if config_dict:
+                semantic_probe = config_dict.get("semantic_probe", {})
+                enabled = semantic_probe.get("enabled", False)
+                api_url = semantic_probe.get("api_url", api_url)
+                api_key = semantic_probe.get("api_key", "")
+                model = semantic_probe.get("model", model)
+                timeout = int(semantic_probe.get("timeout", timeout))
+
+            await db.execute("""
+                INSERT INTO semantic_probe_config (id, enabled, api_url, api_key, model, timeout)
+                VALUES (1, ?, ?, ?, ?, ?)
+            """, (enabled, api_url, api_key, model, timeout))
+
     async def check_and_migrate_db(self, config_dict: dict = None):
         """Check database integrity and perform migrations if needed
 
@@ -244,6 +285,22 @@ class Database:
                     )
                 """)
 
+            # Check and create semantic_probe_config table if missing
+            if not await self._table_exists(db, "semantic_probe_config"):
+                print("  ✓ Creating missing table: semantic_probe_config")
+                await db.execute("""
+                    CREATE TABLE semantic_probe_config (
+                        id INTEGER PRIMARY KEY DEFAULT 1,
+                        enabled BOOLEAN DEFAULT 0,
+                        api_url TEXT DEFAULT 'https://api.openai.com/v1/chat/completions',
+                        api_key TEXT DEFAULT '',
+                        model TEXT DEFAULT 'gpt-4o-mini',
+                        timeout INTEGER DEFAULT 15,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
             # ========== Step 2: Add missing columns to existing tables ==========
             # Check and add missing columns to tokens table
             if await self._table_exists(db, "tokens"):
@@ -262,22 +319,15 @@ class Database:
                     ("banned_at", "TIMESTAMP"),  # 禁用时间
                 ]
 
-                for col_name, col_type in columns_to_add:
-                    if not await self._column_exists(db, "tokens", col_name):
-                        try:
-                            await db.execute(f"ALTER TABLE tokens ADD COLUMN {col_name} {col_type}")
-                            print(f"  ✓ Added column '{col_name}' to tokens table")
-                        except Exception as e:
-                            print(f"  ✗ Failed to add column '{col_name}': {e}")
+                await self._add_missing_columns_atomic(db, "tokens", columns_to_add)
 
             # Check and add missing columns to admin_config table
             if await self._table_exists(db, "admin_config"):
-                if not await self._column_exists(db, "admin_config", "error_ban_threshold"):
-                    try:
-                        await db.execute("ALTER TABLE admin_config ADD COLUMN error_ban_threshold INTEGER DEFAULT 3")
-                        print("  ✓ Added column 'error_ban_threshold' to admin_config table")
-                    except Exception as e:
-                        print(f"  ✗ Failed to add column 'error_ban_threshold': {e}")
+                await self._add_missing_columns_atomic(
+                    db,
+                    "admin_config",
+                    [("error_ban_threshold", "INTEGER DEFAULT 3")]
+                )
 
             # Check and add missing columns to captcha_config table
             if await self._table_exists(db, "captcha_config"):
@@ -293,13 +343,7 @@ class Database:
                     ("browser_count", "INTEGER DEFAULT 1"),
                 ]
 
-                for col_name, col_type in captcha_columns_to_add:
-                    if not await self._column_exists(db, "captcha_config", col_name):
-                        try:
-                            await db.execute(f"ALTER TABLE captcha_config ADD COLUMN {col_name} {col_type}")
-                            print(f"  ✓ Added column '{col_name}' to captcha_config table")
-                        except Exception as e:
-                            print(f"  ✗ Failed to add column '{col_name}': {e}")
+                await self._add_missing_columns_atomic(db, "captcha_config", captcha_columns_to_add)
 
             # Check and add missing columns to token_stats table
             if await self._table_exists(db, "token_stats"):
@@ -311,13 +355,7 @@ class Database:
                     ("consecutive_error_count", "INTEGER DEFAULT 0"),  # 🆕 连续错误计数
                 ]
 
-                for col_name, col_type in stats_columns_to_add:
-                    if not await self._column_exists(db, "token_stats", col_name):
-                        try:
-                            await db.execute(f"ALTER TABLE token_stats ADD COLUMN {col_name} {col_type}")
-                            print(f"  ✓ Added column '{col_name}' to token_stats table")
-                        except Exception as e:
-                            print(f"  ✗ Failed to add column '{col_name}': {e}")
+                await self._add_missing_columns_atomic(db, "token_stats", stats_columns_to_add)
 
             # Check and add missing columns to plugin_config table
             if await self._table_exists(db, "plugin_config"):
@@ -325,13 +363,7 @@ class Database:
                     ("auto_enable_on_update", "BOOLEAN DEFAULT 1"),  # 默认开启
                 ]
 
-                for col_name, col_type in plugin_columns_to_add:
-                    if not await self._column_exists(db, "plugin_config", col_name):
-                        try:
-                            await db.execute(f"ALTER TABLE plugin_config ADD COLUMN {col_name} {col_type}")
-                            print(f"  ✓ Added column '{col_name}' to plugin_config table")
-                        except Exception as e:
-                            print(f"  ✗ Failed to add column '{col_name}': {e}")
+                await self._add_missing_columns_atomic(db, "plugin_config", plugin_columns_to_add)
 
             # ========== Step 3: Ensure all config tables have default rows ==========
             # Note: This will NOT overwrite existing config rows
@@ -531,6 +563,20 @@ class Database:
                 )
             """)
 
+            # Semantic probe config table
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS semantic_probe_config (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    enabled BOOLEAN DEFAULT 0,
+                    api_url TEXT DEFAULT 'https://api.openai.com/v1/chat/completions',
+                    api_key TEXT DEFAULT '',
+                    model TEXT DEFAULT 'gpt-4o-mini',
+                    timeout INTEGER DEFAULT 15,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             await db.execute("CREATE INDEX IF NOT EXISTS idx_task_id ON tasks(task_id)")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_token_st ON tokens(st)")
@@ -691,6 +737,17 @@ class Database:
             await db.execute("DELETE FROM tokens WHERE id = ?", (token_id,))
             await db.commit()
 
+    async def increment_token_use_count(self, token_id: int):
+        """Atomically increment token use count and update last_used_at"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                UPDATE tokens
+                SET use_count = COALESCE(use_count, 0) + 1,
+                    last_used_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (token_id,))
+            await db.commit()
+
     # Project operations
     async def add_project(self, project: Project) -> int:
         """Add a new project"""
@@ -777,6 +834,13 @@ class Database:
                 await db.commit()
 
     # Token stats operations (kept for compatibility, now delegates to specific methods)
+    async def _ensure_token_stats_row(self, db, token_id: int):
+        """Ensure token_stats row exists for token_id before any counter update"""
+        cursor = await db.execute("SELECT 1 FROM token_stats WHERE token_id = ?", (token_id,))
+        row = await cursor.fetchone()
+        if not row:
+            await db.execute("INSERT INTO token_stats (token_id) VALUES (?)", (token_id,))
+
     async def increment_token_stats(self, token_id: int, stat_type: str):
         """Increment token statistics (delegates to specific methods)"""
         if stat_type == "image":
@@ -801,6 +865,8 @@ class Database:
         from datetime import date
         async with aiosqlite.connect(self.db_path) as db:
             today = str(date.today())
+            await self._ensure_token_stats_row(db, token_id)
+
             # Get current stats
             cursor = await db.execute("SELECT today_date FROM token_stats WHERE token_id = ?", (token_id,))
             row = await cursor.fetchone()
@@ -830,6 +896,8 @@ class Database:
         from datetime import date
         async with aiosqlite.connect(self.db_path) as db:
             today = str(date.today())
+            await self._ensure_token_stats_row(db, token_id)
+
             # Get current stats
             cursor = await db.execute("SELECT today_date FROM token_stats WHERE token_id = ?", (token_id,))
             row = await cursor.fetchone()
@@ -865,6 +933,8 @@ class Database:
         from datetime import date
         async with aiosqlite.connect(self.db_path) as db:
             today = str(date.today())
+            await self._ensure_token_stats_row(db, token_id)
+
             # Get current stats
             cursor = await db.execute("SELECT today_date FROM token_stats WHERE token_id = ?", (token_id,))
             row = await cursor.fetchone()
@@ -903,6 +973,7 @@ class Database:
         Note: error_count (total historical errors) is NEVER reset
         """
         async with aiosqlite.connect(self.db_path) as db:
+            await self._ensure_token_stats_row(db, token_id)
             await db.execute("""
                 UPDATE token_stats SET consecutive_error_count = 0 WHERE token_id = ?
             """, (token_id,))
@@ -1108,6 +1179,15 @@ class Database:
             config.set_ezcaptcha_base_url(captcha_config.ezcaptcha_base_url)
             config.set_capsolver_api_key(captcha_config.capsolver_api_key)
             config.set_capsolver_base_url(captcha_config.capsolver_base_url)
+
+        # Reload semantic probe config
+        semantic_probe_config = await self.get_semantic_probe_config()
+        if semantic_probe_config:
+            config.set_semantic_probe_enabled(semantic_probe_config.enabled)
+            config.set_semantic_probe_api_url(semantic_probe_config.api_url)
+            config.set_semantic_probe_api_key(semantic_probe_config.api_key)
+            config.set_semantic_probe_model(semantic_probe_config.model)
+            config.set_semantic_probe_timeout(semantic_probe_config.timeout)
 
     # Cache config operations
     async def get_cache_config(self) -> CacheConfig:
@@ -1322,5 +1402,57 @@ class Database:
                     INSERT INTO plugin_config (id, connection_token, auto_enable_on_update)
                     VALUES (1, ?, ?)
                 """, (connection_token, auto_enable_on_update))
+
+            await db.commit()
+
+    # Semantic probe config operations
+    async def get_semantic_probe_config(self) -> SemanticProbeConfig:
+        """Get semantic probe configuration"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM semantic_probe_config WHERE id = 1")
+            row = await cursor.fetchone()
+            if row:
+                return SemanticProbeConfig(**dict(row))
+            return SemanticProbeConfig()
+
+    async def update_semantic_probe_config(
+        self,
+        enabled: bool = None,
+        api_url: str = None,
+        api_key: str = None,
+        model: str = None,
+        timeout: int = None
+    ):
+        """Update semantic probe configuration"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM semantic_probe_config WHERE id = 1")
+            row = await cursor.fetchone()
+
+            if row:
+                current = dict(row)
+                new_enabled = enabled if enabled is not None else current.get("enabled", False)
+                new_api_url = api_url if api_url is not None else current.get("api_url", "https://api.openai.com/v1/chat/completions")
+                new_api_key = api_key if api_key is not None else current.get("api_key", "")
+                new_model = model if model is not None else current.get("model", "gpt-4o-mini")
+                new_timeout = int(timeout) if timeout is not None else int(current.get("timeout", 15))
+
+                await db.execute("""
+                    UPDATE semantic_probe_config
+                    SET enabled = ?, api_url = ?, api_key = ?, model = ?, timeout = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = 1
+                """, (new_enabled, new_api_url, new_api_key, new_model, new_timeout))
+            else:
+                new_enabled = enabled if enabled is not None else False
+                new_api_url = api_url if api_url is not None else "https://api.openai.com/v1/chat/completions"
+                new_api_key = api_key if api_key is not None else ""
+                new_model = model if model is not None else "gpt-4o-mini"
+                new_timeout = int(timeout) if timeout is not None else 15
+
+                await db.execute("""
+                    INSERT INTO semantic_probe_config (id, enabled, api_url, api_key, model, timeout)
+                    VALUES (1, ?, ?, ?, ?, ?)
+                """, (new_enabled, new_api_url, new_api_key, new_model, new_timeout))
 
             await db.commit()

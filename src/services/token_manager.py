@@ -456,7 +456,7 @@ class TokenManager:
 
     async def record_usage(self, token_id: int, is_video: bool = False):
         """Record token usage"""
-        await self.db.update_token(token_id, use_count=1, last_used_at=datetime.now())
+        await self.db.increment_token_use_count(token_id)
 
         if is_video:
             await self.db.increment_token_stats(token_id, "video")
