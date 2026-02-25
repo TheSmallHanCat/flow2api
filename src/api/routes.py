@@ -1,22 +1,129 @@
 """API routes - OpenAI compatible endpoints"""
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
 import base64
 import re
 import json
-import time
 from urllib.parse import urlparse
 from curl_cffi.requests import AsyncSession
 from ..core.auth import verify_api_key_header
 from ..core.models import ChatCompletionRequest
 from ..services.generation_handler import GenerationHandler, MODEL_CONFIG
+from ..services.semantic_probe import SemanticProbeService
 from ..core.logger import debug_logger
 
 router = APIRouter()
-
 # Dependency injection will be set up in main.py
 generation_handler: GenerationHandler = None
+semantic_probe_service = SemanticProbeService()
+
+
+def _normalize_quality_from_image_quality(image_quality: Optional[str]) -> Optional[str]:
+    value = (image_quality or "").strip().lower().replace("_", "-")
+    mapping = {
+        "standard": "standard",
+        "normal": "standard",
+        "default": "standard",
+        "hd": "ultra",
+        "high": "ultra",
+        "ultra": "ultra",
+        "ultra-relaxed": "ultra_relaxed",
+        "relaxed": "ultra_relaxed"
+    }
+    return mapping.get(value)
+
+
+def _parse_size(size: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
+    if not size:
+        return None, None
+    match = re.match(r"^\s*(\d{2,5})\s*[xX]\s*(\d{2,5})\s*$", size)
+    if not match:
+        return None, None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _infer_aspect_ratio(width: Optional[int], height: Optional[int]) -> Optional[str]:
+    if not width or not height or width <= 0 or height <= 0:
+        return None
+
+    ratio = width / height
+    if abs(ratio - 1.0) <= 0.08:
+        return "square"
+    if abs(ratio - (4 / 3)) <= 0.08:
+        return "four-three"
+    if abs(ratio - (3 / 4)) <= 0.08:
+        return "three-four"
+    return "landscape" if width > height else "portrait"
+
+
+def _infer_resolution(width: Optional[int], height: Optional[int]) -> Optional[str]:
+    if not width or not height or width <= 0 or height <= 0:
+        return None
+    max_side = max(width, height)
+    if max_side >= 3000:
+        return "4k"
+    if max_side >= 1800:
+        return "2k"
+    if max_side >= 1000:
+        return "1080p"
+    return None
+
+
+async def _resolve_generation_params(
+    request: ChatCompletionRequest,
+    prompt: str,
+    has_images: bool
+) -> Dict[str, Any]:
+    # 1) 显式参数（最高优先级）
+    width = request.width
+    height = request.height
+
+    size_w, size_h = _parse_size(request.size)
+    if width is None and size_w is not None:
+        width = size_w
+    if height is None and size_h is not None:
+        height = size_h
+
+    derived_aspect = _infer_aspect_ratio(width, height)
+    derived_resolution = _infer_resolution(width, height)
+    mapped_quality = _normalize_quality_from_image_quality(request.image_quality)
+
+    current = {
+        "aspect_ratio": request.aspect_ratio or derived_aspect,
+        "resolution": request.resolution or derived_resolution,
+        "quality": request.quality or mapped_quality,
+        "video_type": request.video_type
+    }
+
+    # 2) 语意探查仅补全缺失字段
+    probed: Dict[str, Optional[str]] = {}
+    try:
+        probed = await semantic_probe_service.infer(
+            prompt=prompt,
+            has_images=has_images,
+            current=current
+        )
+    except Exception as e:
+        debug_logger.log_warning(f"[SEMANTIC_PROBE] 路由推断异常，继续本地逻辑: {str(e)}")
+
+    final_aspect = request.aspect_ratio or derived_aspect or probed.get("aspect_ratio")
+    final_resolution = request.resolution or derived_resolution or probed.get("resolution")
+    final_quality = request.quality or mapped_quality or probed.get("quality")
+    final_video_type = request.video_type or probed.get("video_type")
+
+    image_count = request.n if isinstance(request.n, int) and request.n > 0 else 1
+    image_count = min(image_count, 4)
+
+    return {
+        "aspect_ratio": final_aspect,
+        "resolution": final_resolution,
+        "quality": final_quality,
+        "video_type": final_video_type,
+        "image_count": image_count,
+        "image_style": request.style,
+        "image_seed": request.seed
+    }
 
 
 def set_generation_handler(handler: GenerationHandler):
@@ -142,8 +249,29 @@ async def create_chat_completion(
                     image_bytes = base64.b64decode(image_base64)
                     images.append(image_bytes)
 
-        # 自动参考图：仅对图片模型生效
-        model_config = MODEL_CONFIG.get(request.model)
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+
+        # 参数映射与语意探查（显式参数优先，探查仅补缺）
+        effective_params = await _resolve_generation_params(
+            request=request,
+            prompt=prompt,
+            has_images=(len(images) > 0)
+        )
+
+        # 自动参考图：仅对图片模型生效（支持通用模型推断）
+        model_config = None
+        try:
+            _, model_config = generation_handler.resolve_model(
+                model=request.model,
+                images=images if images else None,
+                aspect_ratio=effective_params["aspect_ratio"],
+                resolution=effective_params["resolution"],
+                quality=effective_params["quality"],
+                video_type=effective_params["video_type"]
+            )
+        except Exception:
+            model_config = MODEL_CONFIG.get(request.model)
 
         if model_config and model_config["type"] == "image" and len(request.messages) > 1:
             debug_logger.log_info(f"[CONTEXT] 开始查找历史参考图，消息数量: {len(request.messages)}")
@@ -170,9 +298,6 @@ async def create_chat_completion(
                                 debug_logger.log_error(f"[CONTEXT] 处理参考图时出错: {str(e)}")
                                 # 继续尝试下一个图片
 
-        if not prompt:
-            raise HTTPException(status_code=400, detail="Prompt cannot be empty")
-
         # Call generation handler
         if request.stream:
             # Streaming response
@@ -181,7 +306,14 @@ async def create_chat_completion(
                     model=request.model,
                     prompt=prompt,
                     images=images if images else None,
-                    stream=True
+                    stream=True,
+                    aspect_ratio=effective_params["aspect_ratio"],
+                    resolution=effective_params["resolution"],
+                    quality=effective_params["quality"],
+                    video_type=effective_params["video_type"],
+                    image_count=effective_params["image_count"],
+                    image_style=effective_params["image_style"],
+                    image_seed=effective_params["image_seed"]
                 ):
                     yield chunk
 
@@ -204,7 +336,14 @@ async def create_chat_completion(
                 model=request.model,
                 prompt=prompt,
                 images=images if images else None,
-                stream=False
+                stream=False,
+                aspect_ratio=effective_params["aspect_ratio"],
+                resolution=effective_params["resolution"],
+                quality=effective_params["quality"],
+                video_type=effective_params["video_type"],
+                image_count=effective_params["image_count"],
+                image_style=effective_params["image_style"],
+                image_seed=effective_params["image_seed"]
             ):
                 result = chunk
 

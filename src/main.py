@@ -79,6 +79,14 @@ async def lifespan(app: FastAPI):
     config.set_capsolver_api_key(captcha_config.capsolver_api_key)
     config.set_capsolver_base_url(captcha_config.capsolver_base_url)
 
+    # Load semantic probe configuration from database
+    semantic_probe_config = await db.get_semantic_probe_config()
+    config.set_semantic_probe_enabled(semantic_probe_config.enabled)
+    config.set_semantic_probe_api_url(semantic_probe_config.api_url)
+    config.set_semantic_probe_api_key(semantic_probe_config.api_key)
+    config.set_semantic_probe_model(semantic_probe_config.model)
+    config.set_semantic_probe_timeout(semantic_probe_config.timeout)
+
     # Initialize browser captcha service if needed
     browser_service = None
     if captcha_config.captcha_method == "personal":
@@ -133,6 +141,7 @@ async def lifespan(app: FastAPI):
     print(f"✓ Cache: {'Enabled' if config.cache_enabled else 'Disabled'} (timeout: {config.cache_timeout}s)")
     print(f"✓ File cache cleanup task started")
     print(f"✓ 429 auto-unban task started (runs every hour)")
+    print(f"✓ Semantic probe: {'Enabled' if config.semantic_probe_enabled else 'Disabled'}")
     print(f"✓ Server running on http://{config.server_host}:{config.server_port}")
     print("=" * 60)
 

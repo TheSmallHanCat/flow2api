@@ -470,7 +470,10 @@ class FlowClient:
         prompt: str,
         model_name: str,
         aspect_ratio: str,
-        image_inputs: Optional[List[Dict]] = None
+        image_inputs: Optional[List[Dict]] = None,
+        image_count: int = 1,
+        image_style: Optional[str] = None,
+        image_seed: Optional[int] = None
     ) -> dict:
         """生成图片(同步返回)
 
@@ -481,6 +484,9 @@ class FlowClient:
             model_name: GEM_PIX, GEM_PIX_2 或 IMAGEN_3_5
             aspect_ratio: 图片宽高比
             image_inputs: 参考图片列表(图生图时使用)
+            image_count: 生成数量（兼容参数 n）
+            image_style: 图像风格（兼容参数 style）
+            image_seed: 随机种子（兼容参数 seed）
 
         Returns:
             {
@@ -504,7 +510,12 @@ class FlowClient:
             # 每次重试都重新获取 reCAPTCHA token
             recaptcha_token, browser_id = await self._get_recaptcha_token(project_id, action="IMAGE_GENERATION")
             if not recaptcha_token:
-                raise Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Failed to obtain reCAPTCHA token")
+                if retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(f"[IMAGE] 获取 reCAPTCHA token 失败，准备重试 ({retry_attempt + 2}/{max_retries})...")
+                    await asyncio.sleep(1)
+                    continue
+                raise last_error
             session_id = self._generate_session_id()
 
             # 构建请求 - clientContext 只在外层，requests 内不重复
@@ -518,13 +529,24 @@ class FlowClient:
                 "tool": "PINHOLE"
             }
 
+            normalized_count = image_count if isinstance(image_count, int) and image_count > 0 else 1
+            normalized_count = min(normalized_count, 4)
+
             request_data = {
-                "seed": random.randint(1, 99999),
+                "seed": image_seed if isinstance(image_seed, int) else random.randint(1, 99999),
                 "imageModelName": model_name,
                 "imageAspectRatio": aspect_ratio,
                 "prompt": prompt,
                 "imageInputs": image_inputs or []
             }
+
+            if normalized_count > 1:
+                # OpenAI 兼容参数 n -> 上游批量数量字段
+                request_data["sampleCount"] = normalized_count
+
+            if image_style:
+                # 兼容参数 style（上游若不识别会忽略）
+                request_data["style"] = image_style
 
             json_data = {
                 "clientContext": client_context,
@@ -575,38 +597,62 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/flow/upsampleImage"
 
-        # 获取 reCAPTCHA token - 使用 IMAGE_GENERATION action
-        recaptcha_token, _ = await self._get_recaptcha_token(project_id, action="IMAGE_GENERATION")
-        if not recaptcha_token:
-            raise Exception("Failed to obtain reCAPTCHA token")
-        session_id = self._generate_session_id()
+        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
+        max_retries = 3
+        last_error = None
 
-        json_data = {
-            "mediaId": media_id,
-            "targetResolution": target_resolution,
-            "clientContext": {
-                "recaptchaContext": {
-                    "token": recaptcha_token,
-                    "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
-                },
-                "sessionId": session_id,
-                "projectId": project_id,
-                "tool": "PINHOLE"
+        for retry_attempt in range(max_retries):
+            # 每次重试都重新获取 reCAPTCHA token
+            recaptcha_token, browser_id = await self._get_recaptcha_token(project_id, action="IMAGE_GENERATION")
+            if not recaptcha_token:
+                last_error = Exception("Failed to obtain reCAPTCHA token")
+                if retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(f"[UPSAMPLE IMAGE] 获取 reCAPTCHA token 失败，准备重试 ({retry_attempt + 2}/{max_retries})...")
+                    await asyncio.sleep(1)
+                    continue
+                raise last_error
+
+            session_id = self._generate_session_id()
+
+            json_data = {
+                "mediaId": media_id,
+                "targetResolution": target_resolution,
+                "clientContext": {
+                    "recaptchaContext": {
+                        "token": recaptcha_token,
+                        "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                    },
+                    "sessionId": session_id,
+                    "projectId": project_id,
+                    "tool": "PINHOLE"
+                }
             }
-        }
 
-        # 4K/2K 放大使用专用超时，因为返回的 base64 数据量很大
-        result = await self._make_request(
-            method="POST",
-            url=url,
-            json_data=json_data,
-            use_at=True,
-            at_token=at,
-            timeout=config.upsample_timeout
-        )
+            try:
+                # 4K/2K 放大使用专用超时，因为返回的 base64 数据量很大
+                result = await self._make_request(
+                    method="POST",
+                    url=url,
+                    json_data=json_data,
+                    use_at=True,
+                    at_token=at,
+                    timeout=config.upsample_timeout
+                )
+                # 返回 base64 编码的图片
+                return result.get("encodedImage", "")
+            except Exception as e:
+                error_str = str(e)
+                last_error = e
+                retry_reason = self._get_retry_reason(error_str)
+                if retry_reason and retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(f"[UPSAMPLE IMAGE] 放大遇到{retry_reason}，正在重新获取验证码重试 ({retry_attempt + 2}/{max_retries})...")
+                    await self._notify_browser_captcha_error(browser_id)
+                    await asyncio.sleep(1)
+                    continue
+                raise e
 
-        # 返回 base64 编码的图片
-        return result.get("encodedImage", "")
+        # 所有重试都失败
+        raise last_error
 
     # ========== 视频生成 (使用AT) - 异步返回 ==========
 
@@ -649,7 +695,12 @@ class FlowClient:
             # 每次重试都重新获取 reCAPTCHA token - 视频使用 VIDEO_GENERATION action
             recaptcha_token, browser_id = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION")
             if not recaptcha_token:
-                raise Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Failed to obtain reCAPTCHA token")
+                if retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(f"[VIDEO T2V] 获取 reCAPTCHA token 失败，准备重试 ({retry_attempt + 2}/{max_retries})...")
+                    await asyncio.sleep(1)
+                    continue
+                raise last_error
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 
@@ -735,7 +786,12 @@ class FlowClient:
             # 每次重试都重新获取 reCAPTCHA token - 视频使用 VIDEO_GENERATION action
             recaptcha_token, browser_id = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION")
             if not recaptcha_token:
-                raise Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Failed to obtain reCAPTCHA token")
+                if retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(f"[VIDEO R2V] 获取 reCAPTCHA token 失败，准备重试 ({retry_attempt + 2}/{max_retries})...")
+                    await asyncio.sleep(1)
+                    continue
+                raise last_error
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 
@@ -824,7 +880,12 @@ class FlowClient:
             # 每次重试都重新获取 reCAPTCHA token - 视频使用 VIDEO_GENERATION action
             recaptcha_token, browser_id = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION")
             if not recaptcha_token:
-                raise Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Failed to obtain reCAPTCHA token")
+                if retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(f"[VIDEO I2V] 获取 reCAPTCHA token 失败，准备重试 ({retry_attempt + 2}/{max_retries})...")
+                    await asyncio.sleep(1)
+                    continue
+                raise last_error
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 
@@ -916,7 +977,12 @@ class FlowClient:
             # 每次重试都重新获取 reCAPTCHA token - 视频使用 VIDEO_GENERATION action
             recaptcha_token, browser_id = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION")
             if not recaptcha_token:
-                raise Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Failed to obtain reCAPTCHA token")
+                if retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(f"[VIDEO START] 获取 reCAPTCHA token 失败，准备重试 ({retry_attempt + 2}/{max_retries})...")
+                    await asyncio.sleep(1)
+                    continue
+                raise last_error
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 
@@ -1005,7 +1071,12 @@ class FlowClient:
         for retry_attempt in range(max_retries):
             recaptcha_token, browser_id = await self._get_recaptcha_token(project_id, action="VIDEO_GENERATION")
             if not recaptcha_token:
-                raise Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Failed to obtain reCAPTCHA token")
+                if retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(f"[VIDEO UPSAMPLE] 获取 reCAPTCHA token 失败，准备重试 ({retry_attempt + 2}/{max_retries})...")
+                    await asyncio.sleep(1)
+                    continue
+                raise last_error
             session_id = self._generate_session_id()
             scene_id = str(uuid.uuid4())
 

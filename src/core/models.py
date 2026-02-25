@@ -174,6 +174,18 @@ class PluginConfig(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+class SemanticProbeConfig(BaseModel):
+    """Semantic probe configuration"""
+    id: int = 1
+    enabled: bool = False
+    api_url: str = "https://api.openai.com/v1/chat/completions"
+    api_key: str = ""
+    model: str = "gpt-4o-mini"
+    timeout: int = 15
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 # OpenAI Compatible Request Models
 class ChatMessage(BaseModel):
     """Chat message"""
@@ -191,3 +203,17 @@ class ChatCompletionRequest(BaseModel):
     # Flow2API specific parameters
     image: Optional[str] = None  # Base64 encoded image (deprecated, use messages)
     video: Optional[str] = None  # Base64 encoded video (deprecated)
+    # 通用模型推断参数（可选）
+    aspect_ratio: Optional[str] = None  # landscape/portrait/square/four-three/three-four
+    resolution: Optional[str] = None  # 2k/4k/1080p
+    quality: Optional[str] = None  # standard/ultra/ultra_relaxed
+    video_type: Optional[str] = None  # t2v/i2v/r2v
+
+    # 图片兼容参数（OpenAI 风格）
+    size: Optional[str] = None  # e.g. "1024x1024" / "1792x1024" / "1024x1792"
+    width: Optional[int] = None
+    height: Optional[int] = None
+    n: Optional[int] = 1
+    image_quality: Optional[str] = None  # standard/hd/high/ultra
+    style: Optional[str] = None  # vivid/natural/...
+    seed: Optional[int] = None
