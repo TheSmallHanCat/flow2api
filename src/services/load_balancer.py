@@ -3,6 +3,12 @@ import asyncio
 import random
 from typing import Optional, Dict
 from ..core.models import Token
+from ..core.account_tiers import (
+    get_paygate_tier_label,
+    get_required_paygate_tier_for_model,
+    normalize_user_paygate_tier,
+    supports_model_for_tier,
+)
 from .concurrency_manager import ConcurrencyManager
 from ..core.logger import debug_logger
 
@@ -132,8 +138,13 @@ class LoadBalancer:
 
         available_tokens = []
         filtered_reasons = {}
+        required_tier = get_required_paygate_tier_for_model(model)
 
         for token in active_tokens:
+            normalized_tier = normalize_user_paygate_tier(token.user_paygate_tier)
+            if model and not supports_model_for_tier(model, normalized_tier):
+                filtered_reasons[token.id] = '账号等级不足，需要 ' + get_paygate_tier_label(required_tier)
+                continue
             if for_image_generation:
                 if not token.image_enabled:
                     filtered_reasons[token.id] = "图片生成已禁用"
