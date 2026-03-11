@@ -25,9 +25,12 @@ class FileCache:
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
-        self.default_timeout = default_timeout
+        self.default_timeout = max(0, int(default_timeout))
         self.proxy_manager = proxy_manager
         self._cleanup_task = None
+
+    def _is_cleanup_disabled(self) -> bool:
+        return self.default_timeout <= 0
 
     async def _resolve_download_proxy(self, media_type: str) -> Optional[str]:
         """根据媒体类型解析下载代理地址。"""
@@ -84,6 +87,8 @@ class FileCache:
     async def _cleanup_expired_files(self):
         """Remove expired cache files"""
         try:
+            if self._is_cleanup_disabled():
+                return
             current_time = time.time()
             removed_count = 0
 
@@ -139,6 +144,8 @@ class FileCache:
 
         # Check if already cached and not expired
         if file_path.exists():
+            if self._is_cleanup_disabled():
+                return filename
             file_age = time.time() - file_path.stat().st_mtime
             if file_age < self.default_timeout:
                 debug_logger.log_info(f"Cache hit: {filename}")
@@ -323,7 +330,7 @@ class FileCache:
 
     def set_timeout(self, timeout: int):
         """Set cache timeout in seconds"""
-        self.default_timeout = timeout
+        self.default_timeout = max(0, int(timeout))
         debug_logger.log_info(f"Cache timeout updated to {timeout} seconds")
 
     def get_timeout(self) -> int:

@@ -54,11 +54,142 @@ class Config:
 
     @property
     def flow_timeout(self) -> int:
-        return self._config["flow"]["timeout"]
+        timeout = self._config.get("flow", {}).get("timeout", 120)
+        try:
+            return max(5, int(timeout))
+        except Exception:
+            return 120
 
     @property
     def flow_max_retries(self) -> int:
-        return self._config["flow"]["max_retries"]
+        retries = self._config.get("flow", {}).get("max_retries", 3)
+        try:
+            return max(1, int(retries))
+        except Exception:
+            return 3
+
+    @property
+    def flow_image_request_timeout(self) -> int:
+        """图片生成单次 HTTP 请求超时(秒)。"""
+        default_timeout = min(self.flow_timeout, 40)
+        timeout = self._config.get("flow", {}).get(
+            "image_request_timeout",
+            default_timeout
+        )
+        try:
+            return max(5, int(timeout))
+        except Exception:
+            return self.flow_timeout
+
+    @property
+    def flow_image_timeout_retry_count(self) -> int:
+        """图片生成遇到网络超时时的快速重试次数。"""
+        retry_count = self._config.get("flow", {}).get("image_timeout_retry_count", 1)
+        try:
+            return max(0, min(3, int(retry_count)))
+        except Exception:
+            return 1
+
+    @property
+    def flow_image_timeout_retry_delay(self) -> float:
+        """图片生成网络超时重试前等待秒数。"""
+        delay = self._config.get("flow", {}).get("image_timeout_retry_delay", 0.8)
+        try:
+            return max(0.0, min(5.0, float(delay)))
+        except Exception:
+            return 0.8
+
+    @property
+    def flow_image_timeout_use_media_proxy_fallback(self) -> bool:
+        """网络超时时是否切换媒体代理重试。"""
+        return bool(
+            self._config.get("flow", {}).get(
+                "image_timeout_use_media_proxy_fallback",
+                True
+            )
+        )
+
+    @property
+    def flow_image_prefer_media_proxy(self) -> bool:
+        """图片生成是否优先走媒体代理链路。"""
+        return bool(
+            self._config.get("flow", {}).get(
+                "image_prefer_media_proxy",
+                False
+            )
+        )
+
+    @property
+    def flow_image_slot_wait_timeout(self) -> float:
+        """图片硬并发槽位等待超时(秒)。"""
+        timeout = self._config.get("flow", {}).get("image_slot_wait_timeout", 120)
+        try:
+            return max(1.0, min(600.0, float(timeout)))
+        except Exception:
+            return 120.0
+
+    @property
+    def flow_image_launch_soft_limit(self) -> int:
+        """图片生成前置发车软并发上限(0 表示关闭软整形，仅使用硬并发)。"""
+        value = self._config.get("flow", {}).get("image_launch_soft_limit", 0)
+        try:
+            return max(0, min(200, int(value)))
+        except Exception:
+            return 0
+
+    @property
+    def flow_image_launch_wait_timeout(self) -> float:
+        """图片前置发车软并发等待超时(秒)。"""
+        timeout = self._config.get("flow", {}).get("image_launch_wait_timeout", 180)
+        try:
+            return max(1.0, min(600.0, float(timeout)))
+        except Exception:
+            return 180.0
+
+    @property
+    def flow_image_launch_stagger_ms(self) -> int:
+        """图片请求前置发车间隔(毫秒)，用于平滑同批突发。"""
+        value = self._config.get("flow", {}).get("image_launch_stagger_ms", 0)
+        try:
+            return max(0, min(5000, int(value)))
+        except Exception:
+            return 0
+
+    @property
+    def flow_video_slot_wait_timeout(self) -> float:
+        """视频硬并发槽位等待超时(秒)。"""
+        timeout = self._config.get("flow", {}).get("video_slot_wait_timeout", 120)
+        try:
+            return max(1.0, min(600.0, float(timeout)))
+        except Exception:
+            return 120.0
+
+    @property
+    def flow_video_launch_soft_limit(self) -> int:
+        """视频生成前置发车软并发上限(0 表示关闭软整形，仅使用硬并发)。"""
+        value = self._config.get("flow", {}).get("video_launch_soft_limit", 0)
+        try:
+            return max(0, min(200, int(value)))
+        except Exception:
+            return 0
+
+    @property
+    def flow_video_launch_wait_timeout(self) -> float:
+        """视频前置发车软并发等待超时(秒)。"""
+        timeout = self._config.get("flow", {}).get("video_launch_wait_timeout", 180)
+        try:
+            return max(1.0, min(600.0, float(timeout)))
+        except Exception:
+            return 180.0
+
+    @property
+    def flow_video_launch_stagger_ms(self) -> int:
+        """视频请求前置发车间隔(毫秒)，用于平滑同批突发。"""
+        value = self._config.get("flow", {}).get("video_launch_stagger_ms", 0)
+        try:
+            return max(0, min(5000, int(value)))
+        except Exception:
+            return 0
 
     @property
     def poll_interval(self) -> float:
@@ -214,6 +345,23 @@ class Config:
         self._config["captcha"]["browser_launch_background"] = bool(enabled)
 
     @property
+    def browser_recaptcha_settle_seconds(self) -> float:
+        """有头打码在 reload/clr 就绪后的额外等待秒数。"""
+        value = self._config.get("captcha", {}).get("browser_recaptcha_settle_seconds", 3.0)
+        try:
+            return max(0.0, min(10.0, float(value)))
+        except Exception:
+            return 3.0
+
+    @property
+    def browser_idle_ttl_seconds(self) -> int:
+        value = self._config.get("captcha", {}).get("browser_idle_ttl_seconds", 600)
+        try:
+            return max(60, int(value))
+        except Exception:
+            return 600
+
+    @property
     def yescaptcha_api_key(self) -> str:
         """Get YesCaptcha API key"""
         return self._config.get("captcha", {}).get("yescaptcha_api_key", "")
@@ -300,6 +448,47 @@ class Config:
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["capsolver_base_url"] = base_url
+
+    @property
+    def remote_browser_base_url(self) -> str:
+        """Get remote browser captcha service base URL"""
+        return self._config.get("captcha", {}).get("remote_browser_base_url", "")
+
+    def set_remote_browser_base_url(self, base_url: str):
+        """Set remote browser captcha service base URL"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["remote_browser_base_url"] = (base_url or "").strip()
+
+    @property
+    def remote_browser_api_key(self) -> str:
+        """Get remote browser captcha service API key"""
+        return self._config.get("captcha", {}).get("remote_browser_api_key", "")
+
+    def set_remote_browser_api_key(self, api_key: str):
+        """Set remote browser captcha service API key"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        self._config["captcha"]["remote_browser_api_key"] = (api_key or "").strip()
+
+    @property
+    def remote_browser_timeout(self) -> int:
+        """Get remote browser captcha request timeout (seconds)"""
+        timeout = self._config.get("captcha", {}).get("remote_browser_timeout", 60)
+        try:
+            return max(5, int(timeout))
+        except Exception:
+            return 60
+
+    def set_remote_browser_timeout(self, timeout: int):
+        """Set remote browser captcha request timeout (seconds)"""
+        if "captcha" not in self._config:
+            self._config["captcha"] = {}
+        try:
+            normalized = max(5, int(timeout))
+        except Exception:
+            normalized = 60
+        self._config["captcha"]["remote_browser_timeout"] = normalized
 
 
 # Global config instance

@@ -78,6 +78,9 @@ async def lifespan(app: FastAPI):
     config.set_ezcaptcha_base_url(captcha_config.ezcaptcha_base_url)
     config.set_capsolver_api_key(captcha_config.capsolver_api_key)
     config.set_capsolver_base_url(captcha_config.capsolver_base_url)
+    config.set_remote_browser_base_url(captcha_config.remote_browser_base_url)
+    config.set_remote_browser_api_key(captcha_config.remote_browser_api_key)
+    config.set_remote_browser_timeout(captcha_config.remote_browser_timeout)
 
     # Initialize browser captcha service if needed
     browser_service = None
@@ -105,7 +108,8 @@ async def lifespan(app: FastAPI):
     elif captcha_config.captcha_method == "browser":
         from .services.browser_captcha import BrowserCaptchaService
         browser_service = await BrowserCaptchaService.get_instance(db)
-        print("✓ Browser captcha service initialized (headed mode)")
+        await browser_service.warmup_browser_slots()
+        print("? Browser captcha service initialized (headed mode)")
 
     # Initialize concurrency manager
     tokens = await token_manager.get_all_tokens()

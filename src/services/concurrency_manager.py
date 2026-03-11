@@ -1,5 +1,6 @@
 """Concurrency manager for token-based rate limiting"""
 import asyncio
+import time
 from typing import Dict, Optional
 from ..core.logger import debug_logger
 
@@ -117,6 +118,40 @@ class ConcurrencyManager:
             else:
                 debug_logger.log_info(f"Token {token_id} acquired image slot (inflight: {new_inflight}/{limit})")
             return True
+
+    async def wait_acquire_image(self, token_id: int, timeout_seconds: float) -> tuple[bool, int]:
+        """等待获取图片硬并发槽位，避免请求在短暂竞争下直接失败。"""
+        wait_started = time.monotonic()
+        timeout_seconds = max(1.0, float(timeout_seconds or 1.0))
+        deadline = wait_started + timeout_seconds
+
+        while True:
+            if await self.acquire_image(token_id):
+                waited_ms = int((time.monotonic() - wait_started) * 1000)
+                return True, waited_ms
+
+            if time.monotonic() >= deadline:
+                waited_ms = int((time.monotonic() - wait_started) * 1000)
+                return False, waited_ms
+
+            await asyncio.sleep(0.05)
+
+    async def wait_acquire_video(self, token_id: int, timeout_seconds: float) -> tuple[bool, int]:
+        """等待获取视频硬并发槽位，避免请求在短暂竞争下直接失败。"""
+        wait_started = time.monotonic()
+        timeout_seconds = max(1.0, float(timeout_seconds or 1.0))
+        deadline = wait_started + timeout_seconds
+
+        while True:
+            if await self.acquire_video(token_id):
+                waited_ms = int((time.monotonic() - wait_started) * 1000)
+                return True, waited_ms
+
+            if time.monotonic() >= deadline:
+                waited_ms = int((time.monotonic() - wait_started) * 1000)
+                return False, waited_ms
+
+            await asyncio.sleep(0.05)
 
     async def acquire_video(self, token_id: int) -> bool:
         """

@@ -196,6 +196,16 @@ python main.py
 #### 多图生成 (R2V - Reference Images to Video)
 🖼️ **支持多张图片**
 
+> **2026-03-06 更新**
+>
+> - 已同步上游新版 `R2V` 视频请求体
+> - `textInput` 已切换为 `structuredPrompt.parts`
+> - 顶层新增 `mediaGenerationContext.batchId`
+> - 顶层新增 `useV2ModelConfig: true`
+> - 横屏 / 竖屏 `R2V` 模型共用同一套新版请求体
+> - 横屏 `R2V` 的上游 `videoModelKey` 已切换为 `*_landscape` 形式
+> - 根据当前上游协议，`referenceImages` 当前最多传 **3 张**
+
 | 模型名称 | 说明| 尺寸 |
 |---------|---------|--------|
 | `veo_3_1_r2v_fast_portrait` | 图生视频 | 竖屏 |
@@ -319,6 +329,51 @@ curl -X POST "http://localhost:4020/v1/chat/completions" \
             "type": "image_url",
             "image_url": {
               "url": "data:image/jpeg;base64,<尾帧base64>"
+            }
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }'
+```
+
+### 多图生成视频
+
+> `R2V` 会由服务端自动组装新版视频请求体，调用方仍然使用 OpenAI 兼容输入即可。
+> 服务端会将横屏 `R2V` 自动映射到最新的 `*_landscape` 上游模型键。
+> 当前最多传 **3 张参考图**。
+
+```bash
+curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Authorization: Bearer han1234" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "veo_3_1_r2v_fast_portrait",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "以三张参考图的人物和场景为基础，生成一段镜头平滑推进的竖屏视频"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/jpeg;base64/<参考图1base64>"
+            }
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/jpeg;base64/<参考图2base64>"
+            }
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/jpeg;base64/<参考图3base64>"
             }
           }
         ]

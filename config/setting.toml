@@ -7,6 +7,20 @@ admin_password = "admin"
 labs_base_url = "https://labs.google/fx/api"
 api_base_url = "https://aisandbox-pa.googleapis.com/v1"
 timeout = 120
+max_retries = 4
+image_request_timeout = 40
+image_timeout_retry_count = 1
+image_timeout_retry_delay = 0.8
+image_timeout_use_media_proxy_fallback = true
+image_prefer_media_proxy = true
+image_slot_wait_timeout = 900
+image_launch_soft_limit = 25
+image_launch_wait_timeout = 900
+image_launch_stagger_ms = 250
+video_slot_wait_timeout = 480
+video_launch_soft_limit = 20
+video_launch_wait_timeout = 480
+video_launch_stagger_ms = 250
 poll_interval = 3.0
 max_poll_attempts = 200
 
@@ -37,7 +51,11 @@ timeout = 7200  # 缓存超时时间(秒), 默认2小时
 base_url = ""   # 缓存文件访问的基础URL, 留空则使用服务器地址
 
 [captcha]
-captcha_method = "browser"  # 打码方式: yescaptcha 或 browser
+captcha_method = "browser"  # 打码方式: yescaptcha/browser/personal/remote_browser
+browser_recaptcha_settle_seconds = 1.0  # 打码完成额外稳态等待，速度优先可设 1.0
 browser_launch_background = true  # browser 打码默认后台启动(最小化/避免抢占前台)
 yescaptcha_api_key = ""  # YesCaptcha API密钥
 yescaptcha_base_url = "https://api.yescaptcha.com"
+remote_browser_base_url = ""  # 远程有头打码服务地址
+remote_browser_api_key = ""   # 远程有头打码服务 API Key
+remote_browser_timeout = 60   # 远程有头打码请求超时(秒)

@@ -5,6 +5,7 @@
 import os
 import sys
 import subprocess
+import signal
 # 修复 Windows 上 playwright 的 asyncio 兼容性问题
 os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
 
@@ -12,8 +13,8 @@ import asyncio
 import time
 import re
 import random
-from pathlib import Path
-from typing import Optional, Dict, Any, List
+import uuid
+from typing import Optional, Dict, Any, List, Union
 from datetime import datetime
 from urllib.parse import urlparse, unquote, parse_qs
 
@@ -135,13 +136,25 @@ def _ensure_playwright_installed() -> bool:
 def _ensure_browser_installed() -> bool:
     """确保 chromium 浏览器已安装"""
     try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            # 尝试获取浏览器路径，如果失败说明未安装
-            browser_path = p.chromium.executable_path
-            if browser_path and os.path.exists(browser_path):
-                debug_logger.log_info(f"[BrowserCaptcha] chromium 浏览器已安装: {browser_path}")
-                return True
+        detect_script = (
+            "from playwright.sync_api import sync_playwright\n"
+            "with sync_playwright() as p:\n"
+            "    print(p.chromium.executable_path or '')\n"
+        )
+        env = os.environ.copy()
+        env.setdefault("PLAYWRIGHT_BROWSERS_PATH", os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "0") or "0")
+        result = subprocess.run(
+            [sys.executable, "-c", detect_script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
+        browser_path = (result.stdout or "").strip().splitlines()
+        browser_path = browser_path[-1].strip() if browser_path else ""
+        if result.returncode == 0 and browser_path and os.path.exists(browser_path):
+            debug_logger.log_info(f"[BrowserCaptcha] chromium 浏览器已安装: {browser_path}")
+            return True
     except Exception as e:
         debug_logger.log_info(f"[BrowserCaptcha] 检测浏览器时出错: {e}")
     
@@ -257,7 +270,7 @@ class TokenBrowser:
     
     每次都是新的随机 UA，避免长时间运行导致的各种问题
     """
-    # UA ???? 2026-03-01 ??????? score >= 0.3 ? UA?
+    # UA pool updated on 2026-03-01 from browsers that scored >= 0.3.
     UA_LIST = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -355,30 +368,195 @@ class TokenBrowser:
         self.token_id = token_id
         self.user_data_dir = user_data_dir
         self.db = db
-        self._semaphore = asyncio.Semaphore(1)  # 同时只能有一个任务
+        self._semaphore = asyncio.Semaphore(1)  # Only one active solve task is allowed per slot.
         self._solve_count = 0
         self._error_count = 0
         self._last_fingerprint: Optional[Dict[str, Any]] = None
         self._browser_proxy_active = False
-        # 打码成功后延迟关闭浏览器：等待上游图片/视频请求完成通知
-        self._pending_release_events: List[asyncio.Event] = []
-        self._pending_release_tasks: List[asyncio.Task] = []
+        # Delay browser release after solve and track it by request_ref.
+        self._pending_release_entries: Dict[str, Dict[str, Any]] = {}
         self._pending_release_lock = asyncio.Lock()
-    
-    async def _create_browser(self, token_proxy_url: Optional[str] = None) -> tuple:
-        """创建新浏览器实例（新 UA），返回 (playwright, browser, context)"""
-        import random
-        
-        random_ua = random.choice(self.UA_LIST)
+        # Browser mode keeps a shared in-memory browser instead of a persistent profile.
+        self._shared_browser_lock = asyncio.Lock()
+        self._shared_playwright = None
+        self._shared_browser = None
+        self._shared_context = None
+        self._shared_keepalive_page = None
+        self._shared_browser_pid: Optional[int] = None
+        self._pid_dir = os.path.join(os.getcwd(), "tmp", "browser_pids")
+        self._pid_file = os.path.join(self._pid_dir, f"slot_{self.token_id}.pid")
+        os.makedirs(self._pid_dir, exist_ok=True)
+        self._shared_proxy_url: Optional[str] = None
+        self._shared_launch_count = 0
+        self._shared_reuse_count = 0
+        self._consecutive_browser_failures = 0
+        self._solve_inflight = 0
+        self._last_idle_since = time.monotonic()
+        self._refresh_browser_profile()
+
+    def _refresh_browser_profile(self):
+        """Refresh the in-memory browser fingerprint profile."""
         base_w, base_h = random.choice(self.RESOLUTIONS)
-        width, height = base_w, base_h - random.randint(0, 80)
-        viewport = {"width": width, "height": height}
-        launch_in_background = bool(getattr(config, "browser_launch_background", True))
-        
-        playwright = await async_playwright().start()
-        Path(self.user_data_dir).mkdir(parents=True, exist_ok=True)
-        
-        # 代理配置
+        self._profile_user_agent = random.choice(self.UA_LIST)
+        self._profile_viewport = {
+            "width": base_w,
+            "height": base_h - random.randint(0, 80),
+        }
+
+    def _get_slot_marker(self) -> str:
+        return f"--flow2api-browser-slot={self.token_id}"
+
+    def _read_pid_file(self) -> Optional[int]:
+        try:
+            if not os.path.exists(self._pid_file):
+                return None
+            with open(self._pid_file, 'r', encoding='utf-8') as handle:
+                raw = (handle.read() or '').strip()
+            return int(raw or '0') or None
+        except Exception:
+            return None
+
+    def _write_pid_file(self, pid: Optional[int]):
+        self._shared_browser_pid = pid
+        try:
+            if pid:
+                with open(self._pid_file, 'w', encoding='utf-8') as handle:
+                    handle.write(str(pid))
+            elif os.path.exists(self._pid_file):
+                os.remove(self._pid_file)
+        except Exception as e:
+            debug_logger.log_warning(f"[BrowserCaptcha] Token-{self.token_id} failed to write PID file: {e}")
+
+    def _is_pid_running(self, pid: Optional[int]) -> bool:
+        if not pid:
+            return False
+        try:
+            if sys.platform.startswith('win'):
+                result = subprocess.run(
+                    ['tasklist', '/FI', f'PID eq {pid}'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                return str(pid) in (result.stdout or '')
+            os.kill(pid, 0)
+            return True
+        except Exception:
+            return False
+
+    def _pid_matches_slot(self, pid: Optional[int]) -> bool:
+        if not pid:
+            return False
+        marker = self._get_slot_marker()
+        try:
+            if sys.platform.startswith('win'):
+                result = subprocess.run(
+                    [
+                        'powershell',
+                        '-NoProfile',
+                        '-Command',
+                        f'(Get-CimInstance Win32_Process -Filter "ProcessId = {pid}").CommandLine'
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                command_line = (result.stdout or '').strip()
+            else:
+                cmdline_path = f'/proc/{pid}/cmdline'
+                if not os.path.exists(cmdline_path):
+                    return False
+                with open(cmdline_path, 'rb') as handle:
+                    command_line = handle.read().decode('utf-8', errors='ignore').replace('\x00', ' ')
+            return marker in command_line
+        except Exception:
+            return False
+
+    async def _wait_pid_exit(self, pid: Optional[int], timeout_seconds: float = 5.0) -> bool:
+        if not pid:
+            return True
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            if not self._is_pid_running(pid):
+                return True
+            await asyncio.sleep(0.2)
+        return not self._is_pid_running(pid)
+
+    def _kill_pid(self, pid: Optional[int], reason: str):
+        if not pid:
+            return
+        try:
+            debug_logger.log_warning(
+                f"[BrowserCaptcha] Token-{self.token_id} browser process is still alive; force-killing PID={pid}, reason={reason}"
+            )
+            if sys.platform.startswith('win'):
+                subprocess.run(
+                    ['taskkill', '/PID', str(pid), '/T', '/F'],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+            else:
+                os.kill(pid, signal.SIGKILL)
+        except Exception as e:
+            debug_logger.log_warning(f"[BrowserCaptcha] Token-{self.token_id} failed to kill PID={pid}: {e}")
+
+    async def _cleanup_stale_slot_process(self):
+        stale_pid = self._read_pid_file()
+        if not stale_pid:
+            return
+        if not self._is_pid_running(stale_pid):
+            self._write_pid_file(None)
+            return
+        if not self._pid_matches_slot(stale_pid):
+            debug_logger.log_warning(
+                f"[BrowserCaptcha] Token-{self.token_id} PID file points to a process that does not belong to this slot; ignoring PID={stale_pid}"
+            )
+            self._write_pid_file(None)
+            return
+        self._kill_pid(stale_pid, reason='stale_slot_process')
+        await self._wait_pid_exit(stale_pid, timeout_seconds=3)
+        self._write_pid_file(None)
+
+    def _extract_browser_pid(self, browser) -> Optional[int]:
+        candidates = [
+            lambda obj: obj._impl_obj._connection._transport._proc.pid,
+            lambda obj: obj._impl_obj._connection._transport._proc.pid if obj and obj._impl_obj else None,
+        ]
+        for getter in candidates:
+            try:
+                pid = getter(browser)
+                if isinstance(pid, int) and pid > 0:
+                    return pid
+            except Exception:
+                continue
+        return None
+
+    async def _ensure_shared_keepalive_page(self):
+        """Ensure the shared browser always keeps one keepalive page alive."""
+        keepalive_page = self._shared_keepalive_page
+        try:
+            if keepalive_page and not keepalive_page.is_closed():
+                return keepalive_page
+        except Exception:
+            keepalive_page = None
+
+        if not self._shared_context:
+            return None
+
+        keepalive_page = await self._shared_context.new_page()
+        try:
+            await keepalive_page.goto("about:blank", wait_until="load", timeout=5000)
+        except Exception:
+            pass
+        self._shared_keepalive_page = keepalive_page
+        debug_logger.log_info(
+            f"[BrowserCaptcha] Token-{self.token_id} keepalive page created"
+        )
+        return keepalive_page
+
+    async def _resolve_proxy_runtime_config(self, token_proxy_url: Optional[str] = None) -> tuple:
+        """Resolve runtime proxy configuration."""
         proxy_option = None
         raw_proxy_url = None
         proxy_source = "none"
@@ -403,21 +581,35 @@ class TokenBrowser:
                     raw_proxy_url = normalized_proxy_url
                     self._browser_proxy_active = True
                     debug_logger.log_info(
-                        f"[BrowserCaptcha] Token-{self.token_id} 使用{proxy_source}代理: {proxy_option['server']}"
+                        f"[BrowserCaptcha] Token-{self.token_id} using {proxy_source} proxy: {proxy_option['server']}"
                     )
                 else:
                     debug_logger.log_warning(
-                        f"[BrowserCaptcha] Token-{self.token_id} {proxy_source}代理格式无效，已忽略"
+                        f"[BrowserCaptcha] Token-{self.token_id} {proxy_source} proxy format is invalid and has been ignored"
                     )
         except Exception as e:
-            debug_logger.log_warning(f"[BrowserCaptcha] Token-{self.token_id} 读取代理配置失败: {e}")
-        
-        # 先记录创建时的指纹，后续会在页面中补齐 sec-ch-* 等信息
+            debug_logger.log_warning(f"[BrowserCaptcha] Token-{self.token_id} failed to read proxy configuration: {e}")
+
+        return proxy_option, raw_proxy_url, proxy_source
+
+    async def _create_browser(self, token_proxy_url: Optional[str] = None, manage_slot_pid: bool = True) -> tuple:
+        """Create a browser instance; shared-slot browsers track PIDs while temporary browsers do not."""
+        width = self._profile_viewport["width"]
+        height = self._profile_viewport["height"]
+        viewport = {"width": width, "height": height}
+        launch_in_background = bool(getattr(config, "browser_launch_background", True))
+
+        if manage_slot_pid:
+            await self._cleanup_stale_slot_process()
+        playwright = await async_playwright().start()
+        browser_executable_path = os.environ.get("BROWSER_EXECUTABLE_PATH", "").strip() or None
+        proxy_option, raw_proxy_url, _ = await self._resolve_proxy_runtime_config(token_proxy_url=token_proxy_url)
+
+        # 先只记录代理，真实 UA/UA-CH 交给浏览器自己暴露，避免 user-agent 与 sec-ch-ua 版本错位。
         self._last_fingerprint = {
-            "user_agent": random_ua,
             "proxy_url": raw_proxy_url if raw_proxy_url else None,
         }
-        
+
         try:
             browser_args = [
                 '--disable-blink-features=AutomationControlled',
@@ -439,31 +631,128 @@ class TokenBrowser:
                     '--disable-background-timer-throttling',
                     '--disable-renderer-backgrounding',
                     '--disable-backgrounding-occluded-windows',
+                    f'--flow2api-browser-slot={self.token_id}',
                 ])
                 if sys.platform.startswith("win"):
                     browser_args.append('--window-position=-32000,-32000')
                 debug_logger.log_info(
-                    f"[BrowserCaptcha] Token-{self.token_id} 有头浏览器将以后台模式启动"
+                    f"[BrowserCaptcha] Token-{self.token_id} headed browser will launch in background mode"
+                )
+
+            if browser_executable_path:
+                debug_logger.log_info(
+                    f"[BrowserCaptcha] Token-{self.token_id} using custom browser executable: {browser_executable_path}"
                 )
 
             browser = await playwright.chromium.launch(
                 headless=False,
+                executable_path=browser_executable_path,
                 proxy=proxy_option,
-                args=browser_args
+                args=browser_args,
             )
             context = await browser.new_context(
-                user_agent=random_ua,
                 viewport=viewport,
+                locale="en-US",
+            )
+            browser_pid = self._extract_browser_pid(browser)
+            if manage_slot_pid:
+                self._write_pid_file(browser_pid)
+            debug_logger.log_info(
+                f"[BrowserCaptcha] Token-{self.token_id} shared browser started (proxy={'yes' if raw_proxy_url else 'no'})"
             )
             return playwright, browser, context
         except Exception as e:
-            debug_logger.log_error(f"[BrowserCaptcha] Token-{self.token_id} 启动浏览器失败: {type(e).__name__}: {str(e)[:200]}")
-            # 确保清理已创建的对象
+            debug_logger.log_error(f"[BrowserCaptcha] Token-{self.token_id} browser launch failed: {type(e).__name__}: {str(e)[:200]}")
             try:
                 if playwright:
                     await playwright.stop()
-            except: pass
+            except Exception:
+                pass
+            if manage_slot_pid:
+                self._write_pid_file(None)
             raise
+
+    async def _recycle_browser_locked(self, reason: str = "unknown", rotate_profile: bool = True):
+        """Recycle the shared browser instance and reset its state."""
+        playwright = self._shared_playwright
+        browser = self._shared_browser
+        context = self._shared_context
+        keepalive_page = self._shared_keepalive_page
+        browser_pid = self._shared_browser_pid or self._read_pid_file()
+        had_browser = bool(playwright or browser or context or keepalive_page or browser_pid)
+
+        self._shared_playwright = None
+        self._shared_browser = None
+        self._shared_context = None
+        self._shared_keepalive_page = None
+        self._shared_browser_pid = None
+        self._shared_proxy_url = None
+        self._consecutive_browser_failures = 0
+        self._shared_reuse_count = 0
+
+        if rotate_profile:
+            self._refresh_browser_profile()
+
+        if had_browser:
+            debug_logger.log_info(
+                f"[BrowserCaptcha] Token-{self.token_id} shared browser recycled, reason={reason}"
+            )
+        await self._close_browser(playwright, browser, context, browser_pid=browser_pid)
+
+    async def recycle_browser(self, reason: str = "unknown", rotate_profile: bool = True):
+        """Recycle the current shared browser."""
+        async with self._shared_browser_lock:
+            await self._recycle_browser_locked(reason=reason, rotate_profile=rotate_profile)
+
+    async def _get_or_create_shared_browser(self, token_proxy_url: Optional[str] = None) -> tuple:
+        """Get or create the shared browser for this slot."""
+        _, expected_proxy_url, _ = await self._resolve_proxy_runtime_config(token_proxy_url=token_proxy_url)
+
+        async with self._shared_browser_lock:
+            has_shared_browser = bool(self._shared_playwright and self._shared_browser and self._shared_context)
+
+            if has_shared_browser:
+                is_connected = True
+                try:
+                    checker = getattr(self._shared_browser, "is_connected", None)
+                    if callable(checker):
+                        is_connected = bool(checker())
+                except Exception:
+                    is_connected = False
+
+                if not is_connected:
+                    await self._recycle_browser_locked(reason="browser_disconnected", rotate_profile=False)
+                    has_shared_browser = False
+
+            if has_shared_browser and self._shared_proxy_url != expected_proxy_url:
+                # If the proxy configuration changed, recycle the slot before reusing it.
+                await self._recycle_browser_locked(reason="proxy_changed", rotate_profile=False)
+                has_shared_browser = False
+
+            if has_shared_browser:
+                try:
+                    await self._ensure_shared_keepalive_page()
+                except Exception:
+                    await self._recycle_browser_locked(reason="keepalive_page_broken", rotate_profile=False)
+                    has_shared_browser = False
+
+            if has_shared_browser:
+                self._shared_reuse_count += 1
+                debug_logger.log_info(
+                    f"[BrowserCaptcha] Token-{self.token_id} reusing shared browser (reuse={self._shared_reuse_count})"
+                )
+                return self._shared_playwright, self._shared_browser, self._shared_context
+
+            playwright, browser, context = await self._create_browser(token_proxy_url=token_proxy_url)
+            self._shared_playwright = playwright
+            self._shared_browser = browser
+            self._shared_context = context
+            await self._ensure_shared_keepalive_page()
+            self._shared_proxy_url = (self._last_fingerprint or {}).get("proxy_url")
+            self._shared_launch_count += 1
+            self._shared_reuse_count = 0
+            self.note_idle()
+            return playwright, browser, context
 
     async def _capture_page_fingerprint(self, page):
         """从浏览器页面提取 UA 与客户端提示头，确保与打码浏览器一致。"""
@@ -636,23 +925,54 @@ class TokenBrowser:
             },
         }
     
-    async def _close_browser(self, playwright, browser, context):
-        """关闭浏览器实例"""
+    async def _close_browser(
+        self,
+        playwright,
+        browser,
+        context,
+        browser_pid: Optional[int] = None,
+        clear_slot_pid: bool = True,
+    ):
+        """Close a browser instance and fall back to PID cleanup if needed."""
+        is_shared_browser = any([
+            context is not None and context is self._shared_context,
+            browser is not None and browser is self._shared_browser,
+            playwright is not None and playwright is self._shared_playwright,
+        ])
+        effective_pid = browser_pid or self._extract_browser_pid(browser)
+        if clear_slot_pid and not effective_pid:
+            effective_pid = self._shared_browser_pid or self._read_pid_file()
+        if is_shared_browser:
+            self._shared_playwright = None
+            self._shared_browser = None
+            self._shared_context = None
+            self._shared_keepalive_page = None
+            self._shared_browser_pid = None
+            self._shared_proxy_url = None
         try:
             if context:
-                await context.close()
-        except: pass
+                await asyncio.wait_for(context.close(), timeout=10)
+        except Exception:
+            pass
         try:
             if browser:
-                await browser.close()
-        except: pass
+                await asyncio.wait_for(browser.close(), timeout=10)
+        except Exception:
+            pass
         try:
             if playwright:
-                await playwright.stop()
-        except: pass
+                await asyncio.wait_for(playwright.stop(), timeout=10)
+        except Exception:
+            pass
+        if effective_pid and not await self._wait_pid_exit(effective_pid, timeout_seconds=4):
+            self._kill_pid(effective_pid, reason='close_timeout_or_orphan')
+            await self._wait_pid_exit(effective_pid, timeout_seconds=2)
+        if clear_slot_pid:
+            self._write_pid_file(None)
 
     async def _wait_and_close_after_request(
         self,
+        request_ref: str,
         release_event: asyncio.Event,
         wait_timeout: int,
         playwright,
@@ -677,14 +997,10 @@ class TokenBrowser:
         finally:
             await self._close_browser(playwright, browser, context)
             debug_logger.log_info(
-                f"[BrowserCaptcha] Token-{self.token_id} {close_reason}，浏览器已关闭 (action={action})"
+                f"[BrowserCaptcha] Token-{self.token_id} {close_reason}，浏览器已关闭 (action={action}, request_ref={request_ref[:8]})"
             )
             async with self._pending_release_lock:
-                current_task = asyncio.current_task()
-                if current_task in self._pending_release_tasks:
-                    self._pending_release_tasks.remove(current_task)
-                if release_event in self._pending_release_events:
-                    self._pending_release_events.remove(release_event)
+                self._pending_release_entries.pop(request_ref, None)
 
     async def _defer_browser_close_until_request_done(
         self,
@@ -692,7 +1008,7 @@ class TokenBrowser:
         browser,
         context,
         action: str
-    ):
+    ) -> str:
         """打码成功后延迟关闭浏览器，等待 Flow 请求结束通知。"""
         flow_timeout = int(getattr(config, "flow_timeout", 300) or 300)
         upsample_timeout = int(getattr(config, "upsample_timeout", 300) or 300)
@@ -703,9 +1019,11 @@ class TokenBrowser:
         else:
             # 视频请求默认超时更长，给更大的缓冲避免“请求未结束就关闭”
             wait_timeout = max(flow_timeout + 300, 1800)
+        request_ref = uuid.uuid4().hex
         release_event = asyncio.Event()
         release_task = asyncio.create_task(
             self._wait_and_close_after_request(
+                request_ref=request_ref,
                 release_event=release_event,
                 wait_timeout=wait_timeout,
                 playwright=playwright,
@@ -716,39 +1034,70 @@ class TokenBrowser:
         )
 
         async with self._pending_release_lock:
-            self._pending_release_events.append(release_event)
-            self._pending_release_tasks.append(release_task)
+            self._pending_release_entries[request_ref] = {
+                "event": release_event,
+                "task": release_task,
+            }
         debug_logger.log_info(
-            f"[BrowserCaptcha] Token-{self.token_id} 打码成功后进入延迟关闭，等待上游请求完成 (action={action}, timeout={wait_timeout}s)"
+            f"[BrowserCaptcha] Token-{self.token_id} 打码成功后进入延迟关闭，等待上游请求完成 "
+            f"(action={action}, timeout={wait_timeout}s, request_ref={request_ref[:8]})"
         )
+        return request_ref
 
-    async def notify_generation_request_finished(self):
+    async def notify_generation_request_finished(self, request_ref: Optional[str] = None):
         """通知当前 Token 对应的上游图片/视频请求已结束。"""
         async with self._pending_release_lock:
-            release_event = self._pending_release_events.pop(0) if self._pending_release_events else None
+            release_event = None
+            matched_ref = request_ref
+            if matched_ref and matched_ref in self._pending_release_entries:
+                entry = self._pending_release_entries.pop(matched_ref)
+                release_event = entry.get("event")
+            elif not matched_ref and self._pending_release_entries:
+                # 兼容旧调用方（无 request_ref），仅回收最早待释放项，避免一次性影响全部请求。
+                matched_ref = next(iter(self._pending_release_entries.keys()))
+                entry = self._pending_release_entries.pop(matched_ref)
+                release_event = entry.get("event")
         if release_event and not release_event.is_set():
             release_event.set()
             debug_logger.log_info(
-                f"[BrowserCaptcha] Token-{self.token_id} 收到上游请求完成通知，开始关闭浏览器"
+                f"[BrowserCaptcha] Token-{self.token_id} 收到上游请求完成通知，开始关闭浏览器 "
+                f"(request_ref={(matched_ref or 'unknown')[:8]})"
             )
 
-    async def force_close_pending_browser(self):
-        """强制关闭待释放浏览器（服务关闭时调用）。"""
+    async def force_close_pending_browser(self, request_ref: Optional[str] = None, close_all: bool = False):
+        """Force close pending browsers tracked by this slot."""
         async with self._pending_release_lock:
-            release_events = list(self._pending_release_events)
-            release_tasks = list(self._pending_release_tasks)
-            self._pending_release_events.clear()
-            self._pending_release_tasks.clear()
+            entries: List[Dict[str, Any]] = []
+            if close_all:
+                entries = list(self._pending_release_entries.values())
+                self._pending_release_entries.clear()
+            elif request_ref and request_ref in self._pending_release_entries:
+                entry = self._pending_release_entries.pop(request_ref)
+                entries = [entry]
+            elif self._pending_release_entries:
+                first_ref = next(iter(self._pending_release_entries.keys()))
+                entry = self._pending_release_entries.pop(first_ref)
+                entries = [entry]
+
+        release_events = [entry.get("event") for entry in entries if isinstance(entry, dict)]
+        release_tasks = [entry.get("task") for entry in entries if isinstance(entry, dict)]
 
         for release_event in release_events:
+            if not release_event:
+                continue
             if not release_event.is_set():
                 release_event.set()
         for release_task in release_tasks:
+            if not release_task:
+                continue
             try:
                 await asyncio.wait_for(release_task, timeout=5)
             except Exception:
                 pass
-    
+
+        if close_all:
+            await self.recycle_browser(reason="force_close_all", rotate_profile=False)
+
     async def _execute_captcha(self, context, project_id: str, website_key: str, action: str) -> Optional[str]:
         """在给定 context 中执行打码逻辑"""
         page = None
@@ -1079,6 +1428,21 @@ class TokenBrowser:
                 except:
                     pass
 
+    def is_busy(self) -> bool:
+        return self._solve_inflight > 0
+
+    def note_idle(self):
+        if self._solve_inflight <= 0:
+            self._last_idle_since = time.monotonic()
+
+    def idle_seconds(self) -> float:
+        if self.is_busy():
+            return 0.0
+        return max(0.0, time.monotonic() - self._last_idle_since)
+
+    def has_shared_browser(self) -> bool:
+        return bool(self._shared_browser or self._shared_context or self._shared_keepalive_page)
+
     def get_last_fingerprint(self) -> Optional[Dict[str, Any]]:
         """返回最近一次打码浏览器的指纹快照。"""
         if not self._last_fingerprint:
@@ -1091,54 +1455,59 @@ class TokenBrowser:
         website_key: str,
         action: str = "IMAGE_GENERATION",
         token_proxy_url: Optional[str] = None
-    ) -> Optional[str]:
-        """获取 Token：启动新浏览器 -> 打码 -> 关闭浏览器"""
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Get a token from the shared browser unless a fatal browser error occurs."""
         async with self._semaphore:
-            MAX_RETRIES = 3
-            
-            for attempt in range(MAX_RETRIES):
-                playwright = None
-                browser = None
-                context = None
-                try:
-                    start_ts = time.time()
-                    
-                    # 每次都启动新浏览器（新 UA）
-                    playwright, browser, context = await self._create_browser(token_proxy_url=token_proxy_url)
-                    
-                    # 执行打码
-                    token = await self._execute_captcha(context, project_id, website_key, action)
-                    
-                    if token:
-                        self._solve_count += 1
-                        debug_logger.log_info(f"[BrowserCaptcha] Token-{self.token_id} 获取成功 ({(time.time()-start_ts)*1000:.0f}ms)")
-                        # 不立即关闭浏览器：等待图片/视频请求结束后再关闭
-                        await self._defer_browser_close_until_request_done(
-                            playwright=playwright,
-                            browser=browser,
-                            context=context,
-                            action=action,
+            self._solve_inflight += 1
+            max_retries = 3
+
+            try:
+                for attempt in range(max_retries):
+                    try:
+                        start_ts = time.time()
+                        _, _, context = await self._get_or_create_shared_browser(token_proxy_url=token_proxy_url)
+
+                        token = await self._execute_captcha(context, project_id, website_key, action)
+                        if token:
+                            self._solve_count += 1
+                            self._consecutive_browser_failures = 0
+                            debug_logger.log_info(
+                                f"[BrowserCaptcha] Token-{self.token_id} token acquired ({(time.time()-start_ts)*1000:.0f}ms, launches={self._shared_launch_count}, reuse={self._shared_reuse_count})"
+                            )
+                            return token, None
+
+                        self._error_count += 1
+                        self._consecutive_browser_failures += 1
+                        debug_logger.log_warning(
+                            f"[BrowserCaptcha] Token-{self.token_id} token attempt {attempt + 1}/{max_retries} failed"
                         )
-                        playwright = None
-                        browser = None
-                        context = None
-                        return token
-                    
-                    self._error_count += 1
-                    debug_logger.log_warning(f"[BrowserCaptcha] Token-{self.token_id} 尝试 {attempt+1}/{MAX_RETRIES} 失败")
-                    
-                except Exception as e:
-                    self._error_count += 1
-                    debug_logger.log_error(f"[BrowserCaptcha] Token-{self.token_id} 浏览器错误: {type(e).__name__}: {str(e)[:200]}")
-                finally:
-                    # 无论成功失败都关闭浏览器
-                    await self._close_browser(playwright, browser, context)
-                
-                # 重试前等待
-                if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(1)
-            
-            return None
+                        if self._consecutive_browser_failures >= 2:
+                            await self.recycle_browser(reason=f"captcha_failed_{attempt + 1}", rotate_profile=False)
+                    except Exception as e:
+                        self._error_count += 1
+                        self._consecutive_browser_failures += 1
+                        error_message = f"{type(e).__name__}: {str(e)}"
+                        debug_logger.log_error(
+                            f"[BrowserCaptcha] Token-{self.token_id} browser error: {error_message[:200]}"
+                        )
+                        error_lower = error_message.lower()
+                        if any(keyword in error_lower for keyword in [
+                            "context or browser has been closed",
+                            "target closed",
+                            "browser has been closed",
+                            "connection closed",
+                            "crash",
+                            "closed",
+                        ]):
+                            await self.recycle_browser(reason="browser_runtime_error", rotate_profile=False)
+
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+
+                return None, None
+            finally:
+                self._solve_inflight = max(0, self._solve_inflight - 1)
+                self.note_idle()
 
     async def get_custom_token(
         self,
@@ -1147,48 +1516,59 @@ class TokenBrowser:
         action: str = "homepage",
         enterprise: bool = False,
     ) -> Optional[str]:
-        """获取任意站点的 reCAPTCHA token，成功后立即关闭浏览器。"""
+        """Get a custom reCAPTCHA token using a temporary browser."""
         async with self._semaphore:
+            self._solve_inflight += 1
             max_retries = 3
 
-            for attempt in range(max_retries):
-                playwright = None
-                browser = None
-                context = None
-                try:
-                    start_ts = time.time()
-                    playwright, browser, context = await self._create_browser()
-                    token = await self._execute_custom_captcha(
-                        context=context,
-                        website_url=website_url,
-                        website_key=website_key,
-                        action=action,
-                        enterprise=enterprise,
-                    )
-
-                    if token:
-                        self._solve_count += 1
-                        debug_logger.log_info(
-                            f"[BrowserCaptcha] Token-{self.token_id} 自定义 token 获取成功 ({(time.time()-start_ts)*1000:.0f}ms)"
+            try:
+                for attempt in range(max_retries):
+                    playwright = None
+                    browser = None
+                    context = None
+                    try:
+                        start_ts = time.time()
+                        playwright, browser, context = await self._create_browser(manage_slot_pid=False)
+                        token = await self._execute_custom_captcha(
+                            context=context,
+                            website_url=website_url,
+                            website_key=website_key,
+                            action=action,
+                            enterprise=enterprise,
                         )
-                        return token
 
-                    self._error_count += 1
-                    debug_logger.log_warning(
-                        f"[BrowserCaptcha] Token-{self.token_id} 自定义打码尝试 {attempt+1}/{max_retries} 失败"
-                    )
-                except Exception as e:
-                    self._error_count += 1
-                    debug_logger.log_error(
-                        f"[BrowserCaptcha] Token-{self.token_id} 自定义浏览器错误: {type(e).__name__}: {str(e)[:200]}"
-                    )
-                finally:
-                    await self._close_browser(playwright, browser, context)
+                        if token:
+                            self._solve_count += 1
+                            debug_logger.log_info(
+                                f"[BrowserCaptcha] Token-{self.token_id} custom token acquired ({(time.time()-start_ts)*1000:.0f}ms)"
+                            )
+                            return token
 
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(1)
+                        self._error_count += 1
+                        debug_logger.log_warning(
+                            f"[BrowserCaptcha] Token-{self.token_id} custom token attempt {attempt+1}/{max_retries} failed"
+                        )
+                    except Exception as e:
+                        self._error_count += 1
+                        debug_logger.log_error(
+                            f"[BrowserCaptcha] Token-{self.token_id} custom browser error: {type(e).__name__}: {str(e)[:200]}"
+                        )
+                    finally:
+                        await self._close_browser(
+                            playwright,
+                            browser,
+                            context,
+                            browser_pid=self._extract_browser_pid(browser),
+                            clear_slot_pid=False,
+                        )
 
-            return None
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+
+                return None
+            finally:
+                self._solve_inflight = max(0, self._solve_inflight - 1)
+                self.note_idle()
 
     async def get_custom_score(
         self,
@@ -1198,57 +1578,68 @@ class TokenBrowser:
         action: str = "homepage",
         enterprise: bool = False,
     ) -> Dict[str, Any]:
-        """在同一个浏览器页面里获取 token 并直接校验分数。"""
+        """Get a custom token and verify its score using a temporary browser."""
         async with self._semaphore:
+            self._solve_inflight += 1
             max_retries = 3
 
-            for attempt in range(max_retries):
-                playwright = None
-                browser = None
-                context = None
-                try:
-                    started_at = time.time()
-                    playwright, browser, context = await self._create_browser()
-                    payload = await self._execute_custom_captcha(
-                        context=context,
-                        website_url=website_url,
-                        website_key=website_key,
-                        action=action,
-                        verify_url=verify_url,
-                        enterprise=enterprise,
-                    )
-
-                    if isinstance(payload, dict) and payload.get("token"):
-                        self._solve_count += 1
-                        payload.setdefault("token_elapsed_ms", int((time.time() - started_at) * 1000))
-                        debug_logger.log_info(
-                            f"[BrowserCaptcha] Token-{self.token_id} 页面内分数校验成功 ({(time.time()-started_at)*1000:.0f}ms)"
+            try:
+                for attempt in range(max_retries):
+                    playwright = None
+                    browser = None
+                    context = None
+                    try:
+                        started_at = time.time()
+                        playwright, browser, context = await self._create_browser(manage_slot_pid=False)
+                        payload = await self._execute_custom_captcha(
+                            context=context,
+                            website_url=website_url,
+                            website_key=website_key,
+                            action=action,
+                            verify_url=verify_url,
+                            enterprise=enterprise,
                         )
-                        return payload
 
-                    self._error_count += 1
-                    debug_logger.log_warning(
-                        f"[BrowserCaptcha] Token-{self.token_id} 页面内分数校验尝试 {attempt+1}/{max_retries} 失败"
-                    )
-                except Exception as e:
-                    self._error_count += 1
-                    debug_logger.log_error(
-                        f"[BrowserCaptcha] Token-{self.token_id} 页面内分数校验异常: {type(e).__name__}: {str(e)[:200]}"
-                    )
-                finally:
-                    await self._close_browser(playwright, browser, context)
+                        if isinstance(payload, dict) and payload.get("token"):
+                            self._solve_count += 1
+                            payload.setdefault("token_elapsed_ms", int((time.time() - started_at) * 1000))
+                            debug_logger.log_info(
+                                f"[BrowserCaptcha] Token-{self.token_id} in-page score verification succeeded ({(time.time()-started_at)*1000:.0f}ms)"
+                            )
+                            return payload
 
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(1)
+                        self._error_count += 1
+                        debug_logger.log_warning(
+                            f"[BrowserCaptcha] Token-{self.token_id} in-page score attempt {attempt+1}/{max_retries} failed"
+                        )
+                    except Exception as e:
+                        self._error_count += 1
+                        debug_logger.log_error(
+                            f"[BrowserCaptcha] Token-{self.token_id} in-page score browser error: {type(e).__name__}: {str(e)[:200]}"
+                        )
+                    finally:
+                        await self._close_browser(
+                            playwright,
+                            browser,
+                            context,
+                            browser_pid=self._extract_browser_pid(browser),
+                            clear_slot_pid=False,
+                        )
 
-            return {
-                "token": None,
-                "verify_mode": "browser_page",
-                "verify_elapsed_ms": 0,
-                "verify_http_status": None,
-                "verify_result": {}
-            }
-    
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+
+                return {
+                    "token": None,
+                    "verify_mode": "browser_page",
+                    "verify_elapsed_ms": 0,
+                    "verify_http_status": None,
+                    "verify_result": {}
+                }
+            finally:
+                self._solve_inflight = max(0, self._solve_inflight - 1)
+                self.note_idle()
+
 
 class BrowserCaptchaService:
     """多浏览器轮询打码服务（单例模式）
@@ -1265,12 +1656,16 @@ class BrowserCaptchaService:
         self.base_user_data_dir = os.path.join(os.getcwd(), "browser_data_rt")
         self._browsers: Dict[int, TokenBrowser] = {}
         self._browsers_lock = asyncio.Lock()
+        self._slot_allocation_lock = asyncio.Lock()
+        self._slot_reservations: Dict[int, int] = {}
         
-        # 浏览器数量配置
-        self._browser_count = 1  # 默认 1 个，会从数据库加载
-        self._round_robin_index = 0  # 轮询索引
+        # ???????
+        self._browser_count = 1  # ?? 1 ?????????
+        self._round_robin_index = 0  # ????
+        self._project_slot_affinity: Dict[str, List[int]] = {}
+        self._project_slot_lock = asyncio.Lock()
         
-        # 统计指标
+        # ????
         self._stats = {
             "req_total": 0,
             "gen_ok": 0,
@@ -1278,9 +1673,38 @@ class BrowserCaptchaService:
             "api_403": 0
         }
         
-        # 并发限制将在 _load_browser_count 中根据配置设置
+        # ?????? _load_browser_count ???????
         self._token_semaphore = None
+        self._idle_reaper_task: Optional[asyncio.Task] = None
     
+    async def _ensure_idle_reaper(self):
+        if self._idle_reaper_task is None or self._idle_reaper_task.done():
+            self._idle_reaper_task = asyncio.create_task(self._idle_reaper_loop())
+
+    async def _idle_reaper_loop(self):
+        while True:
+            try:
+                await asyncio.sleep(15)
+                idle_ttl = int(getattr(config, "browser_idle_ttl_seconds", 600) or 600)
+                browsers = []
+                async with self._browsers_lock:
+                    browsers = list(self._browsers.values())
+                for browser in browsers:
+                    try:
+                        if browser.is_busy():
+                            continue
+                        if not browser.has_shared_browser():
+                            continue
+                        if browser.idle_seconds() < idle_ttl:
+                            continue
+                        await browser.recycle_browser(reason=f"idle_ttl_{idle_ttl}s", rotate_profile=False)
+                    except Exception as e:
+                        debug_logger.log_warning(f"[BrowserCaptcha] idle reaper failed: {e}")
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                debug_logger.log_warning(f"[BrowserCaptcha] idle reaper loop error: {e}")
+
     @classmethod
     async def get_instance(cls, db=None) -> 'BrowserCaptchaService':
         if cls._instance is None:
@@ -1289,6 +1713,7 @@ class BrowserCaptchaService:
                     cls._instance = cls(db)
                     # 从数据库加载 browser_count 配置
                     await cls._instance._load_browser_count()
+                    await cls._instance._ensure_idle_reaper()
         return cls._instance
     
     def _check_available(self):
@@ -1324,18 +1749,48 @@ class BrowserCaptchaService:
         debug_logger.log_info(f"[BrowserCaptcha] 并发上限: {self._browser_count}")
     
     async def reload_browser_count(self):
-        """重新加载浏览器数量配置（用于配置更新后热重载）"""
+        """???????????????????????"""
         old_count = self._browser_count
         await self._load_browser_count()
         
-        # 如果数量减少，移除多余的浏览器实例
+        browsers_to_close: List[TokenBrowser] = []
+        await self._ensure_idle_reaper()
         if self._browser_count < old_count:
             async with self._browsers_lock:
                 for browser_id in list(self._browsers.keys()):
                     if browser_id >= self._browser_count:
-                        self._browsers.pop(browser_id)
-                        debug_logger.log_info(f"[BrowserCaptcha] 移除多余浏览器实例 {browser_id}")
-    
+                        browsers_to_close.append(self._browsers.pop(browser_id))
+                        debug_logger.log_info(f"[BrowserCaptcha] ????????? {browser_id}")
+
+        for browser in browsers_to_close:
+            try:
+                await browser.force_close_pending_browser(close_all=True)
+                await browser.recycle_browser(reason="browser_slot_removed", rotate_profile=False)
+            except Exception as e:
+                debug_logger.log_warning(f"[BrowserCaptcha] ???????????: {e}")
+
+            async with self._project_slot_lock:
+                pruned: Dict[str, List[int]] = {}
+                for project_key, slots in self._project_slot_affinity.items():
+                    valid_slots = [slot for slot in slots if 0 <= slot < self._browser_count]
+                    if valid_slots:
+                        pruned[project_key] = valid_slots
+                self._project_slot_affinity = pruned
+            async with self._slot_allocation_lock:
+                self._slot_reservations = {
+                    slot_id: count
+                    for slot_id, count in self._slot_reservations.items()
+                    if 0 <= slot_id < self._browser_count and count > 0
+                }
+
+        if self._browser_count > old_count:
+            warmup_tasks = [
+                self._warmup_browser_slot(browser_id)
+                for browser_id in range(old_count, self._browser_count)
+            ]
+            if warmup_tasks:
+                await asyncio.gather(*warmup_tasks, return_exceptions=True)
+
     def _log_stats(self):
         total = self._stats["req_total"]
         gen_fail = self._stats["gen_fail"]
@@ -1348,6 +1803,80 @@ class BrowserCaptchaService:
         rate = (valid_success / total * 100) if total > 0 else 0.0
 
     
+    async def _warmup_browser_slot(self, browser_id: int):
+        browser = await self._get_or_create_browser(browser_id)
+        try:
+            await browser._get_or_create_shared_browser()
+            debug_logger.log_info(f"[BrowserCaptcha] warmed browser slot {browser_id}")
+        except Exception as e:
+            debug_logger.log_warning(f"[BrowserCaptcha] warmup for slot {browser_id} failed: {e}")
+
+    async def warmup_browser_slots(self):
+        tasks = [self._warmup_browser_slot(browser_id) for browser_id in range(self._browser_count)]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _is_slot_busy_for_allocation(self, slot_id: int) -> bool:
+        if self._slot_reservations.get(slot_id, 0) > 0:
+            return True
+        browser = self._browsers.get(slot_id)
+        return bool(browser and getattr(browser, 'is_busy', lambda: False)())
+
+    def _reserve_slot_locked(self, slot_id: int):
+        self._slot_reservations[slot_id] = self._slot_reservations.get(slot_id, 0) + 1
+
+    async def _release_slot_reservation(self, slot_id: Optional[int]):
+        if slot_id is None:
+            return
+        async with self._slot_allocation_lock:
+            current = self._slot_reservations.get(slot_id, 0)
+            if current <= 1:
+                self._slot_reservations.pop(slot_id, None)
+            else:
+                self._slot_reservations[slot_id] = current - 1
+
+    async def _select_browser_id(self, project_id: Optional[str]) -> int:
+        project_key = str(project_id or '').strip()
+
+        # 选择和预留必须原子化，否则同批并发会因为亲和性反复命中同一 slot。
+        async with self._slot_allocation_lock:
+            affinity_slots: List[int] = []
+            if project_key:
+                async with self._project_slot_lock:
+                    affinity_slots = [slot for slot in self._project_slot_affinity.get(project_key, []) if 0 <= slot < self._browser_count]
+                    self._project_slot_affinity[project_key] = affinity_slots
+
+            async with self._browsers_lock:
+                for slot_id in affinity_slots:
+                    if not self._is_slot_busy_for_allocation(slot_id):
+                        self._reserve_slot_locked(slot_id)
+                        return slot_id
+
+                for offset in range(self._browser_count):
+                    slot_id = (self._round_robin_index + offset) % self._browser_count
+                    if self._is_slot_busy_for_allocation(slot_id):
+                        continue
+                    self._round_robin_index = (slot_id + 1) % self._browser_count
+                    self._reserve_slot_locked(slot_id)
+                    if project_key:
+                        async with self._project_slot_lock:
+                            slots = [slot for slot in self._project_slot_affinity.get(project_key, []) if 0 <= slot < self._browser_count]
+                            if slot_id not in slots:
+                                slots.append(slot_id)
+                            self._project_slot_affinity[project_key] = slots
+                    return slot_id
+
+                slot_id = self._get_next_browser_id()
+                self._reserve_slot_locked(slot_id)
+
+            if project_key:
+                async with self._project_slot_lock:
+                    slots = [slot for slot in self._project_slot_affinity.get(project_key, []) if 0 <= slot < self._browser_count]
+                    if slot_id not in slots:
+                        slots.append(slot_id)
+                    self._project_slot_affinity[project_key] = slots
+            return slot_id
+
     async def _get_or_create_browser(self, browser_id: int) -> TokenBrowser:
         """获取或创建指定 ID 的浏览器实例"""
         async with self._browsers_lock:
@@ -1364,6 +1893,32 @@ class BrowserCaptchaService:
         self._round_robin_index += 1
         return browser_id
 
+    @staticmethod
+    def _compose_browser_ref(browser_id: int, request_ref: Optional[str]) -> Union[int, str]:
+        """将 browser_id 与 request_ref 合并为可回传的请求句柄。"""
+        if request_ref:
+            return f"{browser_id}:{request_ref}"
+        return browser_id
+
+    @staticmethod
+    def _parse_browser_ref(browser_ref: Optional[Union[int, str]]) -> tuple[Optional[int], Optional[str]]:
+        """解析请求句柄，兼容旧的纯 int browser_id。"""
+        if browser_ref is None:
+            return None, None
+
+        if isinstance(browser_ref, int):
+            return browser_ref, None
+
+        if isinstance(browser_ref, str):
+            raw = browser_ref.strip()
+            if raw.isdigit():
+                return int(raw), None
+            browser_id_part, sep, request_ref = raw.partition(":")
+            if sep and browser_id_part.isdigit() and request_ref:
+                return int(browser_id_part), request_ref
+
+        return None, None
+
     async def _resolve_token_proxy_url(self, token_id: Optional[int]) -> Optional[str]:
         """读取 token 级打码代理，为空时回退全局配置。"""
         if not token_id or not self.db:
@@ -1376,7 +1931,7 @@ class BrowserCaptchaService:
             debug_logger.log_warning(f"[BrowserCaptcha] 读取 token({token_id}) 打码代理失败: {e}")
         return None
     
-    async def get_token(self, project_id: str, action: str = "IMAGE_GENERATION", token_id: int = None) -> tuple[Optional[str], int]:
+    async def get_token(self, project_id: str, action: str = "IMAGE_GENERATION", token_id: int = None) -> tuple[Optional[str], Union[int, str]]:
         """获取 reCAPTCHA Token（轮询分配到不同浏览器）
         
         Args:
@@ -1385,7 +1940,7 @@ class BrowserCaptchaService:
             token_id: 业务 token id（仅用于读取 token 级打码代理）
         
         Returns:
-            (token, browser_id) 元组，调用方失败时用 browser_id 调用 report_error
+            (token, browser_ref) 元组，browser_ref 包含 browser_id 与请求级 request_ref
         """
         # 检查服务是否可用
         self._check_available()
@@ -1397,15 +1952,17 @@ class BrowserCaptchaService:
         if self._token_semaphore:
             async with self._token_semaphore:
                 # 轮询选择浏览器
-                browser_id = self._get_next_browser_id()
-                browser = await self._get_or_create_browser(browser_id)
-                
-                token = await browser.get_token(
-                    project_id,
-                    self.website_key,
-                    action,
-                    token_proxy_url=token_proxy_url
-                )
+                browser_id = await self._select_browser_id(project_id)
+                try:
+                    browser = await self._get_or_create_browser(browser_id)
+                    token, request_ref = await browser.get_token(
+                        project_id,
+                        self.website_key,
+                        action,
+                        token_proxy_url=token_proxy_url
+                    )
+                finally:
+                    await self._release_slot_reservation(browser_id)
             
             if token:
                 self._stats["gen_ok"] += 1
@@ -1413,18 +1970,20 @@ class BrowserCaptchaService:
                 self._stats["gen_fail"] += 1
                 
             self._log_stats()
-            return token, browser_id
+            return token, self._compose_browser_ref(browser_id, request_ref)
         
         # 无并发限制时直接执行
-        browser_id = self._get_next_browser_id()
-        browser = await self._get_or_create_browser(browser_id)
-        
-        token = await browser.get_token(
-            project_id,
-            self.website_key,
-            action,
-            token_proxy_url=token_proxy_url
-        )
+        browser_id = await self._select_browser_id(project_id)
+        try:
+            browser = await self._get_or_create_browser(browser_id)
+            token, request_ref = await browser.get_token(
+                project_id,
+                self.website_key,
+                action,
+                token_proxy_url=token_proxy_url
+            )
+        finally:
+            await self._release_slot_reservation(browser_id)
         
         if token:
             self._stats["gen_ok"] += 1
@@ -1432,7 +1991,7 @@ class BrowserCaptchaService:
             self._stats["gen_fail"] += 1
             
         self._log_stats()
-        return token, browser_id
+        return token, self._compose_browser_ref(browser_id, request_ref)
 
     async def get_custom_token(
         self,
@@ -1501,38 +2060,50 @@ class BrowserCaptchaService:
         )
         return payload, browser_id
 
-    async def get_fingerprint(self, browser_id: int) -> Optional[Dict[str, Any]]:
+    async def get_fingerprint(self, browser_ref: Optional[Union[int, str]]) -> Optional[Dict[str, Any]]:
         """获取指定浏览器最近一次打码时的指纹快照。"""
+        browser_id, _ = self._parse_browser_ref(browser_ref)
+        if browser_id is None:
+            return None
+
         async with self._browsers_lock:
             browser = self._browsers.get(browser_id)
             if not browser:
                 return None
             return browser.get_last_fingerprint()
 
-    async def report_error(self, browser_id: int = None, error_reason: Optional[str] = None):
-        """上层举报当前请求失败，必要时提前回收待释放浏览器。
-        
-        Args:
-            browser_id: 浏览器 ID（当前架构下每次都是新浏览器，此参数仅用于日志）
-        """
+    async def report_error(self, browser_ref: Optional[Union[int, str]] = None, error_reason: Optional[str] = None):
+        """Handle upstream errors; recycle the browser only for explicit reCAPTCHA evaluation failures."""
+        browser_id, _ = self._parse_browser_ref(browser_ref)
+
         async with self._browsers_lock:
             browser = self._browsers.get(browser_id) if browser_id is not None else None
             error_lower = (error_reason or "").lower()
-            if "403" in error_lower or "recaptcha" in error_lower:
+            has_recaptcha = "recaptcha" in error_lower
+            should_recycle = has_recaptcha and (
+                "evaluation failed" in error_lower
+                or "verification failed" in error_lower or "验证失败" in (error_reason or "")
+                or "failed" in error_lower
+            )
+            if should_recycle:
                 self._stats["api_403"] += 1
             if browser_id is not None:
                 debug_logger.log_info(
-                    f"[BrowserCaptcha] 浏览器 {browser_id} 的 token 验证失败，reason={error_reason or 'unknown'}"
+                    f"[BrowserCaptcha] browser {browser_id} failure reported, reason={error_reason or 'unknown'}, recycle={should_recycle}"
                 )
 
-        if browser:
+        if browser and should_recycle:
             try:
-                await browser.force_close_pending_browser()
+                await browser.recycle_browser(
+                    reason=error_reason or "recaptcha_evaluation_failed",
+                    rotate_profile=True,
+                )
             except Exception as e:
-                debug_logger.log_warning(f"[BrowserCaptcha] 浏览器 {browser_id} 失败后提前关闭异常: {e}")
+                debug_logger.log_warning(f"[BrowserCaptcha] browser {browser_id} recycle failed: {e}")
 
-    async def report_request_finished(self, browser_id: int = None):
-        """上层通知：图片/视频请求已完成，可关闭对应打码浏览器。"""
+    async def report_request_finished(self, browser_ref: Optional[Union[int, str]] = None):
+        """上层通知本次请求已完成；browser 模式仅保留常驻浏览器，不在成功后主动关闭。"""
+        browser_id, _ = self._parse_browser_ref(browser_ref)
         if browser_id is None:
             return
 
@@ -1540,7 +2111,15 @@ class BrowserCaptchaService:
             browser = self._browsers.get(browser_id)
 
         if browser:
-            await browser.notify_generation_request_finished()
+            keepalive_alive = False
+            keepalive_page = getattr(browser, '_shared_keepalive_page', None)
+            try:
+                keepalive_alive = bool(keepalive_page and not keepalive_page.is_closed())
+            except Exception:
+                keepalive_alive = False
+            debug_logger.log_info(
+                f"[BrowserCaptcha] browser {browser_id} request finished; keepalive_alive={keepalive_alive}"
+            )
 
     async def remove_browser(self, browser_id: int):
         async with self._browsers_lock:
@@ -1552,21 +2131,34 @@ class BrowserCaptchaService:
             browsers = list(self._browsers.values())
             self._browsers.clear()
 
+        if self._idle_reaper_task and not self._idle_reaper_task.done():
+            self._idle_reaper_task.cancel()
+            try:
+                await self._idle_reaper_task
+            except asyncio.CancelledError:
+                pass
+
         for browser in browsers:
             try:
-                await browser.force_close_pending_browser()
+                await browser.force_close_pending_browser(close_all=True)
+                await browser.recycle_browser(reason="service_shutdown", rotate_profile=False)
             except Exception:
                 pass
             
     async def open_login_browser(self): return {"success": False, "error": "Not implemented"}
     async def create_browser_for_token(self, t, s=None): pass
     def get_stats(self): 
+        browsers = list(self._browsers.values())
+        busy_browser_count = sum(1 for browser in browsers if getattr(browser, "is_busy", lambda: False)())
         base_stats = {
             "total_solve_count": self._stats["gen_ok"],
             "total_error_count": self._stats["gen_fail"],
             "risk_403_count": self._stats["api_403"],
             "browser_count": len(self._browsers),
             "configured_browser_count": self._browser_count,
+            "busy_browser_count": busy_browser_count,
+            "idle_browser_count": max(self._browser_count - busy_browser_count, 0),
+            "project_affinity_count": len(self._project_slot_affinity),
             "browsers": []
         }
         return base_stats
