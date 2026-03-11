@@ -235,3 +235,10 @@ async def manage_page():
     if manage_file.exists():
         return FileResponse(str(manage_file))
     return HTMLResponse(content="<h1>Management Page Not Found</h1>", status_code=404)
+
+
+@app.get("/health")
+@app.get("/healthz")
+async def health_check():
+    """Basic liveness endpoint for container health checks."""
+    return {"status": "ok"}
