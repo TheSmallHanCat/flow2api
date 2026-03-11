@@ -141,5 +141,6 @@ jobs:
               echo "IMAGE_NAMESPACE=${IMAGE_NAMESPACE}" >> .env
             fi
 
+            docker network inspect my-shared-net >/dev/null 2>&1 || docker network create my-shared-net
             docker compose pull "$DEPLOY_SERVICE"
             docker compose up -d "$DEPLOY_SERVICE"
