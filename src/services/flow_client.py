@@ -6,6 +6,7 @@ import time
 import uuid
 import random
 import base64
+import ssl
 from typing import Dict, Any, Optional, List, Union
 from urllib.parse import quote
 import urllib.error
@@ -308,7 +309,108 @@ class FlowClient:
                 debug_logger.log_error(f"[API FAILED] Request Body: {json_data}")
                 debug_logger.log_error(f"[API FAILED] Exception: {error_msg}")
 
+            if self._should_fallback_to_urllib(error_msg):
+                debug_logger.log_warning(
+                    f"[HTTP FALLBACK] curl_cffi 请求失败，回退 urllib: {method.upper()} {url}"
+                )
+                try:
+                    return await asyncio.to_thread(
+                        self._sync_json_request_via_urllib,
+                        method.upper(),
+                        url,
+                        headers,
+                        json_data,
+                        proxy_url,
+                        request_timeout,
+                    )
+                except Exception as fallback_error:
+                    debug_logger.log_error(
+                        f"[HTTP FALLBACK] urllib 回退也失败: {fallback_error}"
+                    )
+                    raise Exception(
+                        f"Flow API request failed: curl={error_msg}; urllib={fallback_error}"
+                    )
+
             raise Exception(f"Flow API request failed: {error_msg}")
+
+    def _should_fallback_to_urllib(self, error_message: str) -> bool:
+        """判断是否应从 curl_cffi 回退到 urllib。"""
+        error_lower = (error_message or "").lower()
+        return any(
+            keyword in error_lower
+            for keyword in [
+                "curl: (6)",
+                "curl: (7)",
+                "curl: (28)",
+                "curl: (35)",
+                "curl: (52)",
+                "curl: (56)",
+                "connection timed out",
+                "could not connect",
+                "failed to connect",
+                "ssl connect error",
+                "tls connect error",
+                "network is unreachable",
+            ]
+        )
+
+    def _sync_json_request_via_urllib(
+        self,
+        method: str,
+        url: str,
+        headers: Optional[Dict[str, Any]],
+        json_data: Optional[Dict[str, Any]],
+        proxy_url: Optional[str],
+        timeout: int,
+    ) -> Dict[str, Any]:
+        """使用 urllib 执行 JSON 请求，作为 curl_cffi 的网络回退。"""
+        request_headers = dict(headers or {})
+        request_headers.setdefault("Accept", "application/json")
+
+        data = None
+        if method.upper() != "GET" and json_data is not None:
+            data = json.dumps(json_data, ensure_ascii=False).encode("utf-8")
+            request_headers["Content-Type"] = "application/json"
+
+        handlers = [urllib.request.HTTPSHandler(context=ssl.create_default_context())]
+        if proxy_url:
+            handlers.append(
+                urllib.request.ProxyHandler(
+                    {"http": proxy_url, "https": proxy_url}
+                )
+            )
+
+        opener = urllib.request.build_opener(*handlers)
+        request = urllib.request.Request(
+            url=url,
+            data=data,
+            headers=request_headers,
+            method=method.upper(),
+        )
+
+        try:
+            with opener.open(
+                request,
+                timeout=timeout,
+            ) as response:
+                payload = response.read()
+                status_code = int(response.getcode() or 0)
+        except urllib.error.HTTPError as exc:
+            payload = exc.read() if hasattr(exc, "read") else b""
+            status_code = int(getattr(exc, "code", 500) or 500)
+            body_text = payload.decode("utf-8", errors="replace")
+            raise Exception(f"HTTP Error {status_code}: {body_text[:200]}") from exc
+        except Exception as exc:
+            raise Exception(str(exc)) from exc
+
+        body_text = payload.decode("utf-8", errors="replace")
+        if status_code >= 400:
+            raise Exception(f"HTTP Error {status_code}: {body_text[:200]}")
+
+        try:
+            return json.loads(body_text) if body_text else {}
+        except Exception as exc:
+            raise Exception(f"Invalid JSON response: {body_text[:200]}") from exc
 
     def _is_timeout_error(self, error: Exception) -> bool:
         """判断是否为网络超时，便于快速失败重试。"""
@@ -320,6 +422,32 @@ class FlowClient:
             "connection timed out",
             "operation timed out",
         ])
+
+    def _is_retryable_network_error(self, error_str: str) -> bool:
+        """识别可重试的 TLS/连接类网络错误。"""
+        error_lower = (error_str or "").lower()
+        return any(keyword in error_lower for keyword in [
+            "curl: (35)",
+            "curl: (52)",
+            "curl: (56)",
+            "ssl_error_syscall",
+            "tls connect error",
+            "ssl connect error",
+            "connection reset",
+            "connection aborted",
+            "connection was reset",
+            "unexpected eof",
+            "empty reply from server",
+            "recv failure",
+            "send failure",
+            "connection refused",
+            "network is unreachable",
+            "remote host closed connection",
+        ])
+
+    def _get_control_plane_timeout(self) -> int:
+        """控制轻量控制面请求的超时，避免认证/项目接口长时间挂起。"""
+        return max(5, min(int(self.timeout or 0) or 120, 10))
 
     async def _acquire_image_launch_gate(
         self,
@@ -466,7 +594,8 @@ class FlowClient:
             method="GET",
             url=url,
             use_st=True,
-            st_token=st
+            st_token=st,
+            timeout=self._get_control_plane_timeout(),
         )
         return result
 
@@ -489,18 +618,45 @@ class FlowClient:
                 "toolName": "PINHOLE"
             }
         }
+        max_retries = max(2, min(4, int(getattr(config, "flow_max_retries", 3) or 3)))
+        request_timeout = max(self._get_control_plane_timeout(), min(self.timeout, 15))
+        last_error: Optional[Exception] = None
 
-        result = await self._make_request(
-            method="POST",
-            url=url,
-            json_data=json_data,
-            use_st=True,
-            st_token=st
-        )
+        for retry_attempt in range(max_retries):
+            try:
+                result = await self._make_request(
+                    method="POST",
+                    url=url,
+                    json_data=json_data,
+                    use_st=True,
+                    st_token=st,
+                    timeout=request_timeout,
+                )
+                project_result = (
+                    result.get("result", {})
+                    .get("data", {})
+                    .get("json", {})
+                    .get("result", {})
+                )
+                project_id = project_result.get("projectId")
+                if not project_id:
+                    raise Exception("Invalid project.createProject response: missing projectId")
+                return project_id
+            except Exception as e:
+                last_error = e
+                retry_reason = "网络超时" if self._is_timeout_error(e) else self._get_retry_reason(str(e))
+                if retry_reason and retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(
+                        f"[PROJECT] 创建项目失败，准备重试 ({retry_attempt + 2}/{max_retries}) "
+                        f"title={title!r}, reason={retry_reason}: {e}"
+                    )
+                    await asyncio.sleep(1)
+                    continue
+                raise
 
-        # 解析返回的project_id
-        project_id = result["result"]["data"]["json"]["result"]["projectId"]
-        return project_id
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("创建项目失败")
 
     async def delete_project(self, st: str, project_id: str):
         """删除项目
@@ -521,7 +677,8 @@ class FlowClient:
             url=url,
             json_data=json_data,
             use_st=True,
-            st_token=st
+            st_token=st,
+            timeout=self._get_control_plane_timeout(),
         )
 
     # ========== 余额查询 (使用AT) ==========
@@ -543,7 +700,8 @@ class FlowClient:
             method="GET",
             url=url,
             use_at=True,
-            at_token=at
+            at_token=at,
+            timeout=self._get_control_plane_timeout(),
         )
         return result
 
@@ -653,25 +811,6 @@ class FlowClient:
             "mimeType": mime_type
         }
 
-        try:
-            new_result = await self._make_request(
-                method="POST",
-                url=new_url,
-                json_data=new_json_data,
-                use_at=True,
-                at_token=at,
-                use_media_proxy=True
-            )
-            media_id = (
-                new_result.get("media", {}).get("name")
-                or new_result.get("mediaGenerationId", {}).get("mediaGenerationId")
-            )
-            if media_id:
-                return media_id
-            raise Exception(f"Invalid upload response: missing media id, keys={list(new_result.keys())}")
-        except Exception as new_upload_error:
-            debug_logger.log_warning(f"[UPLOAD] New upload API failed, fallback to legacy endpoint: {new_upload_error}")
-
         # 兼容回退：旧接口 :uploadUserImage
         legacy_url = f"{self.api_base_url}:uploadUserImage"
         legacy_json_data = {
@@ -686,23 +825,63 @@ class FlowClient:
                 "tool": "ASSET_MANAGER"
             }
         }
+        max_retries = max(1, getattr(config, "flow_max_retries", 3))
+        last_error: Optional[Exception] = None
 
-        legacy_result = await self._make_request(
-            method="POST",
-            url=legacy_url,
-            json_data=legacy_json_data,
-            use_at=True,
-            at_token=at,
-            use_media_proxy=True
-        )
+        for retry_attempt in range(max_retries):
+            try:
+                new_result = await self._make_request(
+                    method="POST",
+                    url=new_url,
+                    json_data=new_json_data,
+                    use_at=True,
+                    at_token=at,
+                    use_media_proxy=True
+                )
+                media_id = (
+                    new_result.get("media", {}).get("name")
+                    or new_result.get("mediaGenerationId", {}).get("mediaGenerationId")
+                )
+                if media_id:
+                    return media_id
+                raise Exception(f"Invalid upload response: missing media id, keys={list(new_result.keys())}")
+            except Exception as new_upload_error:
+                last_error = new_upload_error
+                debug_logger.log_warning(
+                    f"[UPLOAD] New upload API failed, fallback to legacy endpoint: {new_upload_error}"
+                )
 
-        media_id = (
-            legacy_result.get("mediaGenerationId", {}).get("mediaGenerationId")
-            or legacy_result.get("media", {}).get("name")
-        )
-        if not media_id:
-            raise Exception(f"Legacy upload response missing media id: keys={list(legacy_result.keys())}")
-        return media_id
+            try:
+                legacy_result = await self._make_request(
+                    method="POST",
+                    url=legacy_url,
+                    json_data=legacy_json_data,
+                    use_at=True,
+                    at_token=at,
+                    use_media_proxy=True
+                )
+
+                media_id = (
+                    legacy_result.get("mediaGenerationId", {}).get("mediaGenerationId")
+                    or legacy_result.get("media", {}).get("name")
+                )
+                if media_id:
+                    return media_id
+                raise Exception(f"Legacy upload response missing media id: keys={list(legacy_result.keys())}")
+            except Exception as legacy_upload_error:
+                last_error = legacy_upload_error
+                retry_reason = self._get_retry_reason(str(legacy_upload_error))
+                if retry_reason and retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(
+                        f"[UPLOAD] 上传遇到{retry_reason}，准备重试 ({retry_attempt + 2}/{max_retries})..."
+                    )
+                    await asyncio.sleep(1)
+                    continue
+                raise
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("上传图片失败")
 
     # ========== 图片生成 (使用AT) - 同步返回 ==========
 
@@ -1612,16 +1791,32 @@ class FlowClient:
         json_data = {
             "operations": operations
         }
+        max_retries = max(1, getattr(config, "flow_max_retries", 3))
+        last_error: Optional[Exception] = None
 
-        result = await self._make_request(
-            method="POST",
-            url=url,
-            json_data=json_data,
-            use_at=True,
-            at_token=at
-        )
+        for retry_attempt in range(max_retries):
+            try:
+                return await self._make_request(
+                    method="POST",
+                    url=url,
+                    json_data=json_data,
+                    use_at=True,
+                    at_token=at
+                )
+            except Exception as e:
+                last_error = e
+                retry_reason = self._get_retry_reason(str(e))
+                if retry_reason and retry_attempt < max_retries - 1:
+                    debug_logger.log_warning(
+                        f"[VIDEO POLL] 状态查询遇到{retry_reason}，准备重试 ({retry_attempt + 2}/{max_retries})..."
+                    )
+                    await asyncio.sleep(1)
+                    continue
+                raise
 
-        return result
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("视频状态查询失败")
 
     # ========== 媒体删除 (使用ST) ==========
 
@@ -1710,6 +1905,8 @@ class FlowClient:
             return "403错误"
         if "429" in error_lower or "too many requests" in error_lower:
             return "429限流"
+        if self._is_retryable_network_error(error_str):
+            return "网络/TLS错误"
         if "recaptcha evaluation failed" in error_lower:
             return "reCAPTCHA 验证失败"
         if "recaptcha" in error_lower:

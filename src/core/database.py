@@ -1239,6 +1239,7 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             payload_columns = "rl.request_body, rl.response_body," if include_payload else ""
+            response_excerpt_column = "substr(COALESCE(rl.response_body, ''), 1, 2048) as response_body_excerpt,"
             has_status_text = await self._column_exists(db, "request_logs", "status_text")
             has_progress = await self._column_exists(db, "request_logs", "progress")
             has_updated_at = await self._column_exists(db, "request_logs", "updated_at")
@@ -1253,6 +1254,7 @@ class Database:
                         rl.token_id,
                         rl.operation,
                         {payload_columns}
+                        {response_excerpt_column}
                         rl.status_code,
                         rl.duration,
                         {status_text_column}
@@ -1274,6 +1276,7 @@ class Database:
                         rl.token_id,
                         rl.operation,
                         {payload_columns}
+                        {response_excerpt_column}
                         rl.status_code,
                         rl.duration,
                         {status_text_column}

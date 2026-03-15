@@ -9,6 +9,7 @@
         @keyframes slide-up{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
         .animate-slide-up{animation:slide-up .3s ease-out}
         .tab-btn{transition:all .2s ease}
+        .line-clamp-2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
     </style>
     <script>
         tailwind.config={theme:{extend:{colors:{border:"hsl(0 0% 89%)",input:"hsl(0 0% 89%)",ring:"hsl(0 0% 3.9%)",background:"hsl(0 0% 100%)",foreground:"hsl(0 0% 3.9%)",primary:{DEFAULT:"hsl(0 0% 9%)",foreground:"hsl(0 0% 98%)"},secondary:{DEFAULT:"hsl(0 0% 96.1%)",foreground:"hsl(0 0% 9%)"},muted:{DEFAULT:"hsl(0 0% 96.1%)",foreground:"hsl(0 0% 45.1%)"},destructive:{DEFAULT:"hsl(0 84.2% 60.2%)",foreground:"hsl(0 0% 98%)"}}}}}
@@ -514,6 +515,7 @@
                                 <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#29366;&#24577;</th>
                                 <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#36827;&#24230;</th>
                                 <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#29366;&#24577;&#30721;</th>
+                                <th class="h-10 w-[17rem] px-3 text-left align-middle font-medium text-muted-foreground">结果摘要</th>
                                 <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#32791;&#26102;(&#31186;)</th>
                                 <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#26102;&#38388;</th>
                                 <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#35814;&#24773;</th>
@@ -825,19 +827,22 @@
         generateRandomToken=()=>{const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';let token='';for(let i=0;i<32;i++){token+=chars.charAt(Math.floor(Math.random()*chars.length))}$('cfgPluginConnectionToken').value=token;showToast('随机Token已生成','success')},
         toggleATAutoRefresh=async()=>{try{const enabled=$('atAutoRefreshToggle').checked;const r=await apiRequest('/api/token-refresh/enabled',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r){$('atAutoRefreshToggle').checked=!enabled;return}const d=await r.json();if(d.success){showToast(enabled?'AT自动刷新已启用':'AT自动刷新已禁用','success')}else{showToast('操作失败: '+(d.detail||'未知错误'),'error');$('atAutoRefreshToggle').checked=!enabled}}catch(e){showToast('操作失败: '+e.message,'error');$('atAutoRefreshToggle').checked=!enabled}},
         loadATAutoRefreshConfig=async()=>{try{const r=await apiRequest('/api/token-refresh/config');if(!r)return;const d=await r.json();if(d.success&&d.config){$('atAutoRefreshToggle').checked=d.config.at_auto_refresh_enabled||false}else{console.error('AT自动刷新配置数据格式错误:',d)}}catch(e){console.error('加载AT自动刷新配置失败:',e)}},
-        formatLogStatus=l=>{const statusText=(l.status_text||'').trim();if(statusText){const map={started:'\u5df2\u542f\u52a8',token_selected:'\u5df2\u9009\u4e2d\u8d26\u53f7',token_ready:'\u51c6\u5907\u751f\u6210\u73af\u5883',project_ready:'\u9879\u76ee\u5df2\u5c31\u7eea',uploading_images:'\u4e0a\u4f20\u53c2\u8003\u56fe\u4e2d',submitting_image:'\u83b7\u53d6\u6253\u7801\u5e76\u63d0\u4ea4\u56fe\u7247\u4efb\u52a1',image_generated:'\u56fe\u7247\u751f\u6210\u5b8c\u6210',preparing_video:'\u51c6\u5907\u89c6\u9891\u4efb\u52a1',submitting_video:'\u83b7\u53d6\u6253\u7801\u5e76\u63d0\u4ea4\u89c6\u9891\u4efb\u52a1',video_submitted:'\u89c6\u9891\u4efb\u52a1\u5df2\u63d0\u4ea4',video_polling:'\u89c6\u9891\u751f\u6210\u4e2d',caching_image:'\u7f13\u5b58\u56fe\u7247\u4e2d',caching_video:'\u7f13\u5b58\u89c6\u9891\u4e2d',completed:'\u5df2\u5b8c\u6210',failed:'\u5931\u8d25',processing:'\u5904\u7406\u4e2d',upsampling_2k:'\u6b63\u5728\u653e\u5927\u52302K',upsampling_4k:'\u6b63\u5728\u653e\u5927\u52304K',upsampling_1080p:'\u6b63\u5728\u653e\u5927\u52301080P'};return map[statusText]||statusText}if(l.status_code===102)return'\u5904\u7406\u4e2d';if(l.status_code===200)return'\u5df2\u5b8c\u6210';if(l.status_code&&l.status_code>=400)return'\u5931\u8d25';return'-'},
+        formatLogStatus=l=>{const statusText=(l.status_text||'').trim();if(statusText){const map={started:'\u5df2\u542f\u52a8',token_selected:'\u5df2\u9009\u4e2d\u8d26\u53f7',token_ready:'\u51c6\u5907\u751f\u6210\u73af\u5883',project_ready:'\u9879\u76ee\u5df2\u5c31\u7eea',uploading_images:'\u4e0a\u4f20\u53c2\u8003\u56fe\u4e2d',submitting_image:'\u56fe\u7247\u63d0\u4ea4\u4e2d',image_generated:'\u56fe\u7247\u751f\u6210\u5b8c\u6210',preparing_video:'\u51c6\u5907\u89c6\u9891\u4efb\u52a1',submitting_video:'\u89c6\u9891\u63d0\u4ea4\u4e2d',video_submitted:'\u89c6\u9891\u4efb\u52a1\u5df2\u63d0\u4ea4',video_polling:'\u89c6\u9891\u751f\u6210\u4e2d',caching_image:'\u7f13\u5b58\u56fe\u7247\u4e2d',caching_video:'\u7f13\u5b58\u89c6\u9891\u4e2d',completed:'\u5df2\u5b8c\u6210',failed:'\u5931\u8d25',processing:'\u5904\u7406\u4e2d',upsampling_2k:'\u6b63\u5728\u653e\u5927\u52302K',upsampling_4k:'\u6b63\u5728\u653e\u5927\u52304K',upsampling_1080p:'\u6b63\u5728\u653e\u5927\u52301080P'};return map[statusText]||statusText}if(l.status_code===102)return'\u5904\u7406\u4e2d';if(l.status_code===200)return'\u5df2\u5b8c\u6210';if(l.status_code&&l.status_code>=400)return'\u5931\u8d25';return'-'},
         formatLogStatusClass=l=>{const statusText=formatLogStatus(l);if(statusText==='\u5904\u7406\u4e2d')return'bg-amber-50 text-amber-700';if(statusText==='\u5df2\u5b8c\u6210')return'bg-green-50 text-green-700';if(statusText==='\u5931\u8d25')return'bg-red-50 text-red-700';return'bg-gray-100 text-gray-700'},
         formatLogProgress=l=>{if(l.progress===null||l.progress===undefined||l.progress==='')return'-';const progress=Number(l.progress);return Number.isFinite(progress)?`${Math.max(0,Math.min(100,progress))}%`:'-'},
-        startLogsAutoRefresh=()=>{},
-        stopLogsAutoRefresh=()=>{},
-        loadLogs=async()=>{try{const r=await apiRequest('/api/logs?limit=100');if(!r)return;const logs=await r.json();window.allLogs=logs;window.logDetailCache=window.logDetailCache||Object.create(null);window.logListMeta=Object.create(null);logs.forEach(l=>window.logListMeta[l.id]={updated_at:l.updated_at,created_at:l.created_at,status_code:l.status_code,progress:l.progress,status_text:l.status_text});Object.keys(window.logDetailCache).forEach(key=>{const meta=window.logListMeta[key];const cached=window.logDetailCache[key];if(!meta||!cached||cached.updated_at!==meta.updated_at)delete window.logDetailCache[key]});const tb=$('logsTableBody');if(!logs.length){tb.innerHTML='<tr><td colspan="8" class="py-8 px-3 text-center text-sm text-muted-foreground">\u6682\u65e0\u65e5\u5fd7</td></tr>';return}tb.innerHTML=logs.map(l=>{const statusText=formatLogStatus(l),progressText=formatLogProgress(l),statusCodeClass=l.status_code===102?'bg-amber-50 text-amber-700':(l.status_code===200?'bg-green-50 text-green-700':'bg-red-50 text-red-700');return`<tr><td class="py-2.5 px-3">${escapeLogHtml(l.operation||'-')}</td><td class="py-2.5 px-3"><span class="text-xs ${l.token_email?'text-blue-600':'text-muted-foreground'}">${escapeLogHtml(l.token_email||'\u672a\u77e5')}</span></td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${formatLogStatusClass(l)}">${escapeLogHtml(statusText)}</span></td><td class="py-2.5 px-3 text-xs">${escapeLogHtml(progressText)}</td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${statusCodeClass}">${escapeLogHtml(l.status_code??'-')}</span></td><td class="py-2.5 px-3">${Number(l.duration||0).toFixed(2)}</td><td class="py-2.5 px-3 text-xs text-muted-foreground">${l.created_at?new Date(l.created_at).toLocaleString('zh-CN'):'-'}</td><td class="py-2.5 px-3"><button onclick="showLogDetail(${l.id})" class="inline-flex items-center justify-center rounded-md hover:bg-blue-50 hover:text-blue-700 h-7 px-2 text-xs">&#35814;&#24773;</button></td></tr>`}).join('');if(window.activeLogDetailId&&window.logListMeta[window.activeLogDetailId])await showLogDetail(window.activeLogDetailId)}catch(e){console.error('load logs failed:',e);showToast('\u52a0\u8f7d\u65e5\u5fd7\u5931\u8d25: '+e.message,'error')}},
+        getLogOperationLabel=l=>{const operation=String(l&&l.operation||'').trim();if(operation==='generate_image')return'图片';if(operation==='generate_video')return'视频';return''},
+        formatLogOutcome=l=>{const statusCode=Number(l&&l.status_code);if(statusCode===200){const operationLabel=getLogOperationLabel(l);return operationLabel?`${operationLabel}结果已返回`:'已返回结果'}if(statusCode===102)return'处理中';const errorSummary=extractLogErrorSummary(l);if(errorSummary)return truncateLogText(errorSummary,96);return statusCode>=400?'请求失败':'-'},
+        formatLogOutcomeClass=l=>{if((l.status_code||0)>=400)return'text-red-600';if(l.status_code===200)return'text-green-700';if(l.status_code===102)return'text-amber-700';return'text-muted-foreground'},
+        startLogsAutoRefresh=()=>{stopLogsAutoRefresh()},
+        stopLogsAutoRefresh=()=>{if(window.logsAutoRefreshTimer){clearInterval(window.logsAutoRefreshTimer);window.logsAutoRefreshTimer=null}},
+        loadLogs=async(opts={})=>{const silent=!!opts.silent;try{const r=await apiRequest('/api/logs?limit=100');if(!r)return;const logs=await r.json();window.allLogs=logs;window.logDetailCache=window.logDetailCache||Object.create(null);window.logListMeta=Object.create(null);logs.forEach(l=>window.logListMeta[l.id]={updated_at:l.updated_at,created_at:l.created_at,status_code:l.status_code,progress:l.progress,status_text:l.status_text,error_summary:l.error_summary||''});Object.keys(window.logDetailCache).forEach(key=>{const meta=window.logListMeta[key];const cached=window.logDetailCache[key];if(!meta||!cached||cached.updated_at!==meta.updated_at)delete window.logDetailCache[key]});const tb=$('logsTableBody');if(!logs.length){tb.innerHTML='<tr><td colspan="9" class="py-8 px-3 text-center text-sm text-muted-foreground">\u6682\u65e0\u65e5\u5fd7</td></tr>';return}tb.innerHTML=logs.map(l=>{const statusText=formatLogStatus(l),progressText=formatLogProgress(l),outcomeText=formatLogOutcome(l),outcomePreview=truncateLogText(outcomeText,96),statusCodeClass=l.status_code===102?'bg-amber-50 text-amber-700':(l.status_code===200?'bg-green-50 text-green-700':'bg-red-50 text-red-700');return`<tr><td class="py-2.5 px-3">${escapeLogHtml(l.operation||'-')}</td><td class="py-2.5 px-3"><span class="text-xs ${l.token_email?'text-blue-600':'text-muted-foreground'}">${escapeLogHtml(l.token_email||'\u672a\u77e5')}</span></td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${formatLogStatusClass(l)}">${escapeLogHtml(statusText)}</span></td><td class="py-2.5 px-3 text-xs">${escapeLogHtml(progressText)}</td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${statusCodeClass}">${escapeLogHtml(l.status_code??'-')}</span></td><td class="py-2.5 px-3 align-top"><div class="w-[17rem] max-w-[17rem] text-xs leading-5 whitespace-pre-wrap break-words line-clamp-2 ${formatLogOutcomeClass(l)}" title="${escapeLogHtml(outcomeText)}">${escapeLogHtml(outcomePreview)}</div></td><td class="py-2.5 px-3">${Number(l.duration||0).toFixed(2)}</td><td class="py-2.5 px-3 text-xs text-muted-foreground">${l.created_at?new Date(l.created_at).toLocaleString('zh-CN'):'-'}</td><td class="py-2.5 px-3"><button onclick="showLogDetail(${l.id})" class="inline-flex items-center justify-center rounded-md hover:bg-blue-50 hover:text-blue-700 h-7 px-2 text-xs">&#35814;&#24773;</button></td></tr>`}).join('');if(window.activeLogDetailId&&window.logListMeta[window.activeLogDetailId])await showLogDetail(window.activeLogDetailId,{silent:true})}catch(e){console.error('load logs failed:',e);if(!silent)showToast('\u52a0\u8f7d\u65e5\u5fd7\u5931\u8d25: '+e.message,'error')}},
         refreshLogs=async()=>{await loadLogs()},
         clearAllLogs=async()=>{if(!confirm('确定要清空所有日志吗？此操作不可恢复！'))return;try{const r=await apiRequest('/api/logs',{method:'DELETE'});if(!r)return;const d=await r.json();if(d.success){window.logDetailCache=Object.create(null);window.activeLogDetailId=null;resetLogMediaCache();showToast('日志已清空','success');await loadLogs()}else{showToast('清空失败: '+(d.message||'未知错误'),'error')}}catch(e){showToast('清空失败: '+e.message,'error')}},
-        showLogDetail=async(logId)=>{const modal=$('logDetailModal');const content=$('logDetailContent');window.logDetailCache=window.logDetailCache||Object.create(null);window.logListMeta=window.logListMeta||Object.create(null);window.logDetailRequestSeq=(window.logDetailRequestSeq||0)+1;const requestSeq=window.logDetailRequestSeq;window.activeLogDetailId=logId;modal.classList.remove('hidden');content.innerHTML='<div class="rounded-md border border-border p-4 bg-muted/30 text-sm text-muted-foreground">\u65e5\u5fd7\u8be6\u60c5\u52a0\u8f7d\u4e2d...</div>';try{const meta=window.logListMeta[logId];let log=window.logDetailCache[logId];if(!log||!meta||log.updated_at!==meta.updated_at){const r=await apiRequest(`/api/logs/${logId}`);if(!r)return;if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;if(r.status===404){content.innerHTML='<div class="rounded-md border border-red-200 p-4 bg-red-50 text-sm text-red-700">\u65e5\u5fd7\u4e0d\u5b58\u5728\u6216\u5df2\u88ab\u5220\u9664</div>';return}log=await r.json();window.logDetailCache[logId]=log}if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;renderLogDetail(log)}catch(e){if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;console.error('\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25:',e);content.innerHTML=`<div class="rounded-md border border-red-200 p-4 bg-red-50 text-sm text-red-700">\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25: ${escapeLogHtml(e.message||'\u672a\u77e5\u9519\u8bef')}</div>`;showToast('\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25: '+e.message,'error')}},
+        showLogDetail=async(logId,opts={})=>{const silent=!!opts.silent;const modal=$('logDetailModal');const content=$('logDetailContent');window.logDetailCache=window.logDetailCache||Object.create(null);window.logListMeta=window.logListMeta||Object.create(null);window.logDetailRequestSeq=(window.logDetailRequestSeq||0)+1;const requestSeq=window.logDetailRequestSeq;window.activeLogDetailId=logId;modal.classList.remove('hidden');content.innerHTML='<div class="rounded-md border border-border p-4 bg-muted/30 text-sm text-muted-foreground">\u65e5\u5fd7\u8be6\u60c5\u52a0\u8f7d\u4e2d...</div>';try{const meta=window.logListMeta[logId];let log=window.logDetailCache[logId];if(!log||!meta||log.updated_at!==meta.updated_at){const r=await apiRequest(`/api/logs/${logId}`);if(!r)return;if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;if(r.status===404){content.innerHTML='<div class="rounded-md border border-red-200 p-4 bg-red-50 text-sm text-red-700">\u65e5\u5fd7\u4e0d\u5b58\u5728\u6216\u5df2\u88ab\u5220\u9664</div>';return}log=await r.json();window.logDetailCache[logId]=log}if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;renderLogDetail(log)}catch(e){if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;console.error('\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25:',e);content.innerHTML=`<div class="rounded-md border border-red-200 p-4 bg-red-50 text-sm text-red-700">\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25: ${escapeLogHtml(e.message||'\u672a\u77e5\u9519\u8bef')}</div>`;if(!silent)showToast('\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25: '+e.message,'error')}},
         closeLogDetailModal=()=>{window.activeLogDetailId=null;resetLogMediaCache();$('logDetailModal').classList.add('hidden')},
         showToast=(m,t='info')=>{const d=document.createElement('div'),bc={success:'bg-green-600',error:'bg-destructive',info:'bg-primary'};d.className=`fixed bottom-4 right-4 ${bc[t]||bc.info} text-white px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium z-50 animate-slide-up`;d.textContent=m;document.body.appendChild(d);setTimeout(()=>{d.style.opacity='0';d.style.transition='opacity .3s';setTimeout(()=>d.parentNode&&document.body.removeChild(d),300)},2000)},
         logout=()=>{if(!confirm('确定要退出登录吗?'))return;localStorage.removeItem('adminToken');location.href='/login'},
-        switchTab=t=>{const cap=n=>n.charAt(0).toUpperCase()+n.slice(1);['tokens','settings','logs'].forEach(n=>{const active=n===t;$(`panel${cap(n)}`).classList.toggle('hidden',!active);$(`tab${cap(n)}`).classList.toggle('border-primary',active);$(`tab${cap(n)}`).classList.toggle('text-primary',active);$(`tab${cap(n)}`).classList.toggle('border-transparent',!active);$(`tab${cap(n)}`).classList.toggle('text-muted-foreground',!active)});if(t==='settings'){loadAdminConfig();loadProxyConfig();loadCacheConfig();loadGenerationTimeout();loadCaptchaConfig();loadPluginConfig();loadATAutoRefreshConfig()}else if(t==='logs'){loadLogs()}};
+        switchTab=t=>{const cap=n=>n.charAt(0).toUpperCase()+n.slice(1);['tokens','settings','logs'].forEach(n=>{const active=n===t;$(`panel${cap(n)}`).classList.toggle('hidden',!active);$(`tab${cap(n)}`).classList.toggle('border-primary',active);$(`tab${cap(n)}`).classList.toggle('text-primary',active);$(`tab${cap(n)}`).classList.toggle('border-transparent',!active);$(`tab${cap(n)}`).classList.toggle('text-muted-foreground',!active)});if(t==='settings'){stopLogsAutoRefresh();loadAdminConfig();loadProxyConfig();loadCacheConfig();loadGenerationTimeout();loadCaptchaConfig();loadPluginConfig();loadATAutoRefreshConfig()}else if(t==='logs'){startLogsAutoRefresh();loadLogs()}else{stopLogsAutoRefresh()}};
 
         function escapeLogHtml(text){
             if(text===null||text===undefined) return '';
@@ -847,6 +852,65 @@
         function parseLogJson(raw){
             if(!raw) return null;
             try{return JSON.parse(raw)}catch(_){return null}
+        }
+
+        function truncateLogText(text,limit=240){
+            const value=String(text??'').trim().replace(/\s+/g,' ');
+            if(!value) return '';
+            return value.length<=limit?value:`${value.slice(0,limit-3)}...`;
+        }
+
+        function extractLogErrorSummary(log,responseBodyObj){
+            const direct=log&&typeof log.error_summary==='string'?log.error_summary.trim():'';
+            if(direct) return truncateLogText(direct);
+            const payload=responseBodyObj===undefined?parseLogJson(log&&log.response_body):responseBodyObj;
+            const visit=value=>{
+                if(value===null||value===undefined) return '';
+                if(typeof value==='string') return truncateLogText(value);
+                if(Array.isArray(value)){for(const item of value){const nested=visit(item);if(nested)return nested}return''}
+                if(typeof value==='object'){
+                    for(const key of ['error_summary','error_message','detail','message']){
+                        if(typeof value[key]==='string'&&value[key].trim()) return truncateLogText(value[key]);
+                    }
+                    const errorValue=value.error;
+                    if(typeof errorValue==='string'&&errorValue.trim()) return truncateLogText(errorValue);
+                    if(errorValue&&typeof errorValue==='object'){
+                        for(const key of ['message','detail','reason','code']){
+                            if(typeof errorValue[key]==='string'&&errorValue[key].trim()) return truncateLogText(errorValue[key]);
+                        }
+                    }
+                    for(const key of ['response','data','performance']){
+                        const nested=visit(value[key]);
+                        if(nested) return nested;
+                    }
+                }
+                return '';
+            };
+            const summary=visit(payload);
+            if(summary) return summary;
+            if(log&&log.response_body&&!payload) return truncateLogText(log.response_body);
+            return '';
+        }
+
+        function extractLogPrimaryUrl(responseBodyObj){
+            if(!responseBodyObj||typeof responseBodyObj!=='object') return null;
+            return responseBodyObj.url||((responseBodyObj.data&&responseBodyObj.data[0]&&responseBodyObj.data[0].url)?responseBodyObj.data[0].url:null)||(responseBodyObj.generated_assets&&responseBodyObj.generated_assets.final_video_url)||((responseBodyObj.generated_assets&&responseBodyObj.generated_assets.upscaled_image&&responseBodyObj.generated_assets.upscaled_image.local_url)?responseBodyObj.generated_assets.upscaled_image.local_url:null)||((responseBodyObj.generated_assets&&responseBodyObj.generated_assets.upscaled_image&&responseBodyObj.generated_assets.upscaled_image.url)?responseBodyObj.generated_assets.upscaled_image.url:null)||(responseBodyObj.generated_assets&&responseBodyObj.generated_assets.final_image_url)||null;
+        }
+
+        function extractLogSuccessSummary(log,responseBodyObj){
+            if((log&&Number(log.status_code))!==200) return '';
+            if(!responseBodyObj||typeof responseBodyObj!=='object') return '生成成功，已返回结果';
+            const assets=responseBodyObj.generated_assets;
+            if(assets&&typeof assets==='object'&&assets.upscaled_image&&typeof assets.upscaled_image==='object'){
+                return `生成成功，已返回${assets.upscaled_image.resolution||'高清'}结果`;
+            }
+            const directUrl=extractLogPrimaryUrl(responseBodyObj);
+            if(directUrl){
+                if(isVideoUrl(directUrl)) return '生成成功，已返回视频结果';
+                if(isImageUrl(directUrl)) return '生成成功，已返回图片结果';
+                return '生成成功，已返回结果地址';
+            }
+            return responseBodyObj.status==='success'?'生成成功':'生成成功，已返回结果';
         }
 
         function formatLogPayload(raw){
@@ -912,12 +976,28 @@
             return key;
         }
 
+        function normalizeLogMediaUrl(url){
+            if(!url) return '';
+            const text=String(url).trim();
+            if(!text||/^data:/i.test(text)) return text;
+            try{
+                const parsed=new URL(text,window.location.origin);
+                if(parsed.pathname.startsWith('/tmp/')){
+                    return `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+                }
+                return parsed.toString();
+            }catch(_){
+                return text;
+            }
+        }
+
         function renderLogLink(label,url){
             if(!url) return '';
-            if(/^data:/i.test(String(url))){
-                return `<p class="text-xs"><span class="font-medium">${label}:</span> <span class="text-muted-foreground">data URL（长度 ${String(url).length}）</span></p>`;
+            const normalizedUrl=normalizeLogMediaUrl(url);
+            if(/^data:/i.test(String(normalizedUrl))){
+                return `<p class="text-xs"><span class="font-medium">${label}:</span> <span class="text-muted-foreground">data URL（长度 ${String(normalizedUrl).length}）</span></p>`;
             }
-            const safeUrl=escapeLogHtml(url);
+            const safeUrl=escapeLogHtml(normalizedUrl);
             return `<p class="text-xs"><span class="font-medium">${label}:</span> <a href="${safeUrl}" target="_blank" class="text-blue-600 hover:underline break-all">${safeUrl}</a></p>`;
         }
 
@@ -937,10 +1017,18 @@
 
         function renderMediaPreview(label,url,withUrl=true){
             if(!url) return '';
-            const mediaType=isVideoUrl(url)?'video':(isImageUrl(url)?'image':'');
-            const mediaKey=mediaType?cacheLogMediaUrl(url):'';
+            const previewUrl=normalizeLogMediaUrl(url);
+            const mediaType=isVideoUrl(previewUrl)?'video':(isImageUrl(previewUrl)?'image':'');
+            const mediaKey=mediaType?cacheLogMediaUrl(previewUrl):'';
             const previewTrigger=mediaType?`<button onclick="loadLogMediaPreview(this)" data-media-key="${mediaKey}" data-label="${escapeLogHtml(label)}" data-media-type="${mediaType}" class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">点击加载预览</button><div class="space-y-2"></div>`:'';
-            return `<div class="space-y-2"><p class="text-xs font-medium">${escapeLogHtml(label)}</p>${withUrl?renderLogLink('URL',url):''}${previewTrigger}</div>`;
+            return `<div class="space-y-2"><p class="text-xs font-medium">${escapeLogHtml(label)}</p>${withUrl?renderLogLink('URL',previewUrl):''}${previewTrigger}</div>`;
+        }
+
+        function handleLogMediaPreviewError(node){
+            if(!node) return;
+            const mediaUrl=node.dataset.mediaUrl||'';
+            const mediaLabel=node.dataset.mediaLabel||'媒体';
+            node.outerHTML=`<div class="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700 space-y-2"><p>${escapeLogHtml(mediaLabel)}预览加载失败，请直接打开链接查看。</p>${renderLogLink('URL',mediaUrl)}</div>`;
         }
 
         function loadLogMediaPreview(button){
@@ -952,9 +1040,9 @@
             const mediaType=button.dataset.mediaType||'';
             if(!container||!url||!mediaType) return;
             if(mediaType==='video'){
-                container.innerHTML=`<video src="${escapeLogHtml(url)}" controls preload="metadata" class="w-full max-h-80 rounded-md border border-border bg-black"></video>`;
+                container.innerHTML=`<video src="${escapeLogHtml(url)}" controls preload="metadata" data-media-url="${escapeLogHtml(url)}" data-media-label="${escapeLogHtml(label)}" onerror="handleLogMediaPreviewError(this)" class="w-full max-h-80 rounded-md border border-border bg-black"></video>`;
             }else{
-                container.innerHTML=`<img src="${escapeLogHtml(url)}" alt="${escapeLogHtml(label)}" loading="lazy" decoding="async" class="max-h-80 rounded-md border border-border object-contain bg-background">`;
+                container.innerHTML=`<img src="${escapeLogHtml(url)}" alt="${escapeLogHtml(label)}" loading="lazy" decoding="async" data-media-url="${escapeLogHtml(url)}" data-media-label="${escapeLogHtml(label)}" onerror="handleLogMediaPreviewError(this)" class="max-h-80 rounded-md border border-border object-contain bg-background">`;
             }
             button.remove();
         }
@@ -962,20 +1050,22 @@
         function renderLogDetail(log){
             if(!log){showToast('日志不存在','error');return}
             resetLogMediaCache();
-            const requestBodyObj=parseLogJson(log.request_body);
             const responseBodyObj=parseLogJson(log.response_body);
             const requestPayloadText=formatLogPayload(log.request_body);
             const responsePayloadText=formatLogPayload(log.response_body);
             const toggleLogId=String(log.id??'');
-            const fullResponseOpen=getLogDetailToggleState(toggleLogId,'full_response');
-            const upscaledBase64Open=getLogDetailToggleState(toggleLogId,'upscaled_base64');
+            const errorSummary=extractLogErrorSummary(log,responseBodyObj);
+            const successSummary=extractLogSuccessSummary(log,responseBodyObj);
             let detailHtml='';
 
             detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">请求数据</h4><pre class="rounded-md border border-border p-3 bg-muted/30 text-xs overflow-x-auto">${escapeLogHtml(requestPayloadText)}</pre></div>`;
 
             if(log.status_code===200){
+                if(successSummary){
+                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-green-700">结果摘要</h4><div class="rounded-md border border-green-200 p-3 bg-green-50"><p class="text-sm text-green-700">${escapeLogHtml(successSummary)}</p></div></div>`;
+                }
                 if(responseBodyObj){
-                    const directUrl=responseBodyObj.url||((responseBodyObj.data&&responseBodyObj.data[0]&&responseBodyObj.data[0].url)?responseBodyObj.data[0].url:null);
+                    const directUrl=extractLogPrimaryUrl(responseBodyObj);
                     if(directUrl){
                         detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">生成结果</h4><div class="rounded-md border border-border p-3 bg-muted/30 space-y-3">${renderMediaPreview('主结果',directUrl)}</div></div>`;
                     }
@@ -990,7 +1080,7 @@
                             const upPreviewUrl=up.local_url||up.url||null;
                             assetsHtml+=`<p class="text-xs"><span class="font-medium">放大分辨率:</span> ${escapeLogHtml(upResolution)}</p>`;
                             if(upPreviewUrl){
-                                assetsHtml+=renderMediaPreview(`${upResolution}结果`,upPreviewUrl,false);
+                                assetsHtml+=renderMediaPreview(`${upResolution}结果`,upPreviewUrl,!/^data:/i.test(String(upPreviewUrl||'')));
                             }
                             if(up.base64){
                                 const preview=String(up.base64).length>600?`${String(up.base64).slice(0,600)}...`:String(up.base64);
@@ -1011,13 +1101,13 @@
                     detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">响应数据</h4><pre class="rounded-md border border-border p-3 bg-muted/30 text-xs overflow-x-auto">${escapeLogHtml(responsePayloadText)}</pre></div>`;
                 }
             }else{
-                if(responseBodyObj&&responseBodyObj.error){
-                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-red-600">错误原因</h4><div class="rounded-md border border-red-200 p-3 bg-red-50"><p class="text-sm text-red-700">${escapeLogHtml(responseBodyObj.error.message||responseBodyObj.error||'未知错误')}</p></div></div>`;
+                if(errorSummary){
+                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-red-600">错误原因</h4><div class="rounded-md border border-red-200 p-3 bg-red-50"><p class="text-sm text-red-700 break-all">${escapeLogHtml(errorSummary)}</p></div></div>`;
                 }
                 detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-red-600">错误响应</h4><pre class="rounded-md border border-red-200 p-3 bg-red-50 text-xs overflow-x-auto">${escapeLogHtml(responsePayloadText)}</pre></div>`;
             }
 
-            detailHtml+=`<div class="space-y-2 pt-4 border-t border-border"><h4 class="font-medium text-sm">基本信息</h4><div class="grid grid-cols-2 gap-2 text-sm"><div><span class="text-muted-foreground">操作:</span> ${escapeLogHtml(log.operation||'-')}</div><div><span class="text-muted-foreground">状态码:</span> <span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${log.status_code===200?'bg-green-50 text-green-700':'bg-red-50 text-red-700'}">${escapeLogHtml(log.status_code??'-')}</span></div><div><span class="text-muted-foreground">耗时:</span> ${Number(log.duration||0).toFixed(2)}秒</div><div><span class="text-muted-foreground">时间:</span> ${log.created_at?new Date(log.created_at).toLocaleString('zh-CN'):'-'}</div><div><span class="text-muted-foreground">Token:</span> ${escapeLogHtml(log.token_email||log.token_username||'未知')}</div><div><span class="text-muted-foreground">日志ID:</span> ${escapeLogHtml(log.id??'-')}</div></div></div>`;
+            detailHtml+=`<div class="space-y-2 pt-4 border-t border-border"><h4 class="font-medium text-sm">基本信息</h4><div class="grid grid-cols-2 gap-2 text-sm"><div><span class="text-muted-foreground">操作:</span> ${escapeLogHtml(log.operation||'-')}</div><div><span class="text-muted-foreground">状态:</span> ${escapeLogHtml(formatLogStatus(log))}</div><div><span class="text-muted-foreground">状态码:</span> <span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${log.status_code===200?'bg-green-50 text-green-700':(log.status_code===102?'bg-amber-50 text-amber-700':'bg-red-50 text-red-700')}">${escapeLogHtml(log.status_code??'-')}</span></div><div><span class="text-muted-foreground">耗时:</span> ${Number(log.duration||0).toFixed(2)}秒</div><div><span class="text-muted-foreground">时间:</span> ${log.created_at?new Date(log.created_at).toLocaleString('zh-CN'):'-'}</div><div><span class="text-muted-foreground">Token:</span> ${escapeLogHtml(log.token_email||log.token_username||'未知')}</div><div><span class="text-muted-foreground">日志ID:</span> ${escapeLogHtml(log.id??'-')}</div><div><span class="text-muted-foreground">进度:</span> ${escapeLogHtml(formatLogProgress(log))}</div></div></div>`;
 
             const detailContent=$('logDetailContent');detailContent.dataset.logId=String(log.id??'');detailContent.innerHTML=detailHtml;syncLogDetailViewState();
         }

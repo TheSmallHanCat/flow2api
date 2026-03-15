@@ -1,11 +1,13 @@
 """Authentication module"""
+
 import bcrypt
 from typing import Optional
-from fastapi import HTTPException, Security
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Header, HTTPException, Query, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .config import config
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 class AuthManager:
     """Authentication manager"""
@@ -36,4 +38,25 @@ async def verify_api_key_header(credentials: HTTPAuthorizationCredentials = Secu
     api_key = credentials.credentials
     if not AuthManager.verify_api_key(api_key):
         raise HTTPException(status_code=401, detail="Invalid API key")
+    return api_key
+
+
+async def verify_api_key_flexible(
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(optional_security),
+    x_goog_api_key: Optional[str] = Header(None, alias="x-goog-api-key"),
+    key: Optional[str] = Query(None),
+) -> str:
+    """Verify API key from Authorization header, x-goog-api-key header, or key query param."""
+    api_key = None
+
+    if credentials is not None:
+        api_key = credentials.credentials
+    elif x_goog_api_key:
+        api_key = x_goog_api_key
+    elif key:
+        api_key = key
+
+    if not api_key or not AuthManager.verify_api_key(api_key):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
     return api_key

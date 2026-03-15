@@ -22,6 +22,8 @@
 - 🌐 **代理支持** - 支持 HTTP/SOCKS5 代理
 - 📱 **Web 管理界面** - 直观的 Token 和配置管理
 - 🎨 **图片生成连续对话**
+- 🧩 **Gemini 官方请求体兼容** - 支持 `generateContent` / `streamGenerateContent`、`systemInstruction`、`contents.parts.text/inlineData/fileData`
+- ✅ **Gemini 官方格式已实测出图** - 已使用真实 Token 验证 `/models/{model}:generateContent` 可正常返回官方 `candidates[].content.parts[].inlineData`
 
 ## 🚀 快速开始
 
@@ -237,6 +239,63 @@ python main.py
 | `veo_3_1_r2v_fast_ultra_1080p` | 多图视频放大 | 1080P |
 
 ## 📡 API 使用示例（需要使用流式）
+
+> 除了下方 `OpenAI-compatible` 示例，服务也支持 Gemini 官方格式：
+> - `POST /v1beta/models/{model}:generateContent`
+> - `POST /models/{model}:generateContent`
+> - `POST /v1beta/models/{model}:streamGenerateContent`
+> - `POST /models/{model}:streamGenerateContent`
+>
+> Gemini 官方格式支持以下认证方式：
+> - `Authorization: Bearer <api_key>`
+> - `x-goog-api-key: <api_key>`
+> - `?key=<api_key>`
+>
+> Gemini 官方图片请求体已兼容：
+> - `systemInstruction`
+> - `contents[].parts[].text`
+> - `contents[].parts[].inlineData`
+> - `contents[].parts[].fileData.fileUri`
+> - `generationConfig.responseModalities`
+> - `generationConfig.imageConfig.aspectRatio`
+> - `generationConfig.imageConfig.imageSize`
+
+### Gemini 官方 generateContent（文生图）
+
+> 已使用真实 Token 实测通过。
+> 如需流式返回，可将路径替换为 `:streamGenerateContent?alt=sse`。
+
+```bash
+curl -X POST "http://localhost:8000/models/gemini-3.1-flash-image:generateContent" \
+  -H "x-goog-api-key: han1234" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "systemInstruction": {
+      "parts": [
+        {
+          "text": "Return an image only."
+        }
+      ]
+    },
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "一颗放在木桌上的红苹果，棚拍光线，极简背景"
+          }
+        ]
+      }
+    ],
+    "generationConfig": {
+      "responseModalities": ["IMAGE"],
+      "imageConfig": {
+        "aspectRatio": "1:1",
+        "imageSize": "1K"
+      }
+    }
+  }'
+```
 
 ### 文生图
 

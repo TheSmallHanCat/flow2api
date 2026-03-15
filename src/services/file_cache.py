@@ -128,6 +128,21 @@ class FileCache:
 
         return f"{url_hash}{ext}"
 
+    def _normalize_cache_error(self, error: Exception) -> str:
+        """整理缓存错误，避免将底层命令异常直接暴露给用户。"""
+        if isinstance(error, FileNotFoundError):
+            missing_name = Path(getattr(error, "filename", "") or "curl").name or "curl"
+            return f"本机未安装 {missing_name}"
+
+        message = str(error or "").strip()
+        if not message:
+            return "未知错误"
+
+        if message.startswith("Failed to cache file:"):
+            message = message.split(":", 1)[1].strip() or "未知错误"
+
+        return message
+
     async def download_and_cache(self, url: str, media_type: str) -> str:
         """
         Download file from URL and cache it locally
@@ -281,13 +296,22 @@ class FileCache:
                 error_msg = result.stderr.decode('utf-8', errors='ignore') if result.stderr else "Unknown error"
                 raise Exception(f"curl command failed: {error_msg}")
 
-        except Exception as e:
+        except FileNotFoundError as e:
+            normalized_error = self._normalize_cache_error(e)
             debug_logger.log_error(
                 error_message=f"Failed to download file: {str(e)}",
                 status_code=0,
                 response_text=str(e)
             )
-            raise Exception(f"Failed to cache file: {str(e)}")
+            raise Exception(normalized_error) from e
+        except Exception as e:
+            normalized_error = self._normalize_cache_error(e)
+            debug_logger.log_error(
+                error_message=f"Failed to download file: {str(e)}",
+                status_code=0,
+                response_text=str(e)
+            )
+            raise Exception(normalized_error) from e
 
     async def cache_base64_image(self, base64_data: str, resolution: str = "") -> str:
         """
