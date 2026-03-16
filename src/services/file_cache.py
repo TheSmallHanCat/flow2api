@@ -33,20 +33,20 @@ class FileCache:
         return self.default_timeout <= 0
 
     async def _resolve_download_proxy(self, media_type: str) -> Optional[str]:
-        """根据媒体类型解析下载代理地址。"""
+        """Resolve download proxy URL based on media type."""
         if not self.proxy_manager:
             return None
 
         try:
-            # 媒体下载（图片/视频）优先使用独立的上传/下载代理
+            # Media download (image/video) prefers dedicated upload/download proxy
             if media_type in ("image", "video") and hasattr(self.proxy_manager, "get_media_proxy_url"):
                 return await self.proxy_manager.get_media_proxy_url()
 
-            # 其他下载走请求代理
+            # Other downloads use request proxy
             if hasattr(self.proxy_manager, "get_request_proxy_url"):
                 return await self.proxy_manager.get_request_proxy_url()
 
-            # 向后兼容旧实现
+            # Backward compatible with old implementation
             if hasattr(self.proxy_manager, "get_proxy_url"):
                 return await self.proxy_manager.get_proxy_url()
         except Exception as e:
@@ -129,17 +129,17 @@ class FileCache:
         return f"{url_hash}{ext}"
 
     def _normalize_cache_error(self, error: Exception) -> str:
-        """整理缓存错误，避免将底层命令异常直接暴露给用户。"""
+        """Normalize cache error to avoid exposing underlying command exceptions to user."""
         if isinstance(error, FileNotFoundError):
             missing_name = Path(getattr(error, "filename", "") or "curl").name or "curl"
-            return f"本机未安装 {missing_name}"
+            return f"Not installed on this machine: {missing_name}"
 
         message = str(error or "").strip()
         if not message:
-            return "未知错误"
+            return "Unknown error"
 
         if message.startswith("Failed to cache file:"):
-            message = message.split(":", 1)[1].strip() or "未知错误"
+            message = message.split(":", 1)[1].strip() or "Unknown error"
 
         return message
 

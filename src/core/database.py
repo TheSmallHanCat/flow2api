@@ -306,9 +306,9 @@ class Database:
                     ("video_enabled", "BOOLEAN DEFAULT 1"),
                     ("image_concurrency", "INTEGER DEFAULT -1"),
                     ("video_concurrency", "INTEGER DEFAULT -1"),
-                    ("captcha_proxy_url", "TEXT"),  # token级打码代理
-                    ("ban_reason", "TEXT"),  # 禁用原因
-                    ("banned_at", "TIMESTAMP"),  # 禁用时间
+                    ("captcha_proxy_url", "TEXT"),  # Token-level captcha proxy
+                    ("ban_reason", "TEXT"),  # Ban reason
+                    ("banned_at", "TIMESTAMP"),  # Ban time
                 ]
 
                 for col_name, col_type in columns_to_add:
@@ -375,7 +375,7 @@ class Database:
                     ("today_video_count", "INTEGER DEFAULT 0"),
                     ("today_error_count", "INTEGER DEFAULT 0"),
                     ("today_date", "DATE"),
-                    ("consecutive_error_count", "INTEGER DEFAULT 0"),  # 🆕 连续错误计数
+                    ("consecutive_error_count", "INTEGER DEFAULT 0"),  # 🆕 Consecutive error count
                 ]
 
                 for col_name, col_type in stats_columns_to_add:
@@ -389,7 +389,7 @@ class Database:
             # Check and add missing columns to plugin_config table
             if await self._table_exists(db, "plugin_config"):
                 plugin_columns_to_add = [
-                    ("auto_enable_on_update", "BOOLEAN DEFAULT 1"),  # 默认开启
+                    ("auto_enable_on_update", "BOOLEAN DEFAULT 1"),  # Default on
                 ]
 
                 for col_name, col_type in plugin_columns_to_add:
@@ -411,7 +411,7 @@ class Database:
     async def init_db(self):
         """Initialize database tables"""
         async with aiosqlite.connect(self.db_path) as db:
-            # Tokens table (Flow2API版本)
+            # Tokens table (Flow2APIversion)
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS tokens (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -439,7 +439,7 @@ class Database:
                 )
             """)
 
-            # Projects table (新增)
+            # Projects table (added)
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS projects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -617,7 +617,7 @@ class Database:
             # Migrate request_logs table if needed
             await self._migrate_request_logs(db)
 
-            # Request logs query indexes (列表按 created_at 排序 / token 过滤)
+            # Request logs query indexes (List sorted by created_at / token filter)
             await db.execute("CREATE INDEX IF NOT EXISTS idx_request_logs_created_at ON request_logs(created_at DESC)")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_request_logs_token_id_created_at ON request_logs(token_id, created_at DESC)")
 

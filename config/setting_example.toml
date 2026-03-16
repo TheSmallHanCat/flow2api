@@ -47,14 +47,17 @@ error_ban_threshold = 3
 
 [cache]
 enabled = false
-timeout = 7200  # 缓存超时时间(秒), 默认2小时; 设置为0表示不自动删除缓存
-base_url = ""   # 缓存文件访问的基础URL, 留空则使用服务器地址
+timeout = 7200  # Cache timeout in seconds, default 2 hours; set to 0 to disable auto-deletion
+base_url = ""   # Base URL for cached file access, leave empty to use server address
 
 [captcha]
-captcha_method = "browser"  # 打码方式: yescaptcha/browser/personal/remote_browser
-browser_recaptcha_settle_seconds = 3.0  # reload/clr 就绪后的额外稳态等待
-yescaptcha_api_key = ""  # YesCaptcha API密钥
+captcha_method = "browser"  # Captcha method: yescaptcha/browser/personal/remote_browser
+browser_recaptcha_settle_seconds = 3.0  # Extra settle wait after captcha reload/clr ready
+yescaptcha_api_key = ""  # YesCaptcha API key
 yescaptcha_base_url = "https://api.yescaptcha.com"
-remote_browser_base_url = ""  # 远程有头打码服务地址
-remote_browser_api_key = ""   # 远程有头打码服务 API Key
-remote_browser_timeout = 60   # 远程有头打码请求超时(秒)
+remote_browser_base_url = ""  # Remote headed captcha service URL
+remote_browser_api_key = ""   # Remote headed captcha service API key
+remote_browser_timeout = 60   # Remote headed captcha request timeout (seconds)
+
+[i18n]
+language = "en"

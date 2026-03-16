@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
         browser_service = await BrowserCaptchaService.get_instance(db)
         print("✓ Browser captcha service initialized (nodriver mode)")
         
-        # 启动常驻模式：从第一个可用token获取project_id
+        # Start resident mode: get project_id from first available token
         tokens = await token_manager.get_all_tokens()
         resident_project_id = None
         for t in tokens:
@@ -98,11 +98,11 @@ async def lifespan(app: FastAPI):
                 break
         
         if resident_project_id:
-            # 直接启动常驻模式（会自动导航到项目页面，cookie已持久化）
+            # Start resident mode directly (auto-navigates to project page, cookies are persisted)
             await browser_service.start_resident_mode(resident_project_id)
             print(f"✓ Browser captcha resident mode started (project: {resident_project_id[:8]}...)")
         else:
-            # 没有可用的project_id时，打开登录窗口供用户手动操作
+            # If no project_id available, open login window for manual setup
             await browser_service.open_login_window()
             print("⚠ No active token with project_id found, opened login window for manual setup")
     elif captcha_config.captcha_method == "browser":
@@ -122,10 +122,10 @@ async def lifespan(app: FastAPI):
     # Start 429 auto-unban task
     import asyncio
     async def auto_unban_task():
-        """定时任务：每小时检查并解禁429被禁用的token"""
+        """Scheduled task: check and unban 429-disabled tokens every hour"""
         while True:
             try:
-                await asyncio.sleep(3600)  # 每小时执行一次
+                await asyncio.sleep(3600)  # Run once per hour
                 await token_manager.auto_unban_429_tokens()
             except Exception as e:
                 print(f"❌ Auto-unban task error: {e}")
@@ -173,7 +173,7 @@ generation_handler = GenerationHandler(
     load_balancer,
     db,
     concurrency_manager,
-    proxy_manager  # 添加 proxy_manager 参数
+    proxy_manager  # Add proxy_manager parameter
 )
 
 # Set dependencies
@@ -183,7 +183,7 @@ admin.set_dependencies(token_manager, proxy_manager, db, concurrency_manager)
 # Create FastAPI app
 app = FastAPI(
     title="Flow2API",
-    description="OpenAI-compatible API for Google VideoFX (Veo)",
+    description="OpenAI-compatible API for Google videoFX (Veo)",
     version="1.0.0",
     lifespan=lifespan
 )

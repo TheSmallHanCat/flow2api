@@ -54,11 +54,11 @@ class LoadBalancer:
                     self._video_pending[token_id] = current - 1
 
     async def _get_token_load(self, token_id: int, for_image_generation: bool, for_video_generation: bool) -> tuple[int, Optional[int]]:
-        """获取 token 当前负载。
+        """Get token current load.
 
         Returns:
             (inflight, remaining)
-            remaining 为 None 表示无限制
+            remaining is None means unlimited
         """
         if not self.concurrency_manager:
             return 0, None
@@ -84,7 +84,7 @@ class LoadBalancer:
         return 0, None
 
     async def _reserve_slot(self, token_id: int, for_image_generation: bool, for_video_generation: bool) -> bool:
-        """尝试为当前 token 预占一个生成槽位。"""
+        """Try to reserve a generation slot for the current token."""
         if not self.concurrency_manager:
             return True
 
@@ -125,15 +125,15 @@ class LoadBalancer:
             Selected token or None if no available tokens
         """
         debug_logger.log_info(
-            f"[LOAD_BALANCER] 开始选择Token (图片生成={for_image_generation}, "
-            f"视频生成={for_video_generation}, 模型={model}, 预占槽位={reserve})"
+            f"[LOAD_BALANCER] Starting selectionToken (image generation={for_image_generation}, "
+            f"video generation={for_video_generation}, model={model}, reserve_slot={reserve})"
         )
 
         active_tokens = await self.token_manager.get_active_tokens()
-        debug_logger.log_info(f"[LOAD_BALANCER] 获取到 {len(active_tokens)} 个活跃Token")
+        debug_logger.log_info(f"[LOAD_BALANCER] Found {len(active_tokens)} active tokens")
 
         if not active_tokens:
-            debug_logger.log_info(f"[LOAD_BALANCER] ❌ 没有活跃的Token")
+            debug_logger.log_info(f"[LOAD_BALANCER] ❌ No active tokens")
             return None
 
         available_tokens = []
@@ -143,11 +143,11 @@ class LoadBalancer:
         for token in active_tokens:
             normalized_tier = normalize_user_paygate_tier(token.user_paygate_tier)
             if model and not supports_model_for_tier(model, normalized_tier):
-                filtered_reasons[token.id] = '账号等级不足，需要 ' + get_paygate_tier_label(required_tier)
+                filtered_reasons[token.id] = 'Account tier insufficient, requires ' + get_paygate_tier_label(required_tier)
                 continue
             if for_image_generation:
                 if not token.image_enabled:
-                    filtered_reasons[token.id] = "图片生成已禁用"
+                    filtered_reasons[token.id] = "image generationdisabled"
                     continue
 
                 if (
@@ -155,12 +155,12 @@ class LoadBalancer:
                     and self.concurrency_manager
                     and not await self.concurrency_manager.can_use_image(token.id)
                 ):
-                    filtered_reasons[token.id] = "图片并发已满"
+                    filtered_reasons[token.id] = "Image concurrency full"
                     continue
 
             if for_video_generation:
                 if not token.video_enabled:
-                    filtered_reasons[token.id] = "视频生成已禁用"
+                    filtered_reasons[token.id] = "video generationdisabled"
                     continue
 
                 if (
@@ -168,7 +168,7 @@ class LoadBalancer:
                     and self.concurrency_manager
                     and not await self.concurrency_manager.can_use_video(token.id)
                 ):
-                    filtered_reasons[token.id] = "视频并发已满"
+                    filtered_reasons[token.id] = "Video concurrency full"
                     continue
 
             inflight, remaining = await self._get_token_load(
@@ -184,15 +184,15 @@ class LoadBalancer:
             })
 
         if filtered_reasons:
-            debug_logger.log_info(f"[LOAD_BALANCER] 已过滤Token:")
+            debug_logger.log_info(f"[LOAD_BALANCER] Filtered tokens:")
             for token_id, reason in filtered_reasons.items():
                 debug_logger.log_info(f"[LOAD_BALANCER]   - Token {token_id}: {reason}")
 
         if not available_tokens:
-            debug_logger.log_info(f"[LOAD_BALANCER] ❌ 没有可用的Token (图片生成={for_image_generation}, 视频生成={for_video_generation})")
+            debug_logger.log_info(f"[LOAD_BALANCER] ❌ No available token (image generation={for_image_generation}, video generation={for_video_generation})")
             return None
 
-        # 最低 in-flight 优先；有并发上限时，剩余槽位更多的 token 优先；最后随机打散
+        # Lowest in-flight first; with concurrency limit, prefer tokens with more remaining slots; then random
         available_tokens.sort(
             key=lambda item: (
                 item["inflight"],
@@ -202,7 +202,7 @@ class LoadBalancer:
             )
         )
 
-        debug_logger.log_info("[LOAD_BALANCER] 候选Token负载:")
+        debug_logger.log_info("[LOAD_BALANCER] Candidate token loads:")
         for item in available_tokens:
             token = item["token"]
             remaining = "unlimited" if item["remaining"] is None else item["remaining"]
@@ -211,25 +211,25 @@ class LoadBalancer:
                 f"inflight={item['inflight']}, remaining={remaining}, credits={token.credits}"
             )
 
-        # 只为候选列表中真正尝试到的 token 做 AT 校验，避免每次请求把所有 token 全扫一遍
+        # Only check AT for tokens actually tried in candidate list, avoiding scanning all tokens per request
         for item in available_tokens:
             token = item["token"]
             token_id = token.id
 
             token = await self.token_manager.ensure_valid_token(token)
             if not token:
-                debug_logger.log_info(f"[LOAD_BALANCER] 跳过 Token {token_id}: AT无效或已过期")
+                debug_logger.log_info(f"[LOAD_BALANCER] Skipping token {token_id}: AT invalid or expired")
                 continue
 
             if reserve and not await self._reserve_slot(token.id, for_image_generation, for_video_generation):
-                debug_logger.log_info(f"[LOAD_BALANCER] 跳过 Token {token.id}: 预占槽位失败")
+                debug_logger.log_info(f"[LOAD_BALANCER] Skipping token {token.id}: slot reservation failed")
                 continue
 
             debug_logger.log_info(
-                f"[LOAD_BALANCER] ✅ 已选择Token {token.id} ({token.email}) - "
-                f"余额: {token.credits}, inflight={item['inflight']}"
+                f"[LOAD_BALANCER] ✅ Token selected {token.id} ({token.email}) - "
+                f"credits: {token.credits}, inflight={item['inflight']}"
             )
             return token
 
-        debug_logger.log_info(f"[LOAD_BALANCER] ❌ 候选Token均不可用 (图片生成={for_image_generation}, 视频生成={for_video_generation})")
+        debug_logger.log_info(f"[LOAD_BALANCER] ❌ All candidate tokens unavailable (image_generation={for_image_generation}, video_generation={for_video_generation})")
         return None

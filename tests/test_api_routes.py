@@ -27,7 +27,7 @@ def build_openai_completion(content: str) -> str:
 
 
 def test_openai_route_resolves_alias_and_returns_non_stream_result(client, fake_handler):
-    fake_handler.non_stream_chunks = [build_openai_completion("![Generated Image](https://example.com/out.png)")]
+    fake_handler.non_stream_chunks = [build_openai_completion("![Generated image](https://example.com/out.png)")]
 
     response = client.post(
         "/v1/chat/completions",
@@ -45,7 +45,7 @@ def test_openai_route_resolves_alias_and_returns_non_stream_result(client, fake_
 
     assert response.status_code == 200
     assert fake_handler.calls[0]["model"] == "gemini-3.0-pro-image-landscape-2k"
-    assert response.json()["choices"][0]["message"]["content"].startswith("![Generated Image]")
+    assert response.json()["choices"][0]["message"]["content"].startswith("![Generated image]")
 
 
 def test_openai_route_returns_handler_error_status(client, fake_handler):
@@ -53,7 +53,7 @@ def test_openai_route_returns_handler_error_status(client, fake_handler):
         json.dumps(
             {
                 "error": {
-                    "message": "没有可用的Token进行图片生成",
+                    "message": "No available token for image generation",
                     "status_code": 503,
                 }
             }
@@ -69,7 +69,7 @@ def test_openai_route_returns_handler_error_status(client, fake_handler):
     )
 
     assert response.status_code == 503
-    assert response.json()["error"]["message"] == "没有可用的Token进行图片生成"
+    assert response.json()["error"]["message"] == "No available token for image generation"
 
 
 def test_flexible_auth_accepts_x_goog_api_key(monkeypatch):

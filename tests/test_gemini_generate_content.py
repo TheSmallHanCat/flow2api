@@ -27,7 +27,7 @@ def build_openai_completion(content: str) -> str:
 
 def test_generate_content_returns_gemini_response(client, fake_handler, monkeypatch):
     fake_handler.non_stream_chunks = [
-        build_openai_completion("![Generated Image](https://example.com/generated.png)")
+        build_openai_completion("![Generated image](https://example.com/generated.png)")
     ]
 
     async def fake_retrieve_image_data(url: str):
@@ -65,7 +65,7 @@ def test_generate_content_returns_gemini_response(client, fake_handler, monkeypa
 def test_stream_generate_content_returns_sse_chunks(client, fake_handler, monkeypatch):
     fake_handler.stream_chunks = [
         'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":1,"model":"flow2api","choices":[{"index":0,"delta":{"reasoning_content":"starting generation"},"finish_reason":null}]}\n\n',
-        'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":1,"model":"flow2api","choices":[{"index":0,"delta":{"content":"![Generated Image](https://example.com/final.png)"},"finish_reason":"stop"}]}\n\n',
+        'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":1,"model":"flow2api","choices":[{"index":0,"delta":{"content":"![Generated image](https://example.com/final.png)"},"finish_reason":"stop"}]}\n\n',
     ]
 
     async def fake_retrieve_image_data(url: str):
@@ -108,7 +108,7 @@ def test_stream_generate_content_returns_sse_chunks(client, fake_handler, monkey
 
 def test_models_generate_content_supports_system_instruction_and_file_data(client, fake_handler):
     fake_handler.non_stream_chunks = [
-        build_openai_completion("![Generated Image](https://example.com/generated-square.png)")
+        build_openai_completion("![Generated image](https://example.com/generated-square.png)")
     ]
 
     reference_image = base64.b64encode(b"\x89PNG\r\n\x1a\nref").decode()

@@ -70,7 +70,7 @@ class Config:
 
     @property
     def flow_image_request_timeout(self) -> int:
-        """图片生成单次 HTTP 请求超时(秒)。"""
+        """Image generation single HTTP request timeout (seconds)."""
         default_timeout = min(self.flow_timeout, 40)
         timeout = self._config.get("flow", {}).get(
             "image_request_timeout",
@@ -83,7 +83,7 @@ class Config:
 
     @property
     def flow_image_timeout_retry_count(self) -> int:
-        """图片生成遇到网络超时时的快速重试次数。"""
+        """Fast retry count on image generation network timeout."""
         retry_count = self._config.get("flow", {}).get("image_timeout_retry_count", 1)
         try:
             return max(0, min(3, int(retry_count)))
@@ -92,7 +92,7 @@ class Config:
 
     @property
     def flow_image_timeout_retry_delay(self) -> float:
-        """图片生成网络超时重试前等待秒数。"""
+        """Wait seconds before retrying on image generation network timeout."""
         delay = self._config.get("flow", {}).get("image_timeout_retry_delay", 0.8)
         try:
             return max(0.0, min(5.0, float(delay)))
@@ -101,7 +101,7 @@ class Config:
 
     @property
     def flow_image_timeout_use_media_proxy_fallback(self) -> bool:
-        """网络超时时是否切换媒体代理重试。"""
+        """Whether to switch to media proxy on network timeout retry."""
         return bool(
             self._config.get("flow", {}).get(
                 "image_timeout_use_media_proxy_fallback",
@@ -111,7 +111,7 @@ class Config:
 
     @property
     def flow_image_prefer_media_proxy(self) -> bool:
-        """图片生成是否优先走媒体代理链路。"""
+        """Whether image generation prefers media proxy route."""
         return bool(
             self._config.get("flow", {}).get(
                 "image_prefer_media_proxy",
@@ -121,7 +121,7 @@ class Config:
 
     @property
     def flow_image_slot_wait_timeout(self) -> float:
-        """图片硬并发槽位等待超时(秒)。"""
+        """Image hard concurrency slot wait timeout (seconds)."""
         timeout = self._config.get("flow", {}).get("image_slot_wait_timeout", 120)
         try:
             return max(1.0, min(600.0, float(timeout)))
@@ -130,7 +130,7 @@ class Config:
 
     @property
     def flow_image_launch_soft_limit(self) -> int:
-        """图片生成前置发车软并发上限(0 表示关闭软整形，仅使用硬并发)。"""
+        """Image generation pre-dispatch soft concurrency limit (0 disables soft shaping, uses hard concurrency only)."""
         value = self._config.get("flow", {}).get("image_launch_soft_limit", 0)
         try:
             return max(0, min(200, int(value)))
@@ -139,7 +139,7 @@ class Config:
 
     @property
     def flow_image_launch_wait_timeout(self) -> float:
-        """图片前置发车软并发等待超时(秒)。"""
+        """Image pre-dispatch soft concurrency wait timeout (seconds)."""
         timeout = self._config.get("flow", {}).get("image_launch_wait_timeout", 180)
         try:
             return max(1.0, min(600.0, float(timeout)))
@@ -148,7 +148,7 @@ class Config:
 
     @property
     def flow_image_launch_stagger_ms(self) -> int:
-        """图片请求前置发车间隔(毫秒)，用于平滑同批突发。"""
+        """Image request pre-dispatch stagger interval (ms), for smoothing concurrent bursts."""
         value = self._config.get("flow", {}).get("image_launch_stagger_ms", 0)
         try:
             return max(0, min(5000, int(value)))
@@ -157,7 +157,7 @@ class Config:
 
     @property
     def flow_video_slot_wait_timeout(self) -> float:
-        """视频硬并发槽位等待超时(秒)。"""
+        """Video hard concurrency slot wait timeout (seconds)."""
         timeout = self._config.get("flow", {}).get("video_slot_wait_timeout", 120)
         try:
             return max(1.0, min(600.0, float(timeout)))
@@ -166,7 +166,7 @@ class Config:
 
     @property
     def flow_video_launch_soft_limit(self) -> int:
-        """视频生成前置发车软并发上限(0 表示关闭软整形，仅使用硬并发)。"""
+        """Video generation pre-dispatch soft concurrency limit (0 disables soft shaping, uses hard concurrency only)."""
         value = self._config.get("flow", {}).get("video_launch_soft_limit", 0)
         try:
             return max(0, min(200, int(value)))
@@ -175,7 +175,7 @@ class Config:
 
     @property
     def flow_video_launch_wait_timeout(self) -> float:
-        """视频前置发车软并发等待超时(秒)。"""
+        """Video pre-dispatch soft concurrency wait timeout (seconds)."""
         timeout = self._config.get("flow", {}).get("video_launch_wait_timeout", 180)
         try:
             return max(1.0, min(600.0, float(timeout)))
@@ -184,7 +184,7 @@ class Config:
 
     @property
     def flow_video_launch_stagger_ms(self) -> int:
-        """视频请求前置发车间隔(毫秒)，用于平滑同批突发。"""
+        """Video request pre-dispatch stagger interval (ms), for smoothing concurrent bursts."""
         value = self._config.get("flow", {}).get("video_launch_stagger_ms", 0)
         try:
             return max(0, min(5000, int(value)))
@@ -335,18 +335,18 @@ class Config:
 
     @property
     def browser_launch_background(self) -> bool:
-        """有头浏览器打码是否默认后台启动，避免抢占前台窗口。"""
+        """Whether headed browser captcha launches in background by default, to avoid stealing foreground window."""
         return self._config.get("captcha", {}).get("browser_launch_background", True)
 
     def set_browser_launch_background(self, enabled: bool):
-        """设置有头浏览器打码是否后台启动。"""
+        """Set whether headed browser captcha launches in background."""
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["browser_launch_background"] = bool(enabled)
 
     @property
     def browser_recaptcha_settle_seconds(self) -> float:
-        """有头打码在 reload/clr 就绪后的额外等待秒数。"""
+        """Extra wait seconds after captcha reload/clr is ready."""
         value = self._config.get("captcha", {}).get("browser_recaptcha_settle_seconds", 3.0)
         try:
             return max(0.0, min(10.0, float(value)))
