@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="h-full">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>管理控制台 - Flow2API</title>
+    <title>Admin Console - Flow2API</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes slide-up{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -16,14 +16,14 @@
     </script>
 </head>
 <body class="h-full bg-background text-foreground antialiased">
-    <!-- 导航栏 -->
+    <!-- Navigation Bar -->
     <header class="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
         <div class="mx-auto flex h-14 max-w-7xl items-center px-6">
             <div class="mr-4 flex items-baseline gap-3">
                 <span class="font-bold text-xl">Flow2API</span>
             </div>
             <div class="flex flex-1 items-center justify-end gap-3">
-                <a href="https://github.com/TheSmallHanCat/flow2api" target="_blank" class="inline-flex items-center justify-center text-xs transition-colors hover:bg-accent hover:text-accent-foreground h-7 px-2.5" title="GitHub 仓库">
+                <a href="https://github.com/TheSmallHanCat/flow2api" target="_blank" class="inline-flex items-center justify-center text-xs transition-colors hover:bg-accent hover:text-accent-foreground h-7 px-2.5" title="GitHub Repository">
                     <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                     </svg>
@@ -34,95 +34,95 @@
                         <polyline points="16 17 21 12 16 7"/>
                         <line x1="21" y1="12" x2="9" y2="12"/>
                     </svg>
-                    退出
+                    Logout
                 </button>
             </div>
         </div>
     </header>
 
     <main class="mx-auto max-w-7xl px-6 py-6">
-        <!-- Tab 导航 -->
+        <!-- Tab Navigation -->
         <div class="border-b border-border mb-6">
             <nav class="flex space-x-8">
-                <button onclick="switchTab('tokens')" id="tabTokens" class="tab-btn border-b-2 border-primary text-sm font-medium py-3 px-1">Token 管理</button>
-                <button onclick="switchTab('settings')" id="tabSettings" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">系统配置</button>
-                <button onclick="switchTab('logs')" id="tabLogs" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">请求日志</button>
+                <button onclick="switchTab('tokens')" id="tabTokens" class="tab-btn border-b-2 border-primary text-sm font-medium py-3 px-1">Token Management</button>
+                <button onclick="switchTab('settings')" id="tabSettings" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">System Settings</button>
+                <button onclick="switchTab('logs')" id="tabLogs" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Request Logs</button>
             </nav>
         </div>
 
-        <!-- Token 管理面板 -->
+        <!-- Token Management Panel -->
         <div id="panelTokens">
-            <!-- 统计卡片 -->
+            <!-- Statistics Cards -->
             <div class="grid gap-4 grid-cols-2 md:grid-cols-5 mb-6">
                 <div class="rounded-lg border border-border bg-background p-4">
-                    <p class="text-sm font-medium text-muted-foreground mb-2">Token 总数</p>
+                    <p class="text-sm font-medium text-muted-foreground mb-2">Total Tokens</p>
                     <h3 class="text-xl font-bold" id="statTotal">-</h3>
                 </div>
                 <div class="rounded-lg border border-border bg-background p-4">
-                    <p class="text-sm font-medium text-muted-foreground mb-2">活跃 Token</p>
+                    <p class="text-sm font-medium text-muted-foreground mb-2">Active Token</p>
                     <h3 class="text-xl font-bold text-green-600" id="statActive">-</h3>
                 </div>
                 <div class="rounded-lg border border-border bg-background p-4">
-                    <p class="text-sm font-medium text-muted-foreground mb-2">今日图片/总图片</p>
+                    <p class="text-sm font-medium text-muted-foreground mb-2">Images Today/Total Images</p>
                     <h3 class="text-xl font-bold text-blue-600" id="statImages">-</h3>
                 </div>
                 <div class="rounded-lg border border-border bg-background p-4">
-                    <p class="text-sm font-medium text-muted-foreground mb-2">今日视频/总视频</p>
+                    <p class="text-sm font-medium text-muted-foreground mb-2">Videos Today/Total Videos</p>
                     <h3 class="text-xl font-bold text-purple-600" id="statVideos">-</h3>
                 </div>
                 <div class="rounded-lg border border-border bg-background p-4">
-                    <p class="text-sm font-medium text-muted-foreground mb-2">今日错误/总错误</p>
+                    <p class="text-sm font-medium text-muted-foreground mb-2">Errors Today/Total Errors</p>
                     <h3 class="text-xl font-bold text-destructive" id="statErrors">-</h3>
                 </div>
             </div>
 
-            <!-- Token 列表 -->
+            <!-- Token List -->
             <div class="rounded-lg border border-border bg-background">
                 <div class="flex items-center justify-between gap-4 p-4 border-b border-border">
-                    <h3 class="text-lg font-semibold">Token 列表</h3>
+                    <h3 class="text-lg font-semibold">Token List</h3>
                     <div class="flex items-center gap-3">
-                        <!-- 自动刷新AT标签和开关 -->
+                        <!-- Auto Refresh AT Label and Toggle -->
                         <div class="flex items-center gap-2">
-                            <span class="text-xs text-muted-foreground">自动刷新AT</span>
+                            <span class="text-xs text-muted-foreground">Auto Refresh AT</span>
                             <div class="relative inline-flex items-center group">
                                 <label class="inline-flex items-center cursor-pointer">
                                     <input type="checkbox" id="atAutoRefreshToggle" onchange="toggleATAutoRefresh()" class="sr-only peer">
                                     <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                                 </label>
-                                <!-- 悬浮提示 -->
+                                <!-- Hover Tooltip -->
                                 <div class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                    Token距离过期<1h时自动使用ST刷新AT
+                                    Auto refresh AT using ST when token expires in less than 1 hour
                                     <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                                 </div>
                             </div>
                         </div>
-                        <button onclick="refreshTokens()" class="inline-flex items-center justify-center rounded-md transition-colors hover:bg-accent h-8 w-8" title="刷新">
+                        <button onclick="refreshTokens()" class="inline-flex items-center justify-center rounded-md transition-colors hover:bg-accent h-8 w-8" title="Refresh">
                             <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                             </svg>
                         </button>
-                        <button onclick="exportTokens()" class="inline-flex items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700 h-8 px-3" title="导出所有Token">
+                        <button onclick="exportTokens()" class="inline-flex items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700 h-8 px-3" title="Export All Tokens">
                             <svg class="h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                 <polyline points="7 10 12 15 17 10"/>
                                 <line x1="12" y1="15" x2="12" y2="3"/>
                             </svg>
-                            <span class="text-sm font-medium">导出</span>
+                            <span class="text-sm font-medium">Export</span>
                         </button>
-                        <button onclick="openImportModal()" class="inline-flex items-center justify-center rounded-md bg-green-600 text-white hover:bg-green-700 h-8 px-3" title="导入Token">
+                        <button onclick="openImportModal()" class="inline-flex items-center justify-center rounded-md bg-green-600 text-white hover:bg-green-700 h-8 px-3" title="Import Token">
                             <svg class="h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                 <polyline points="17 8 12 3 7 8"/>
                                 <line x1="12" y1="3" x2="12" y2="15"/>
                             </svg>
-                            <span class="text-sm font-medium">导入</span>
+                            <span class="text-sm font-medium">Import</span>
                         </button>
                         <button onclick="openAddModal()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3">
                             <svg class="h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"/>
                                 <line x1="5" y1="12" x2="19" y2="12"/>
                             </svg>
-                            <span class="text-sm font-medium">新增</span>
+                            <span class="text-sm font-medium">Add</span>
                         </button>
                     </div>
                 </div>
@@ -131,375 +131,375 @@
                     <table class="w-full table-auto text-sm">
                         <thead>
                             <tr class="border-b border-border">
-                                <th class="h-10 px-2.5 text-left align-middle font-medium text-muted-foreground">邮箱</th>
-                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">状态</th>
-                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">过期时间</th>
-                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">余额</th>
-                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">类型</th>
-                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">项目ID</th>
-                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">图片</th>
-                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">视频</th>
-                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">错误</th>
-                                <th class="h-10 w-[184px] px-2.5 text-right align-middle font-medium text-muted-foreground">操作</th>
+                                <th class="h-10 px-2.5 text-left align-middle font-medium text-muted-foreground">Email</th>
+                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">Status</th>
+                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">Expiry Time</th>
+                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">Credits</th>
+                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">Type</th>
+                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">Project ID</th>
+                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">Image</th>
+                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">Video</th>
+                                <th class="h-10 px-2.5 text-center align-middle font-medium text-muted-foreground">error</th>
+                                <th class="h-10 w-[184px] px-2.5 text-right align-middle font-medium text-muted-foreground">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="tokenTableBody" class="divide-y divide-border">
-                            <!-- 动态填充 -->
+                            <!-- Dynamically populated -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- 系统配置面板 -->
+        <!-- System Settings Panel -->
         <div id="panelSettings" class="hidden">
             <div class="grid gap-6 lg:grid-cols-2">
-                <!-- 安全配置 -->
+                <!-- Security Configuration -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">安全配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">Security Configuration</h3>
                     <div class="space-y-4 flex-1">
                         <div>
-                            <label class="text-sm font-medium mb-2 block">管理员用户名</label>
+                            <label class="text-sm font-medium mb-2 block">Admin Username</label>
                             <input id="cfgAdminUsername" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                            <p class="text-xs text-muted-foreground mt-1">管理员用户名</p>
+                            <p class="text-xs text-muted-foreground mt-1">Admin username</p>
                         </div>
                         <div>
-                            <label class="text-sm font-medium mb-2 block">旧密码</label>
-                            <input id="cfgOldPassword" type="password" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="输入旧密码">
+                            <label class="text-sm font-medium mb-2 block">Old Password</label>
+                            <input id="cfgOldPassword" type="password" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Enter old password">
                         </div>
                         <div>
-                            <label class="text-sm font-medium mb-2 block">新密码</label>
-                            <input id="cfgNewPassword" type="password" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="输入新密码">
+                            <label class="text-sm font-medium mb-2 block">New Password</label>
+                            <input id="cfgNewPassword" type="password" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Enter new password">
                         </div>
                     </div>
-                    <button onclick="updateAdminPassword()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">修改密码</button>
+                    <button onclick="updateAdminPassword()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">Change Password</button>
                 </div>
 
-                <!-- API 密钥配置 -->
+                <!-- API Key Configuration -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">API 密钥配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">API Key Configuration</h3>
                     <div class="space-y-4 flex-1">
                         <div>
-                            <label class="text-sm font-medium mb-2 block">当前 API Key</label>
+                            <label class="text-sm font-medium mb-2 block">Current API Key</label>
                             <input id="cfgCurrentAPIKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" readonly disabled>
-                            <p class="text-xs text-muted-foreground mt-1">当前使用的 API Key（只读）</p>
+                            <p class="text-xs text-muted-foreground mt-1">Currently active API Key (read-only)</p>
                         </div>
                         <div>
-                            <label class="text-sm font-medium mb-2 block">新 API Key</label>
-                            <input id="cfgNewAPIKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="输入新的 API Key">
-                            <p class="text-xs text-muted-foreground mt-1">用于客户端调用 API 的密钥</p>
+                            <label class="text-sm font-medium mb-2 block">New API Key</label>
+                            <input id="cfgNewAPIKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Enter new API Key">
+                            <p class="text-xs text-muted-foreground mt-1">API key used for client API calls</p>
                         </div>
                     </div>
-                    <button onclick="updateAPIKey()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">更新 API Key</button>
+                    <button onclick="updateAPIKey()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">Update API Key</button>
                 </div>
 
-                <!-- 代理配置 -->
+                <!-- Proxy Settings -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">代理配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">Proxy Settings</h3>
                     <div class="space-y-4 flex-1">
                         <div>
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="cfgProxyEnabled" class="h-4 w-4 rounded border-input">
-                                <span class="text-sm font-medium">启用请求代理</span>
+                                <span class="text-sm font-medium">Enable Request Proxy</span>
                             </label>
                         </div>
                         <div>
-                            <label class="text-sm font-medium mb-2 block">请求代理地址</label>
-                            <input id="cfgProxyUrl" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080">
-                            <p class="text-xs text-muted-foreground mt-1">支持 HTTP 和 SOCKS5 代理</p>
+                            <label class="text-sm font-medium mb-2 block">Request Proxy URL</label>
+                            <input id="cfgProxyUrl" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://127.0.0.1:7890 or socks5://127.0.0.1:1080">
+                            <p class="text-xs text-muted-foreground mt-1">Supports HTTP and SOCKS5 proxies</p>
                         </div>
                         <div class="pt-3 border-t border-border">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="cfgMediaProxyEnabled" class="h-4 w-4 rounded border-input" onchange="toggleMediaProxyInput()">
-                                <span class="text-sm font-medium">媒体上传下载代理</span>
+                                <span class="text-sm font-medium">Media Upload/Download Proxy</span>
                             </label>
-                            <p class="text-xs text-muted-foreground mt-1">启用后，图片上传与图片/视频缓存下载可单独走该代理</p>
+                            <p class="text-xs text-muted-foreground mt-1">When enabled, image uploads and image/video cache downloads can use this separate proxy</p>
                         </div>
                         <div id="mediaProxyUrlInput" class="hidden">
-                            <label class="text-sm font-medium mb-2 block">媒体上传下载代理地址</label>
-                            <input id="cfgMediaProxyUrl" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://127.0.0.1:7897 或 socks5://127.0.0.1:1080">
-                            <p class="text-xs text-muted-foreground mt-1">支持 HTTP 和 SOCKS5 代理</p>
+                            <label class="text-sm font-medium mb-2 block">Media Upload/Download Proxy URL</label>
+                            <input id="cfgMediaProxyUrl" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://127.0.0.1:7897 or socks5://127.0.0.1:1080">
+                            <p class="text-xs text-muted-foreground mt-1">Supports HTTP and SOCKS5 proxies</p>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-2 mt-4">
-                        <button id="btnTestProxy" onclick="testProxyConfig()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-4">测试代理</button>
-                        <button onclick="saveProxyConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4">保存配置</button>
+                        <button id="btnTestProxy" onclick="testProxyConfig()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-4">Test Proxy</button>
+                        <button onclick="saveProxyConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4">Save Settings</button>
                     </div>
-                    <p id="proxyTestResult" class="text-xs text-muted-foreground mt-2">测试目标：<code class="bg-muted px-1 py-0.5 rounded">https://labs.google/</code></p>
+                    <p id="proxyTestResult" class="text-xs text-muted-foreground mt-2">Test target: <code class="bg-muted px-1 py-0.5 rounded">https://labs.google/</code></p>
                 </div>
 
-                <!-- 生成超时配置 -->
+                <!-- Generation Timeout Settings -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">生成超时配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">Generation Timeout Settings</h3>
                     <div class="space-y-4 flex-1">
                         <div>
-                            <label class="text-sm font-medium mb-2 block">图片生成超时时间（秒）</label>
+                            <label class="text-sm font-medium mb-2 block">Image Generation Timeout (seconds)</label>
                             <input id="cfgImageTimeout" type="number" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="300" min="60" max="3600">
-                            <p class="text-xs text-muted-foreground mt-1">图片生成超时时间，范围：60-3600 秒（1分钟-1小时），超时后自动释放Token锁</p>
+                            <p class="text-xs text-muted-foreground mt-1">Image generation timeout, range: 60-3600 seconds (1 min - 1 hour). Token lock is automatically released after timeout.</p>
                         </div>
                         <div>
-                            <label class="text-sm font-medium mb-2 block">视频生成超时时间（秒）</label>
+                            <label class="text-sm font-medium mb-2 block">Video Generation Timeout (seconds)</label>
                             <input id="cfgVideoTimeout" type="number" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="1500" min="60" max="7200">
-                            <p class="text-xs text-muted-foreground mt-1">视频生成超时时间，范围：60-7200 秒（1分钟-2小时），超时后返回上游API超时错误</p>
+                            <p class="text-xs text-muted-foreground mt-1">Video generation timeout, range: 60-7200 seconds (1 min - 2 hours). Returns upstream API timeout error after timeout.</p>
                         </div>
                     </div>
-                    <button onclick="saveGenerationTimeout()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">保存配置</button>
+                    <button onclick="saveGenerationTimeout()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">Save Settings</button>
                 </div>
 
-                <!-- 错误处理配置 -->
+                <!-- Error Handling Configuration -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">错误处理配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">Error Handling Configuration</h3>
                     <div class="space-y-4 flex-1">
                         <div>
-                            <label class="text-sm font-medium mb-2 block">错误封禁阈值</label>
+                            <label class="text-sm font-medium mb-2 block">Error Ban Threshold</label>
                             <input id="cfgErrorBan" type="number" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="3">
-                            <p class="text-xs text-muted-foreground mt-1">Token 连续错误达到此次数后自动禁用</p>
+                            <p class="text-xs text-muted-foreground mt-1">Token is automatically disabled after reaching this number of consecutive errors</p>
                         </div>
                     </div>
-                    <button onclick="saveAdminConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">保存配置</button>
+                    <button onclick="saveAdminConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">Save Settings</button>
                 </div>
 
-                <!-- 缓存配置 -->
+                <!-- Cache Settings -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">缓存配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">Cache Settings</h3>
                     <div class="space-y-4 flex-1">
                         <div>
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="cfgCacheEnabled" class="h-4 w-4 rounded border-input" onchange="toggleCacheOptions()">
-                                <span class="text-sm font-medium">启用缓存</span>
+                                <span class="text-sm font-medium">Enable Cache</span>
                             </label>
-                            <p class="text-xs text-muted-foreground mt-1">关闭后，生成的图片和视频将直接输出原始链接，不会缓存到本地</p>
+                            <p class="text-xs text-muted-foreground mt-1">When disabled, generated images and videos will output original URLs directly without caching locally</p>
                         </div>
 
-                        <!-- 缓存配置选项 -->
+                        <!-- Cache Settings Options -->
                         <div id="cacheOptions" style="display: none;" class="space-y-4 pt-4 border-t border-border">
                             <div>
-                                <label class="text-sm font-medium mb-2 block">缓存超时时间（秒）</label>
+                                <label class="text-sm font-medium mb-2 block">Cache Timeout (seconds)</label>
                                 <input id="cfgCacheTimeout" type="number" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="7200" min="0" max="86400">
-                                <p class="text-xs text-muted-foreground mt-1">文件缓存超时时间，范围：0-86400 秒，其中 0 表示永不过期，不自动删除缓存文件</p>
+                                <p class="text-xs text-muted-foreground mt-1">File cache timeout, range: 0-86400 seconds. 0 means never expires, cached files will not be auto-deleted.</p>
                             </div>
                             <div>
-                                <label class="text-sm font-medium mb-2 block">缓存文件访问域名</label>
+                                <label class="text-sm font-medium mb-2 block">Cache File Access Domain</label>
                                 <input id="cfgCacheBaseUrl" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="https://yourdomain.com">
-                                <p class="text-xs text-muted-foreground mt-1">留空则使用服务器地址，例如：https://yourdomain.com</p>
+                                <p class="text-xs text-muted-foreground mt-1">Leave empty to use server address, e.g.: https://yourdomain.com</p>
                             </div>
                             <div id="cacheEffectiveUrl" class="rounded-md bg-muted p-3 hidden">
                                 <p class="text-xs text-muted-foreground">
-                                    <strong>🌐 当前生效的访问地址：</strong><code id="cacheEffectiveUrlValue" class="bg-background px-1 py-0.5 rounded"></code>
+                                    <strong>Current effective access URL:</strong><code id="cacheEffectiveUrlValue" class="bg-background px-1 py-0.5 rounded"></code>
                                 </p>
                             </div>
                         </div>
                     </div>
-                    <button onclick="saveCacheConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">保存配置</button>
+                    <button onclick="saveCacheConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">Save Settings</button>
                 </div>
 
-                <!-- 插件连接配置 -->
+                <!-- Plugin Connection Configuration -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">插件连接配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">Plugin Connection Configuration</h3>
                     <div class="space-y-4 flex-1">
                         <div>
-                            <label class="text-sm font-semibold mb-2 block">连接接口</label>
+                            <label class="text-sm font-semibold mb-2 block">Connection Endpoint</label>
                             <div class="flex gap-2">
-                                <input id="cfgPluginConnectionUrl" type="text" readonly class="flex h-9 flex-1 rounded-md border border-input bg-muted px-3 py-2 text-sm" placeholder="加载中...">
-                                <button onclick="copyConnectionUrl()" class="inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 px-4">复制</button>
+                                <input id="cfgPluginConnectionUrl" type="text" readonly class="flex h-9 flex-1 rounded-md border border-input bg-muted px-3 py-2 text-sm" placeholder="Loading...">
+                                <button onclick="copyConnectionUrl()" class="inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 px-4">Copy</button>
                             </div>
-                            <p class="text-xs text-muted-foreground mt-1">Chrome扩展插件需要配置此接口地址</p>
+                            <p class="text-xs text-muted-foreground mt-1">Chrome extension plugin needs to configure this endpoint URL</p>
                         </div>
                         <div>
-                            <label class="text-sm font-semibold mb-2 block">连接Token</label>
+                            <label class="text-sm font-semibold mb-2 block">Connection Token</label>
                             <div class="flex gap-2">
-                                <input id="cfgPluginConnectionToken" type="text" class="flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="留空自动生成">
-                                <button onclick="generateRandomToken()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4">随机</button>
-                                <button onclick="copyConnectionToken()" class="inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 px-4">复制</button>
+                                <input id="cfgPluginConnectionToken" type="text" class="flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Leave empty to auto-generate">
+                                <button onclick="generateRandomToken()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4">Random</button>
+                                <button onclick="copyConnectionToken()" class="inline-flex items-center justify-center rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 px-4">Copy</button>
                             </div>
-                            <p class="text-xs text-muted-foreground mt-1">用于验证Chrome扩展插件的身份，留空将自动生成随机token</p>
+                            <p class="text-xs text-muted-foreground mt-1">Used to verify Chrome extension plugin identity. Leave empty to auto-generate a random token.</p>
                         </div>
                         <div>
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="cfgAutoEnableOnUpdate" class="h-4 w-4 rounded border-input">
-                                <span class="text-sm font-medium">更新token时自动启用</span>
+                                <span class="text-sm font-medium">Auto-enable on token update</span>
                             </label>
-                            <p class="text-xs text-muted-foreground mt-2">当插件更新token时，如果该token被禁用，则自动启用它</p>
+                            <p class="text-xs text-muted-foreground mt-2">When the plugin updates a token, if that token is disabled, it will be automatically enabled</p>
                         </div>
                         <div class="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800">
                             <p class="text-xs text-blue-800 dark:text-blue-200">
-                                ℹ️ <strong>使用说明：</strong>安装Chrome扩展后，将连接接口和Token配置到插件中，插件会自动提取Google Labs的cookie并更新到系统
+                                ℹ️ <strong>Usage Instructions:</strong> After installing the Chrome extension, configure the connection endpoint and token in the plugin. The plugin will automatically extract Google Labs cookies and update them to the system.
                             </p>
                         </div>
                     </div>
-                    <button onclick="savePluginConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">保存配置</button>
+                    <button onclick="savePluginConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4">Save Settings</button>
                 </div>
 
-                <!-- 验证码配置 -->
+                <!-- Captcha Settings -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">验证码配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">Captcha Settings</h3>
                     <div class="space-y-4 flex-1">
                         <div>
-                            <label class="text-sm font-medium mb-2 block">打码方式</label>
+                            <label class="text-sm font-medium mb-2 block">Captcha Method</label>
                             <select id="cfgCaptchaMethod" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" onchange="toggleCaptchaOptions()">
-                                <option value="yescaptcha">YesCaptcha打码</option>
-                                <option value="capmonster">CapMonster打码</option>
-                                <option value="ezcaptcha">EzCaptcha打码</option>
-                                <option value="capsolver">CapSolver打码</option>
-                                <option value="browser">有头浏览器打码</option>
-                                <option value="personal">内置浏览器打码</option>
-                                <option value="remote_browser">远程有头打码</option>
+                                <option value="yescaptcha">YesCaptcha Solver</option>
+                                <option value="capmonster">CapMonster Solver</option>
+                                <option value="ezcaptcha">EzCaptcha Solver</option>
+                                <option value="capsolver">CapSolver Solver</option>
+                                <option value="browser">Headed Browser Captcha</option>
+                                <option value="personal">Built-in Browser Captcha</option>
+                                <option value="remote_browser">Remote Headed Solver</option>
                             </select>
-                            <p class="text-xs text-muted-foreground mt-1">选择验证码获取方式</p>
+                            <p class="text-xs text-muted-foreground mt-1">Select captcha solving method</p>
                         </div>
 
-                        <!-- YesCaptcha配置选项 -->
+                        <!-- YesCaptcha Configuration Options -->
                         <div id="yescaptchaOptions" class="space-y-4">
                             <div>
-                                <label class="text-sm font-medium mb-2 block">YesCaptcha API密钥</label>
-                                <input id="cfgYescaptchaApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="请输入YesCaptcha API密钥">
-                                <p class="text-xs text-muted-foreground mt-1">用于自动获取reCAPTCHA验证码，留空则不使用验证码</p>
+                                <label class="text-sm font-medium mb-2 block">YesCaptcha API Key</label>
+                                <input id="cfgYescaptchaApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Enter YesCaptcha API Key">
+                                <p class="text-xs text-muted-foreground mt-1">Used to automatically obtain reCAPTCHA tokens. Leave empty to disable captcha.</p>
                             </div>
                             <div>
-                                <label class="text-sm font-medium mb-2 block">YesCaptcha API地址</label>
+                                <label class="text-sm font-medium mb-2 block">YesCaptcha API URL</label>
                                 <input id="cfgYescaptchaBaseUrl" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="https://api.yescaptcha.com">
-                                <p class="text-xs text-muted-foreground mt-1">YesCaptcha服务地址，默认：https://api.yescaptcha.com</p>
+                                <p class="text-xs text-muted-foreground mt-1">YesCaptcha service URL, default: https://api.yescaptcha.com</p>
                             </div>
                         </div>
 
-                        <!-- CapMonster配置选项 -->
+                        <!-- CapMonster Configuration Options -->
                         <div id="capmonsterOptions" class="hidden space-y-4">
                             <div>
-                                <label class="text-sm font-medium mb-2 block">CapMonster API密钥</label>
-                                <input id="cfgCapmonsterApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="请输入CapMonster API密钥">
-                                <p class="text-xs text-muted-foreground mt-1">用于自动获取reCAPTCHA验证码</p>
+                                <label class="text-sm font-medium mb-2 block">CapMonster API Key</label>
+                                <input id="cfgCapmonsterApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Enter CapMonster API Key">
+                                <p class="text-xs text-muted-foreground mt-1">Used to automatically obtain reCAPTCHA tokens</p>
                             </div>
                             <div>
-                                <label class="text-sm font-medium mb-2 block">CapMonster API地址</label>
+                                <label class="text-sm font-medium mb-2 block">CapMonster API URL</label>
                                 <input id="cfgCapmonsterBaseUrl" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="https://api.capmonster.cloud">
-                                <p class="text-xs text-muted-foreground mt-1">CapMonster服务地址，默认：https://api.capmonster.cloud</p>
+                                <p class="text-xs text-muted-foreground mt-1">CapMonster service URL, default: https://api.capmonster.cloud</p>
                             </div>
                         </div>
 
-                        <!-- EzCaptcha配置选项 -->
+                        <!-- EzCaptcha Configuration Options -->
                         <div id="ezcaptchaOptions" class="hidden space-y-4">
                             <div>
-                                <label class="text-sm font-medium mb-2 block">EzCaptcha API密钥</label>
-                                <input id="cfgEzcaptchaApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="请输入EzCaptcha API密钥">
-                                <p class="text-xs text-muted-foreground mt-1">用于自动获取reCAPTCHA验证码</p>
+                                <label class="text-sm font-medium mb-2 block">EzCaptcha API Key</label>
+                                <input id="cfgEzcaptchaApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Enter EzCaptcha API Key">
+                                <p class="text-xs text-muted-foreground mt-1">Used to automatically obtain reCAPTCHA tokens</p>
                             </div>
                             <div>
-                                <label class="text-sm font-medium mb-2 block">EzCaptcha API地址</label>
+                                <label class="text-sm font-medium mb-2 block">EzCaptcha API URL</label>
                                 <input id="cfgEzcaptchaBaseUrl" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="https://api.ez-captcha.com">
-                                <p class="text-xs text-muted-foreground mt-1">EzCaptcha服务地址，默认：https://api.ez-captcha.com</p>
+                                <p class="text-xs text-muted-foreground mt-1">EzCaptcha service URL, default: https://api.ez-captcha.com</p>
                             </div>
                         </div>
 
-                        <!-- CapSolver配置选项 -->
+                        <!-- CapSolver Configuration Options -->
                         <div id="capsolverOptions" class="hidden space-y-4">
                             <div>
-                                <label class="text-sm font-medium mb-2 block">CapSolver API密钥</label>
-                                <input id="cfgCapsolverApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="请输入CapSolver API密钥">
-                                <p class="text-xs text-muted-foreground mt-1">用于自动获取reCAPTCHA验证码</p>
+                                <label class="text-sm font-medium mb-2 block">CapSolver API Key</label>
+                                <input id="cfgCapsolverApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Enter CapSolver API Key">
+                                <p class="text-xs text-muted-foreground mt-1">Used to automatically obtain reCAPTCHA tokens</p>
                             </div>
                             <div>
-                                <label class="text-sm font-medium mb-2 block">CapSolver API地址</label>
+                                <label class="text-sm font-medium mb-2 block">CapSolver API URL</label>
                                 <input id="cfgCapsolverBaseUrl" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="https://api.capsolver.com">
-                                <p class="text-xs text-muted-foreground mt-1">CapSolver服务地址，默认：https://api.capsolver.com</p>
+                                <p class="text-xs text-muted-foreground mt-1">CapSolver service URL, default: https://api.capsolver.com</p>
                             </div>
                         </div>
 
-                        <!-- 浏览器打码配置选项 -->
+                        <!-- Browser Captcha Configuration Options -->
                         <div id="browserCaptchaOptions" class="hidden space-y-4">
                             <div class="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800">
                                 <p class="text-xs text-blue-800 dark:text-blue-200">
-                                    ℹ️ <strong>浏览器打码：</strong>使用Playwright自动化浏览器获取验证码，无需额外配置，但会占用更多系统资源
+                                    ℹ️ <strong>Browser Captcha:</strong> Uses Playwright automated browser to obtain captcha tokens. No extra configuration needed, but uses more system resources.
                                 </p>
                             </div>
 
                             <div>
                                 <label class="inline-flex items-center gap-2 cursor-pointer">
                                     <input type="checkbox" id="cfgBrowserProxyEnabled" class="h-4 w-4 rounded border-input" onchange="toggleBrowserProxyInput()">
-                                    <span class="text-sm font-medium">启用代理</span>
+                                    <span class="text-sm font-medium">Enable Proxy</span>
                                 </label>
-                                <p class="text-xs text-muted-foreground mt-2">为有头浏览器配置独立代理</p>
+                                <p class="text-xs text-muted-foreground mt-2">Configure a dedicated proxy for the headed browser</p>
                             </div>
 
                             <div id="browserProxyUrlInput" class="hidden">
-                                <label class="text-sm font-medium mb-2 block">代理地址</label>
-                                <input id="cfgBrowserProxyUrl" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://host:port 或 socks5://host:port">
+                                <label class="text-sm font-medium mb-2 block">Proxy URL</label>
+                                <input id="cfgBrowserProxyUrl" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://host:port or socks5://host:port">
                                 <p class="text-xs text-muted-foreground mt-1">
-                                    ⚠️ <strong>仅支持：</strong>HTTP代理（可带认证）或 SOCKS5代理（不可带认证）<br>
-                                    示例：<code class="bg-muted px-1 py-0.5 rounded">http://user:pass@proxy.com:8080</code> 或 <code class="bg-muted px-1 py-0.5 rounded">socks5://proxy.com:1080</code>
+                                    ⚠️ <strong>Supported only:</strong> HTTP proxy (with auth) or SOCKS5 proxy (without auth)<br>
+                                    Examples: <code class="bg-muted px-1 py-0.5 rounded">http://user:pass@proxy.com:8080</code> or <code class="bg-muted px-1 py-0.5 rounded">socks5://proxy.com:1080</code>
                                 </p>
                             </div>
 
                             <div>
-                                <label class="text-sm font-medium mb-2 block">浏览器数量</label>
+                                <label class="text-sm font-medium mb-2 block">Browser Count</label>
                                 <input id="cfgBrowserCount" type="number" min="1" max="20" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="1" value="1">
-                                <p class="text-xs text-muted-foreground mt-1">同时启动的浏览器实例数量，每个浏览器只开1个标签页，请求轮询分配</p>
+                                <p class="text-xs text-muted-foreground mt-1">Number of browser instances to launch simultaneously. Each browser opens only 1 tab, requests are distributed via round-robin.</p>
                             </div>
                         </div>
 
-                        <!-- 远程有头打码配置选项 -->
+                        <!-- Remote Headed Solver Configuration Options -->
                         <div id="remoteBrowserOptions" class="hidden space-y-4">
                             <div class="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800">
                                 <p class="text-xs text-blue-800 dark:text-blue-200">
-                                    ℹ️ <strong>远程有头打码：</strong>通过 HTTP 调用独立打码服务获取 token，并在请求结束后回调 finish/error
+                                    ℹ️ <strong>Remote Headed Solver:</strong> Obtains tokens by calling an independent captcha solving service via HTTP, and calls back finish/error when the request ends.
                                 </p>
                             </div>
                             <div>
-                                <label class="text-sm font-medium mb-2 block">远程服务 Base URL</label>
+                                <label class="text-sm font-medium mb-2 block">Remote Service Base URL</label>
                                 <input id="cfgRemoteBrowserBaseUrl" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="http://127.0.0.1:8060">
-                                <p class="text-xs text-muted-foreground mt-1">示例：<code class="bg-muted px-1 py-0.5 rounded">http://127.0.0.1:8060</code></p>
+                                <p class="text-xs text-muted-foreground mt-1">Example: <code class="bg-muted px-1 py-0.5 rounded">http://127.0.0.1:8060</code></p>
                             </div>
                             <div>
-                                <label class="text-sm font-medium mb-2 block">远程服务 API Key</label>
+                                <label class="text-sm font-medium mb-2 block">Remote Service API Key</label>
                                 <input id="cfgRemoteBrowserApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="fcs_xxx">
                             </div>
                             <div>
-                                <label class="text-sm font-medium mb-2 block">远程请求超时（秒）</label>
+                                <label class="text-sm font-medium mb-2 block">Remote Request Timeout (seconds)</label>
                                 <input id="cfgRemoteBrowserTimeout" type="number" min="5" max="300" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="60" value="60">
                             </div>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-2 mt-4">
-                        <button id="btnTestCaptchaScore" onclick="testCaptchaScore()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-4">测试当前打码分数</button>
-                        <button onclick="saveCaptchaConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4">保存配置</button>
+                        <button id="btnTestCaptchaScore" onclick="testCaptchaScore()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-4">Test Current Captcha Score</button>
+                        <button onclick="saveCaptchaConfig()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4">Save Settings</button>
                     </div>
-                    <p id="captchaScoreTestResult" class="text-xs text-muted-foreground mt-2">测试目标：<code class="bg-muted px-1 py-0.5 rounded">https://antcpt.com/score_detector/</code></p>
+                    <p id="captchaScoreTestResult" class="text-xs text-muted-foreground mt-2">Test target: <code class="bg-muted px-1 py-0.5 rounded">https://antcpt.com/score_detector/</code></p>
                 </div>
 
-                <!-- 调试配置 -->
+                <!-- Debug Configuration -->
                 <div class="rounded-lg border border-border bg-background p-6 flex flex-col">
-                    <h3 class="text-lg font-semibold mb-4">调试配置</h3>
+                    <h3 class="text-lg font-semibold mb-4">Debug Configuration</h3>
                     <div class="space-y-4 flex-1">
                         <div>
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="cfgDebugEnabled" class="h-4 w-4 rounded border-input" onchange="toggleDebugMode()">
-                                <span class="text-sm font-medium">启用调试模式</span>
+                                <span class="text-sm font-medium">Enable Debug Mode</span>
                             </label>
-                            <p class="text-xs text-muted-foreground mt-2">开启后，详细的上游API请求和响应日志将写入 <code class="bg-muted px-1 py-0.5 rounded">logs.txt</code> 文件</p>
+                            <p class="text-xs text-muted-foreground mt-2">When enabled, detailed upstream API request and response logs will be written to <code class="bg-muted px-1 py-0.5 rounded">logs.txt</code></p>
                         </div>
                         <div class="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-3 border border-yellow-200 dark:border-yellow-800">
                             <p class="text-xs text-yellow-800 dark:text-yellow-200">
-                                ⚠️ <strong>注意：</strong>调试模式会产生非常非常大量的日志，仅限Debug时候开启，否则磁盘boom
+                                ⚠️ <strong>Warning:</strong> Debug mode generates an extremely large amount of logs. Only enable when debugging, otherwise disk space will fill up quickly.
                             </p>
                         </div>
                     </div>
-                    <div class="text-xs text-muted-foreground text-center mt-4 h-9 flex items-center justify-center">✅ 开关状态自动保存</div>
+                    <div class="text-xs text-muted-foreground text-center mt-4 h-9 flex items-center justify-center">Toggle state is auto-saved</div>
                 </div>
             </div>
         </div>
 
-        <!-- 请求日志面板 -->
+        <!-- Request Logs Panel -->
         <div id="panelLogs" class="hidden">
             <div class="rounded-lg border border-border bg-background">
                 <div class="flex items-center justify-between gap-4 p-4 border-b border-border">
-                    <h3 class="text-lg font-semibold">请求日志</h3>
+                    <h3 class="text-lg font-semibold">Request Logs</h3>
                     <div class="flex gap-2">
-                        <button onclick="clearAllLogs()" class="inline-flex items-center justify-center rounded-md transition-colors hover:bg-red-50 hover:text-red-700 h-8 px-3 text-sm" title="清空日志">
+                        <button onclick="clearAllLogs()" class="inline-flex items-center justify-center rounded-md transition-colors hover:bg-red-50 hover:text-red-700 h-8 px-3 text-sm" title="Clear Logs">
                             <svg class="h-4 w-4 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                             </svg>
-                            清空
+                            Clear
                         </button>
-                        <button onclick="refreshLogs()" class="inline-flex items-center justify-center rounded-md transition-colors hover:bg-accent h-8 w-8" title="刷新">
+                        <button onclick="refreshLogs()" class="inline-flex items-center justify-center rounded-md transition-colors hover:bg-accent h-8 w-8" title="Refresh">
                             <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                             </svg>
@@ -510,30 +510,30 @@
                     <table class="w-full table-auto text-sm">
                         <thead class="sticky top-0 bg-background">
                             <tr class="border-b border-border">
-                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#25805;&#20316;</th>
-                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Token&#37038;&#31665;</th>
-                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#29366;&#24577;</th>
-                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#36827;&#24230;</th>
-                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#29366;&#24577;&#30721;</th>
-                                <th class="h-10 w-[17rem] px-3 text-left align-middle font-medium text-muted-foreground">结果摘要</th>
-                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#32791;&#26102;(&#31186;)</th>
-                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#26102;&#38388;</th>
-                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">&#35814;&#24773;</th>
+                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Operation</th>
+                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Token Email</th>
+                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Status</th>
+                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Progress</th>
+                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Status Code</th>
+                                <th class="h-10 w-[17rem] px-3 text-left align-middle font-medium text-muted-foreground">Result Summary</th>
+                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Duration(s)</th>
+                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Time</th>
+                                <th class="h-10 px-3 text-left align-middle font-medium text-muted-foreground">Details</th>
                             </tr>
                         </thead>
                         <tbody id="logsTableBody" class="divide-y divide-border">
-                            <!-- 动态填充 -->
+                            <!-- Dynamically populated -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- 日志详情模态框 -->
+        <!-- Log Details Modal -->
         <div id="logDetailModal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
             <div class="bg-background rounded-lg border border-border w-full max-w-3xl shadow-xl max-h-[80vh] flex flex-col">
                 <div class="flex items-center justify-between p-5 border-b border-border">
-                    <h3 class="text-lg font-semibold">日志详情</h3>
+                    <h3 class="text-lg font-semibold">Log Details</h3>
                     <button onclick="closeLogDetailModal()" class="text-muted-foreground hover:text-foreground">
                         <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -543,23 +543,23 @@
                 </div>
                 <div class="p-5 overflow-y-auto">
                     <div id="logDetailContent" class="space-y-4">
-                        <!-- 动态填充 -->
+                        <!-- Dynamically populated -->
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 页脚 -->
+        <!-- Footer -->
         <footer class="mt-12 pt-6 border-t border-border text-center text-xs text-muted-foreground">
             <p>© 2025 <a href="https://linux.do/u/thesmallhancat/summary" target="_blank" class="no-underline hover:underline" style="color: inherit;">TheSmallHanCat</a> && <a href="https://linux.do/u/tibbar/summary" target="_blank" class="no-underline hover:underline" style="color: inherit;">Tibbar</a>. All rights reserved.</p>
         </footer>
     </main>
 
-    <!-- 添加 Token 模态框 -->
+    <!-- Add Token Modal -->
     <div id="addModal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto">
         <div class="bg-background rounded-lg border border-border w-full max-w-2xl shadow-xl my-auto">
             <div class="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-background">
-                <h3 class="text-lg font-semibold">添加 Token</h3>
+                <h3 class="text-lg font-semibold">Add Token</h3>
                 <button onclick="closeAddModal()" class="text-muted-foreground hover:text-foreground">
                     <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -571,63 +571,63 @@
                 <!-- Session Token -->
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Session Token (ST) <span class="text-red-500">*</span></label>
-                    <textarea id="addTokenST" rows="3" class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-none" placeholder="请输入 Session Token" required></textarea>
-                    <p class="text-xs text-muted-foreground">从浏览器 Cookie 中获取 __Secure-next-auth.session-token，保存时将自动转换为 Access Token</p>
+                    <textarea id="addTokenST" rows="3" class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-none" placeholder="Enter Session Token" required></textarea>
+                    <p class="text-xs text-muted-foreground">Obtained from browser cookie __Secure-next-auth.session-token. Will be automatically converted to Access Token on save.</p>
                 </div>
 
                 <!-- Remark -->
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">备注 <span class="text-muted-foreground text-xs">- 可选</span></label>
-                    <input id="addTokenRemark" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="添加备注信息">
+                    <label class="text-sm font-medium">Remark <span class="text-muted-foreground text-xs">- optional</span></label>
+                    <input id="addTokenRemark" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Add remark information">
                 </div>
 
                 <!-- Project ID -->
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">Project ID <span class="text-muted-foreground text-xs">- 可选</span></label>
-                    <input id="addTokenProjectId" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder="若不填写则系统自动生成">
-                    <p class="text-xs text-muted-foreground">如果已有Project ID可直接输入,留空则创建新项目</p>
+                    <label class="text-sm font-medium">Project ID <span class="text-muted-foreground text-xs">- optional</span></label>
+                    <input id="addTokenProjectId" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder="Leave empty to auto-generate">
+                    <p class="text-xs text-muted-foreground">Enter an existing Project ID directly, or leave empty to create a new project</p>
                 </div>
 
                 <!-- Project Name -->
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">Project Name <span class="text-muted-foreground text-xs">- 可选</span></label>
-                    <input id="addTokenProjectName" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="若不填写则自动生成 (如: Jan 01 - 12:00)">
+                    <label class="text-sm font-medium">Project Name <span class="text-muted-foreground text-xs">- optional</span></label>
+                    <input id="addTokenProjectName" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Leave empty to auto-generate (e.g.: Jan 01 - 12:00)">
                 </div>
 
                 <!-- Captcha Proxy -->
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">打码代理 <span class="text-muted-foreground text-xs">- 可选</span></label>
-                    <input id="addTokenCaptchaProxyUrl" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder="例如 http://user:pass@host:port">
-                    <p class="text-xs text-muted-foreground">仅覆盖当前 Token 的浏览器打码代理，留空则使用全局打码代理</p>
+                    <label class="text-sm font-medium">Captcha Proxy <span class="text-muted-foreground text-xs">- optional</span></label>
+                    <input id="addTokenCaptchaProxyUrl" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder="e.g. http://user:pass@host:port">
+                    <p class="text-xs text-muted-foreground">Overrides the browser captcha proxy for this token only. Leave empty to use the global captcha proxy.</p>
                 </div>
 
-                <!-- 功能开关 -->
+                <!-- Feature Toggles -->
                 <div class="space-y-3 pt-2 border-t border-border">
-                    <label class="text-sm font-medium">功能开关</label>
+                    <label class="text-sm font-medium">Feature Toggles</label>
                     <div class="space-y-2">
                         <div class="flex items-center gap-3">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="addTokenImageEnabled" checked class="h-4 w-4 rounded border-input">
-                                <span class="text-sm font-medium">启用图片生成</span>
+                                <span class="text-sm font-medium">Enable Image Generation</span>
                             </label>
-                            <input type="number" id="addTokenImageConcurrency" value="-1" class="flex h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="并发数" title="并发数量限制：设置同时处理的最大请求数。-1表示不限制">
+                            <input type="number" id="addTokenImageConcurrency" value="-1" class="flex h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="Concurrency" title="Concurrency limit: sets the maximum number of simultaneous requests. -1 means no limit.">
                         </div>
                     </div>
                     <div class="space-y-2">
                         <div class="flex items-center gap-3">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="addTokenVideoEnabled" checked class="h-4 w-4 rounded border-input">
-                                <span class="text-sm font-medium">启用视频生成</span>
+                                <span class="text-sm font-medium">Enable Video Generation</span>
                             </label>
-                            <input type="number" id="addTokenVideoConcurrency" value="-1" class="flex h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="并发数" title="并发数量限制：设置同时处理的最大请求数。-1表示不限制">
+                            <input type="number" id="addTokenVideoConcurrency" value="-1" class="flex h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="Concurrency" title="Concurrency limit: sets the maximum number of simultaneous requests. -1 means no limit.">
                         </div>
                     </div>
                 </div>
             </div>
             <div class="flex items-center justify-end gap-3 p-5 border-t border-border sticky bottom-0 bg-background">
-                <button onclick="closeAddModal()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-5">取消</button>
+                <button onclick="closeAddModal()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-5">Cancel</button>
                 <button id="addTokenBtn" onclick="submitAddToken()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-5">
-                    <span id="addTokenBtnText">添加</span>
+                    <span id="addTokenBtnText">Add</span>
                     <svg id="addTokenBtnSpinner" class="hidden animate-spin h-4 w-4 ml-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -637,11 +637,11 @@
         </div>
     </div>
 
-    <!-- 编辑 Token 模态框 -->
+    <!-- Edit Token Modal -->
     <div id="editModal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto">
         <div class="bg-background rounded-lg border border-border w-full max-w-2xl shadow-xl my-auto">
             <div class="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-background">
-                <h3 class="text-lg font-semibold">编辑 Token</h3>
+                <h3 class="text-lg font-semibold">Edit Token</h3>
                 <button onclick="closeEditModal()" class="text-muted-foreground hover:text-foreground">
                     <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -655,63 +655,63 @@
                 <!-- Session Token -->
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Session Token (ST) <span class="text-red-500">*</span></label>
-                    <textarea id="editTokenST" rows="3" class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-none" placeholder="请输入 Session Token" required></textarea>
-                    <p class="text-xs text-muted-foreground">从浏览器 Cookie 中获取 __Secure-next-auth.session-token，保存时将自动转换为 Access Token</p>
+                    <textarea id="editTokenST" rows="3" class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-none" placeholder="Enter Session Token" required></textarea>
+                    <p class="text-xs text-muted-foreground">Obtained from browser cookie __Secure-next-auth.session-token. Will be automatically converted to Access Token on save.</p>
                 </div>
 
                 <!-- Remark -->
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">备注 <span class="text-muted-foreground text-xs">- 可选</span></label>
-                    <input id="editTokenRemark" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="添加备注信息">
+                    <label class="text-sm font-medium">Remark <span class="text-muted-foreground text-xs">- optional</span></label>
+                    <input id="editTokenRemark" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Add remark information">
                 </div>
 
                 <!-- Project ID -->
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">Project ID <span class="text-muted-foreground text-xs">- 可选</span></label>
-                    <input id="editTokenProjectId" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder="若不填写则保持原有值">
-                    <p class="text-xs text-muted-foreground">修改Project ID会更新Token使用的项目</p>
+                    <label class="text-sm font-medium">Project ID <span class="text-muted-foreground text-xs">- optional</span></label>
+                    <input id="editTokenProjectId" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder="Leave empty to keep current value">
+                    <p class="text-xs text-muted-foreground">Changing the Project ID will update the project used by this token</p>
                 </div>
 
                 <!-- Project Name -->
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">Project Name <span class="text-muted-foreground text-xs">- 可选</span></label>
-                    <input id="editTokenProjectName" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="若不填写则保持原有值">
+                    <label class="text-sm font-medium">Project Name <span class="text-muted-foreground text-xs">- optional</span></label>
+                    <input id="editTokenProjectName" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Leave empty to keep current value">
                 </div>
 
                 <!-- Captcha Proxy -->
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">打码代理 <span class="text-muted-foreground text-xs">- 可选</span></label>
-                    <input id="editTokenCaptchaProxyUrl" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder="例如 http://user:pass@host:port">
-                    <p class="text-xs text-muted-foreground">填写后优先覆盖全局打码代理，清空后恢复走全局打码代理</p>
+                    <label class="text-sm font-medium">Captcha Proxy <span class="text-muted-foreground text-xs">- optional</span></label>
+                    <input id="editTokenCaptchaProxyUrl" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder="e.g. http://user:pass@host:port">
+                    <p class="text-xs text-muted-foreground">When set, overrides the global captcha proxy. Clear to revert to global captcha proxy.</p>
                 </div>
 
-                <!-- 功能开关 -->
+                <!-- Feature Toggles -->
                 <div class="space-y-3 pt-2 border-t border-border">
-                    <label class="text-sm font-medium">功能开关</label>
+                    <label class="text-sm font-medium">Feature Toggles</label>
                     <div class="space-y-2">
                         <div class="flex items-center gap-3">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="editTokenImageEnabled" class="h-4 w-4 rounded border-input">
-                                <span class="text-sm font-medium">启用图片生成</span>
+                                <span class="text-sm font-medium">Enable Image Generation</span>
                             </label>
-                            <input type="number" id="editTokenImageConcurrency" class="flex h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="并发数" title="并发数量限制：设置同时处理的最大请求数。-1表示不限制">
+                            <input type="number" id="editTokenImageConcurrency" class="flex h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="Concurrency" title="Concurrency limit: sets the maximum number of simultaneous requests. -1 means no limit.">
                         </div>
                     </div>
                     <div class="space-y-2">
                         <div class="flex items-center gap-3">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="editTokenVideoEnabled" class="h-4 w-4 rounded border-input">
-                                <span class="text-sm font-medium">启用视频生成</span>
+                                <span class="text-sm font-medium">Enable Video Generation</span>
                             </label>
-                            <input type="number" id="editTokenVideoConcurrency" class="flex h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="并发数" title="并发数量限制：设置同时处理的最大请求数。-1表示不限制">
+                            <input type="number" id="editTokenVideoConcurrency" class="flex h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" placeholder="Concurrency" title="Concurrency limit: sets the maximum number of simultaneous requests. -1 means no limit.">
                         </div>
                     </div>
                 </div>
             </div>
             <div class="flex items-center justify-end gap-3 p-5 border-t border-border sticky bottom-0 bg-background">
-                <button onclick="closeEditModal()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-5">取消</button>
+                <button onclick="closeEditModal()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-5">Cancel</button>
                 <button id="editTokenBtn" onclick="submitEditToken()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-5">
-                    <span id="editTokenBtnText">保存</span>
+                    <span id="editTokenBtnText">Save</span>
                     <svg id="editTokenBtnSpinner" class="hidden animate-spin h-4 w-4 ml-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -721,11 +721,11 @@
         </div>
     </div>
 
-    <!-- Token 导入模态框 -->
+    <!-- Token Import Modal -->
     <div id="importModal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
         <div class="bg-background rounded-lg border border-border w-full max-w-md shadow-xl">
             <div class="flex items-center justify-between p-5 border-b border-border">
-                <h3 class="text-lg font-semibold">导入 Token</h3>
+                <h3 class="text-lg font-semibold">Import Token</h3>
                 <button onclick="closeImportModal()" class="text-muted-foreground hover:text-foreground">
                     <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -735,20 +735,20 @@
             </div>
             <div class="p-5 space-y-4">
                 <div>
-                    <label class="text-sm font-medium mb-2 block">选择 JSON 文件</label>
+                    <label class="text-sm font-medium mb-2 block">Select JSON File</label>
                     <input type="file" id="importFile" accept=".json" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                    <p class="text-xs text-muted-foreground mt-1">选择导出的 Token JSON 文件进行导入</p>
+                    <p class="text-xs text-muted-foreground mt-1">Select an exported Token JSON file to import</p>
                 </div>
                 <div class="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800">
                     <p class="text-xs text-blue-800 dark:text-blue-200">
-                        <strong>说明：</strong>如果邮箱存在则会覆盖更新，不存在则会新增
+                        <strong>Note:</strong> If an email already exists, it will be updated. Otherwise, a new entry will be added.
                     </p>
                 </div>
             </div>
             <div class="flex items-center justify-end gap-3 p-5 border-t border-border">
-                <button onclick="closeImportModal()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-5">取消</button>
+                <button onclick="closeImportModal()" class="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent h-9 px-5">Cancel</button>
                 <button id="importBtn" onclick="submitImportTokens()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-5">
-                    <span id="importBtnText">导入</span>
+                    <span id="importBtnText">Import</span>
                     <svg id="importBtnSpinner" class="hidden animate-spin h-4 w-4 ml-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -763,85 +763,85 @@
         const $=(id)=>document.getElementById(id),
         checkAuth=()=>{const t=localStorage.getItem('adminToken');return t||(location.href='/login',null),t},
         apiRequest=async(url,opts={})=>{const t=checkAuth();if(!t)return null;const r=await fetch(url,{...opts,headers:{...opts.headers,Authorization:`Bearer ${t}`,'Content-Type':'application/json'}});return r.status===401?(localStorage.removeItem('adminToken'),location.href='/login',null):r},
-        loadStats=async()=>{try{const r=await apiRequest('/api/stats');if(!r)return;const d=await r.json();$('statTotal').textContent=d.total_tokens||0;$('statActive').textContent=d.active_tokens||0;$('statImages').textContent=(d.today_images||0)+'/'+(d.total_images||0);$('statVideos').textContent=(d.today_videos||0)+'/'+(d.total_videos||0);$('statErrors').textContent=(d.today_errors||0)+'/'+(d.total_errors||0)}catch(e){console.error('加载统计失败:',e)}},
-        loadTokens=async()=>{try{const r=await apiRequest('/api/tokens');if(!r)return;allTokens=await r.json();renderTokens()}catch(e){console.error('加载Token失败:',e)}},
-        formatExpiry=exp=>{if(!exp)return'<span class="text-muted-foreground">-</span>';const d=new Date(exp),now=new Date(),diff=d-now;const dateStr=d.toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}).replace(/\//g,'-');const timeStr=d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false});const hours=Math.floor(diff/36e5);if(diff<0)return`<span class="text-red-600 font-medium" title="已过期">已过期</span>`;if(hours<1)return`<span class="text-red-600 font-medium" title="${dateStr} ${timeStr}">${Math.floor(diff/6e4)}分钟</span>`;if(hours<24)return`<span class="text-orange-600 font-medium" title="${dateStr} ${timeStr}">${hours}小时</span>`;const days=Math.floor(diff/864e5);if(days<7)return`<span class="text-orange-600" title="${dateStr} ${timeStr}">${days}天</span>`;return`<span class="text-muted-foreground" title="${dateStr} ${timeStr}">${days}天</span>`},
+        loadStats=async()=>{try{const r=await apiRequest('/api/stats');if(!r)return;const d=await r.json();$('statTotal').textContent=d.total_tokens||0;$('statActive').textContent=d.active_tokens||0;$('statImages').textContent=(d.today_images||0)+'/'+(d.total_images||0);$('statVideos').textContent=(d.today_videos||0)+'/'+(d.total_videos||0);$('statErrors').textContent=(d.today_errors||0)+'/'+(d.total_errors||0)}catch(e){console.error('Failed to load stats:',e)}},
+        loadTokens=async()=>{try{const r=await apiRequest('/api/tokens');if(!r)return;allTokens=await r.json();renderTokens()}catch(e){console.error('Failed to load tokens:',e)}},
+        formatExpiry=exp=>{if(!exp)return'<span class="text-muted-foreground">-</span>';const d=new Date(exp),now=new Date(),diff=d-now;const dateStr=d.toLocaleDateString('en-US',{year:'numeric',month:'2-digit',day:'2-digit'}).replace(/\//g,'-');const timeStr=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});const hours=Math.floor(diff/36e5);if(diff<0)return`<span class="text-red-600 font-medium" title="Expired">Expired</span>`;if(hours<1)return`<span class="text-red-600 font-medium" title="${dateStr} ${timeStr}">${Math.floor(diff/6e4)}m</span>`;if(hours<24)return`<span class="text-orange-600 font-medium" title="${dateStr} ${timeStr}">${hours}h</span>`;const days=Math.floor(diff/864e5);if(days<7)return`<span class="text-orange-600" title="${dateStr} ${timeStr}">${days}d</span>`;return`<span class="text-muted-foreground" title="${dateStr} ${timeStr}">${days}d</span>`},
         formatPlanType=type=>{if(!type)return'-';const typeMap={'chatgpt_team':'Team','chatgpt_plus':'Plus','chatgpt_pro':'Pro','chatgpt_free':'Free'};return typeMap[type]||type},
-        formatSora2=(t)=>{if(t.sora2_supported===true){const remaining=t.sora2_total_count-t.sora2_redeemed_count;const tooltipText=`邀请码: ${t.sora2_invite_code||'无'}\n可用次数: ${remaining}/${t.sora2_total_count}\n已用次数: ${t.sora2_redeemed_count}`;return`<div class="inline-flex items-center gap-1"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-green-50 text-green-700 cursor-pointer" title="${tooltipText}" onclick="copySora2Code('${t.sora2_invite_code||''}')">支持</span><span class="text-xs text-muted-foreground" title="${tooltipText}">${remaining}/${t.sora2_total_count}</span></div>`}else if(t.sora2_supported===false){return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-gray-100 text-gray-700 cursor-pointer" title="点击使用邀请码激活" onclick="openSora2Modal(${t.id})">不支持</span>`}else{return'-'}},
-        formatPlanTypeWithTooltip=(t)=>{const tooltipText=t.subscription_end?`套餐到期: ${new Date(t.subscription_end).toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}).replace(/\//g,'-')} ${new Date(t.subscription_end).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})}`:'';return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700 cursor-pointer" title="${tooltipText||t.plan_title||'-'}">${formatPlanType(t.plan_type)}</span>`},
+        formatSora2=(t)=>{if(t.sora2_supported===true){const remaining=t.sora2_total_count-t.sora2_redeemed_count;const tooltipText=`Invite code: ${t.sora2_invite_code||'none'}\nAvailable uses: ${remaining}/${t.sora2_total_count}\nRedeemed: ${t.sora2_redeemed_count}`;return`<div class="inline-flex items-center gap-1"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-green-50 text-green-700 cursor-pointer" title="${tooltipText}" onclick="copySora2Code('${t.sora2_invite_code||''}')">Supported</span><span class="text-xs text-muted-foreground" title="${tooltipText}">${remaining}/${t.sora2_total_count}</span></div>`}else if(t.sora2_supported===false){return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-gray-100 text-gray-700 cursor-pointer" title="Click to activate with invite code" onclick="openSora2Modal(${t.id})">Not Supported</span>`}else{return'-'}},
+        formatPlanTypeWithTooltip=(t)=>{const tooltipText=t.subscription_end?`Subscription expires: ${new Date(t.subscription_end).toLocaleDateString('en-US',{year:'numeric',month:'2-digit',day:'2-digit'}).replace(/\//g,'-')} ${new Date(t.subscription_end).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})}`:'';return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700 cursor-pointer" title="${tooltipText||t.plan_title||'-'}">${formatPlanType(t.plan_type)}</span>`},
         formatSora2Remaining=(t)=>{if(t.sora2_supported===true){const remaining=t.sora2_remaining_count||0;return`<span class="text-xs">${remaining}</span>`}else{return'-'}},
-        formatAccountType=(tier)=>{if(tier==='PAYGATE_TIER_NOT_PAID'||!tier){return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-gray-100 text-gray-700">普通</span>`}if(tier==='PAYGATE_TIER_ONE'){return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700">Pro</span>`}if(tier==='PAYGATE_TIER_TWO'){return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-purple-50 text-purple-700">Ult</span>`}return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-amber-50 text-amber-700" title="${tier}">${tier}</span>`},
+        formatAccountType=(tier)=>{if(tier==='PAYGATE_TIER_NOT_PAID'||!tier){return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-gray-100 text-gray-700">Free</span>`}if(tier==='PAYGATE_TIER_ONE'){return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700">Pro</span>`}if(tier==='PAYGATE_TIER_TWO'){return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-purple-50 text-purple-700">Ult</span>`}return`<span class="inline-flex items-center rounded px-2 py-0.5 text-xs bg-amber-50 text-amber-700" title="${tier}">${tier}</span>`},
         formatProjectNameDisplay=name=>{if(!name)return'<span class="text-muted-foreground">-</span>';const text=String(name);const match=text.match(/^(.*?)(?:\s+(P\d+))$/);if(match){return`<div class="flex flex-col items-center justify-center gap-1 leading-none"><span class="text-xs font-medium text-foreground whitespace-nowrap">${escapeLogHtml(match[1])}</span><span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">${escapeLogHtml(match[2])}</span></div>`}return`<div class="text-center text-xs font-medium text-foreground whitespace-nowrap">${escapeLogHtml(text)}</div>`},
-        formatProjectIdDisplay=projectId=>{if(!projectId)return'<span class="text-muted-foreground">-</span>';const text=String(projectId);const short=text.length>8?`${text.substring(0,8)}...`:text;return`<button onclick="copyProjectId('${projectId}')" class="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-mono font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800" title="点击复制项目ID&#10;${escapeLogHtml(text)}">${escapeLogHtml(short)}</button>`},
-        renderTokenActions=t=>{const toggleLabel=t.is_active?'禁用':'启用';return`<div class="inline-flex flex-nowrap items-center justify-end gap-1"><button onclick="refreshTokenAT(${t.id})" class="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium hover:bg-blue-50 hover:text-blue-700">刷新AT</button><button onclick="openEditModal(${t.id})" class="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium hover:bg-green-50 hover:text-green-700">详情</button><button onclick="toggleToken(${t.id},${t.is_active})" class="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium hover:bg-accent">${toggleLabel}</button><button onclick="deleteToken(${t.id})" class="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium hover:bg-destructive/10 hover:text-destructive">删除</button></div>`},
-        renderTokens=()=>{const tb=$('tokenTableBody');tb.innerHTML=allTokens.map(t=>{const imageDisplay=t.image_enabled?`${t.image_count||0}`:'-';const videoDisplay=t.video_enabled?`${t.video_count||0}`:'-';const creditsDisplay=t.credits!==undefined?`${t.credits}`:'-';const accountTypeDisplay=formatAccountType(t.user_paygate_tier);const projectIdDisplay=formatProjectIdDisplay(t.current_project_id);const expiryDisplay=formatExpiry(t.at_expires);const tokenActions=renderTokenActions(t);return`<tr class="hover:bg-muted/20 transition-colors"><td class="py-3 px-2.5 align-middle"><div class="max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground" title="${escapeLogHtml(t.email||'')}">${escapeLogHtml(t.email||'-')}</div></td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${t.is_active?'bg-green-50 text-green-700':'bg-gray-100 text-gray-700'}">${t.is_active?'启用':'禁用'}</span></td><td class="py-3 px-2.5 text-center text-xs align-middle whitespace-nowrap">${expiryDisplay}</td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><button onclick="refreshTokenCredits(${t.id})" class="inline-flex items-center justify-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800" title="点击刷新余额"><span>${creditsDisplay}</span><svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/><path d="M15 4.5l3.5 3.5L22 4.5"/></svg></button></td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap">${accountTypeDisplay}</td><td class="py-3 px-2.5 text-center text-xs align-middle whitespace-nowrap">${projectIdDisplay}</td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><span class="text-sm font-medium">${imageDisplay}</span></td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><span class="text-sm font-medium">${videoDisplay}</span></td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><span class="text-sm font-medium ${Number(t.error_count||0)>0?'text-red-600':'text-foreground'}">${t.error_count||0}</span></td><td class="py-3 px-2.5 text-right align-middle whitespace-nowrap">${tokenActions}</td></tr>`}).join('')},
-        refreshTokenCredits=async(id)=>{try{showToast('正在刷新余额...','info');const r=await apiRequest(`/api/tokens/${id}/refresh-credits`,{method:'POST'});if(!r)return;const d=await r.json();if(d.success){showToast(`余额刷新成功: ${d.credits}`,'success');await refreshTokens()}else{showToast('刷新余额失败: '+(d.detail||'未知错误'),'error')}}catch(e){showToast('刷新余额失败: '+e.message,'error')}},
-        refreshTokenAT=async(id)=>{try{showToast('正在更新AT...','info');const r=await apiRequest(`/api/tokens/${id}/refresh-at`,{method:'POST'});if(!r)return;const d=await r.json();if(d.success){const expiresDate=d.token.at_expires?new Date(d.token.at_expires):null;const expiresStr=expiresDate?expiresDate.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(/\//g,'-'):'未知';showToast(`AT更新成功! 新过期时间: ${expiresStr}`,'success');await refreshTokens()}else{showToast('更新失败: '+(d.detail||'未知错误'),'error')}}catch(e){showToast('更新失败: '+e.message,'error')}},
+        formatProjectIdDisplay=projectId=>{if(!projectId)return'<span class="text-muted-foreground">-</span>';const text=String(projectId);const short=text.length>8?`${text.substring(0,8)}...`:text;return`<button onclick="copyProjectId('${projectId}')" class="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-mono font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800" title="Click to copy Project ID&#10;${escapeLogHtml(text)}">${escapeLogHtml(short)}</button>`},
+        renderTokenActions=t=>{const toggleLabel=t.is_active?'Disable':'Enable';return`<div class="inline-flex flex-nowrap items-center justify-end gap-1"><button onclick="refreshTokenAT(${t.id})" class="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium hover:bg-blue-50 hover:text-blue-700">Refresh AT</button><button onclick="openEditModal(${t.id})" class="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium hover:bg-green-50 hover:text-green-700">Details</button><button onclick="toggleToken(${t.id},${t.is_active})" class="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium hover:bg-accent">${toggleLabel}</button><button onclick="deleteToken(${t.id})" class="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium hover:bg-destructive/10 hover:text-destructive">Delete</button></div>`},
+        renderTokens=()=>{const tb=$('tokenTableBody');tb.innerHTML=allTokens.map(t=>{const imageDisplay=t.image_enabled?`${t.image_count||0}`:'-';const videoDisplay=t.video_enabled?`${t.video_count||0}`:'-';const creditsDisplay=t.credits!==undefined?`${t.credits}`:'-';const accountTypeDisplay=formatAccountType(t.user_paygate_tier);const projectIdDisplay=formatProjectIdDisplay(t.current_project_id);const expiryDisplay=formatExpiry(t.at_expires);const tokenActions=renderTokenActions(t);return`<tr class="hover:bg-muted/20 transition-colors"><td class="py-3 px-2.5 align-middle"><div class="max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground" title="${escapeLogHtml(t.email||'')}">${escapeLogHtml(t.email||'-')}</div></td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${t.is_active?'bg-green-50 text-green-700':'bg-gray-100 text-gray-700'}">${t.is_active?'Enable':'Disable'}</span></td><td class="py-3 px-2.5 text-center text-xs align-middle whitespace-nowrap">${expiryDisplay}</td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><button onclick="refreshTokenCredits(${t.id})" class="inline-flex items-center justify-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800" title="Click to refresh credits"><span>${creditsDisplay}</span><svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/><path d="M15 4.5l3.5 3.5L22 4.5"/></svg></button></td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap">${accountTypeDisplay}</td><td class="py-3 px-2.5 text-center text-xs align-middle whitespace-nowrap">${projectIdDisplay}</td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><span class="text-sm font-medium">${imageDisplay}</span></td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><span class="text-sm font-medium">${videoDisplay}</span></td><td class="py-3 px-2.5 text-center align-middle whitespace-nowrap"><span class="text-sm font-medium ${Number(t.error_count||0)>0?'text-red-600':'text-foreground'}">${t.error_count||0}</span></td><td class="py-3 px-2.5 text-right align-middle whitespace-nowrap">${tokenActions}</td></tr>`}).join('')},
+        refreshTokenCredits=async(id)=>{try{showToast('Refreshing credits...','info');const r=await apiRequest(`/api/tokens/${id}/refresh-credits`,{method:'POST'});if(!r)return;const d=await r.json();if(d.success){showToast(`Credits refreshed successfully: ${d.credits}`,'success');await refreshTokens()}else{showToast('Failed to refresh credits:'+(d.detail||'Unknown error'),'error')}}catch(e){showToast('Failed to refresh credits:'+e.message,'error')}},
+        refreshTokenAT=async(id)=>{try{showToast('Updating AT...','info');const r=await apiRequest(`/api/tokens/${id}/refresh-at`,{method:'POST'});if(!r)return;const d=await r.json();if(d.success){const expiresDate=d.token.at_expires?new Date(d.token.at_expires):null;const expiresStr=expiresDate?expiresDate.toLocaleString('en-US',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(/\//g,'-'):'Unknown';showToast(`AT updated successfully! New expiry time: ${expiresStr}`,'success');await refreshTokens()}else{showToast('Update failed:'+(d.detail||'Unknown error'),'error')}}catch(e){showToast('Update failed:'+e.message,'error')}},
         refreshTokens=async()=>{await loadTokens();await loadStats()},
         openAddModal=()=>$('addModal').classList.remove('hidden'),
         closeAddModal=()=>{$('addModal').classList.add('hidden');$('addTokenST').value='';$('addTokenRemark').value='';$('addTokenProjectId').value='';$('addTokenProjectName').value='';$('addTokenCaptchaProxyUrl').value='';$('addTokenImageEnabled').checked=true;$('addTokenVideoEnabled').checked=true;$('addTokenImageConcurrency').value='-1';$('addTokenVideoConcurrency').value='-1'},
-        openEditModal=(id)=>{const token=allTokens.find(t=>t.id===id);if(!token)return showToast('Token不存在','error');$('editTokenId').value=token.id;$('editTokenST').value=token.st||'';$('editTokenRemark').value=token.remark||'';$('editTokenProjectId').value=token.current_project_id||'';$('editTokenProjectName').value=token.current_project_name||'';$('editTokenCaptchaProxyUrl').value=token.captcha_proxy_url||'';$('editTokenImageEnabled').checked=token.image_enabled!==false;$('editTokenVideoEnabled').checked=token.video_enabled!==false;$('editTokenImageConcurrency').value=token.image_concurrency||'-1';$('editTokenVideoConcurrency').value=token.video_concurrency||'-1';$('editModal').classList.remove('hidden')},
+        openEditModal=(id)=>{const token=allTokens.find(t=>t.id===id);if(!token)return showToast('Token not found','error');$('editTokenId').value=token.id;$('editTokenST').value=token.st||'';$('editTokenRemark').value=token.remark||'';$('editTokenProjectId').value=token.current_project_id||'';$('editTokenProjectName').value=token.current_project_name||'';$('editTokenCaptchaProxyUrl').value=token.captcha_proxy_url||'';$('editTokenImageEnabled').checked=token.image_enabled!==false;$('editTokenVideoEnabled').checked=token.video_enabled!==false;$('editTokenImageConcurrency').value=token.image_concurrency||'-1';$('editTokenVideoConcurrency').value=token.video_concurrency||'-1';$('editModal').classList.remove('hidden')},
         closeEditModal=()=>{$('editModal').classList.add('hidden');$('editTokenId').value='';$('editTokenST').value='';$('editTokenRemark').value='';$('editTokenProjectId').value='';$('editTokenProjectName').value='';$('editTokenCaptchaProxyUrl').value='';$('editTokenImageEnabled').checked=true;$('editTokenVideoEnabled').checked=true;$('editTokenImageConcurrency').value='';$('editTokenVideoConcurrency').value=''},
-        submitEditToken=async()=>{const id=parseInt($('editTokenId').value),st=$('editTokenST').value.trim(),remark=$('editTokenRemark').value.trim(),projectId=$('editTokenProjectId').value.trim(),projectName=$('editTokenProjectName').value.trim(),captchaProxyUrl=$('editTokenCaptchaProxyUrl').value.trim(),imageEnabled=$('editTokenImageEnabled').checked,videoEnabled=$('editTokenVideoEnabled').checked,imageConcurrency=$('editTokenImageConcurrency').value?parseInt($('editTokenImageConcurrency').value):null,videoConcurrency=$('editTokenVideoConcurrency').value?parseInt($('editTokenVideoConcurrency').value):null;if(!id)return showToast('Token ID无效','error');if(!st)return showToast('请输入 Session Token','error');const btn=$('editTokenBtn'),btnText=$('editTokenBtnText'),btnSpinner=$('editTokenBtnSpinner');btn.disabled=true;btnText.textContent='保存中...';btnSpinner.classList.remove('hidden');try{const r=await apiRequest(`/api/tokens/${id}`,{method:'PUT',body:JSON.stringify({st:st,remark:remark||null,project_id:projectId||null,project_name:projectName||null,captcha_proxy_url:captchaProxyUrl,image_enabled:imageEnabled,video_enabled:videoEnabled,image_concurrency:imageConcurrency,video_concurrency:videoConcurrency})});if(!r){btn.disabled=false;btnText.textContent='保存';btnSpinner.classList.add('hidden');return}const d=await r.json();if(d.success){closeEditModal();await refreshTokens();showToast('Token更新成功','success')}else{showToast('更新失败: '+(d.detail||d.message||'未知错误'),'error')}}catch(e){showToast('更新失败: '+e.message,'error')}finally{btn.disabled=false;btnText.textContent='保存';btnSpinner.classList.add('hidden')}},
-        convertST2AT=async()=>{const st=$('addTokenST').value.trim();if(!st)return showToast('请先输入 Session Token','error');try{showToast('正在转换 ST→AT...','info');const r=await apiRequest('/api/tokens/st2at',{method:'POST',body:JSON.stringify({st:st})});if(!r)return;const d=await r.json();if(d.success&&d.access_token){$('addTokenAT').value=d.access_token;showToast('转换成功！AT已自动填入','success')}else{showToast('转换失败: '+(d.message||d.detail||'未知错误'),'error')}}catch(e){showToast('转换失败: '+e.message,'error')}},
-        convertEditST2AT=async()=>{const st=$('editTokenST').value.trim();if(!st)return showToast('请先输入 Session Token','error');try{showToast('正在转换 ST→AT...','info');const r=await apiRequest('/api/tokens/st2at',{method:'POST',body:JSON.stringify({st:st})});if(!r)return;const d=await r.json();if(d.success&&d.access_token){$('editTokenAT').value=d.access_token;showToast('转换成功！AT已自动填入','success')}else{showToast('转换失败: '+(d.message||d.detail||'未知错误'),'error')}}catch(e){showToast('转换失败: '+e.message,'error')}},
-        submitAddToken=async()=>{const st=$('addTokenST').value.trim(),remark=$('addTokenRemark').value.trim(),projectId=$('addTokenProjectId').value.trim(),projectName=$('addTokenProjectName').value.trim(),captchaProxyUrl=$('addTokenCaptchaProxyUrl').value.trim(),imageEnabled=$('addTokenImageEnabled').checked,videoEnabled=$('addTokenVideoEnabled').checked,imageConcurrency=parseInt($('addTokenImageConcurrency').value)||(-1),videoConcurrency=parseInt($('addTokenVideoConcurrency').value)||(-1);if(!st)return showToast('请输入 Session Token','error');const btn=$('addTokenBtn'),btnText=$('addTokenBtnText'),btnSpinner=$('addTokenBtnSpinner');btn.disabled=true;btnText.textContent='添加中...';btnSpinner.classList.remove('hidden');try{const r=await apiRequest('/api/tokens',{method:'POST',body:JSON.stringify({st:st,remark:remark||null,project_id:projectId||null,project_name:projectName||null,captcha_proxy_url:captchaProxyUrl,image_enabled:imageEnabled,video_enabled:videoEnabled,image_concurrency:imageConcurrency,video_concurrency:videoConcurrency})});if(!r){btn.disabled=false;btnText.textContent='添加';btnSpinner.classList.add('hidden');return}const d=await r.json();if(d.success){closeAddModal();await refreshTokens();showToast('Token添加成功','success')}else{showToast('添加失败: '+(d.detail||d.message||'未知错误'),'error')}}catch(e){showToast('添加失败: '+e.message,'error')}finally{btn.disabled=false;btnText.textContent='添加';btnSpinner.classList.add('hidden')}},
-        testToken=async(id)=>{try{showToast('正在测试Token...','info');const r=await apiRequest(`/api/tokens/${id}/test`,{method:'POST'});if(!r)return;const d=await r.json();if(d.success&&d.status==='success'){let msg=`Token有效！用户: ${d.email||'未知'}`;if(d.sora2_supported){const remaining=d.sora2_total_count-d.sora2_redeemed_count;msg+=`\nSora2: 支持 (${remaining}/${d.sora2_total_count})`;if(d.sora2_remaining_count!==undefined){msg+=`\n可用次数: ${d.sora2_remaining_count}`}}showToast(msg,'success');await refreshTokens()}else{showToast(`Token无效: ${d.message||'未知错误'}`,'error')}}catch(e){showToast('测试失败: '+e.message,'error')}},
-        toggleToken=async(id,isActive)=>{const action=isActive?'disable':'enable';try{const r=await apiRequest(`/api/tokens/${id}/${action}`,{method:'POST'});if(!r)return;const d=await r.json();d.success?(await refreshTokens(),showToast(isActive?'Token已禁用':'Token已启用','success')):showToast('操作失败','error')}catch(e){showToast('操作失败: '+e.message,'error')}},
-        toggleTokenStatus=async(id,active)=>{try{const r=await apiRequest(`/api/tokens/${id}/status`,{method:'PUT',body:JSON.stringify({is_active:active})});if(!r)return;const d=await r.json();d.success?(await refreshTokens(),showToast('状态更新成功','success')):showToast('更新失败','error')}catch(e){showToast('更新失败: '+e.message,'error')}},
-        deleteToken=async(id,skipConfirm=false)=>{if(!skipConfirm&&!confirm('确定要删除这个Token吗?'))return;try{const r=await apiRequest(`/api/tokens/${id}`,{method:'DELETE'});if(!r)return;const d=await r.json();if(d.success){await refreshTokens();if(!skipConfirm)showToast('删除成功','success');return true}else{if(!skipConfirm)showToast('删除失败','error');return false}}catch(e){if(!skipConfirm)showToast('删除失败: '+e.message,'error');return false}},
-        copySora2Code=async(code)=>{if(!code){showToast('没有可复制的邀请码','error');return}try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(code);showToast(`邀请码已复制: ${code}`,'success')}else{const textarea=document.createElement('textarea');textarea.value=code;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const success=document.execCommand('copy');document.body.removeChild(textarea);if(success){showToast(`邀请码已复制: ${code}`,'success')}else{showToast('复制失败: 浏览器不支持','error')}}}catch(e){showToast('复制失败: '+e.message,'error')}},
-        copyProjectId=async(projectId)=>{if(!projectId){showToast('没有可复制的Project ID','error');return}try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(projectId);showToast(`Project ID已复制: ${projectId}`,'success')}else{const textarea=document.createElement('textarea');textarea.value=projectId;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const success=document.execCommand('copy');document.body.removeChild(textarea);if(success){showToast(`Project ID已复制: ${projectId}`,'success')}else{showToast('复制失败: 浏览器不支持','error')}}}catch(e){showToast('复制失败: '+e.message,'error')}},
+        submitEditToken=async()=>{const id=parseInt($('editTokenId').value),st=$('editTokenST').value.trim(),remark=$('editTokenRemark').value.trim(),projectId=$('editTokenProjectId').value.trim(),projectName=$('editTokenProjectName').value.trim(),captchaProxyUrl=$('editTokenCaptchaProxyUrl').value.trim(),imageEnabled=$('editTokenImageEnabled').checked,videoEnabled=$('editTokenVideoEnabled').checked,imageConcurrency=$('editTokenImageConcurrency').value?parseInt($('editTokenImageConcurrency').value):null,videoConcurrency=$('editTokenVideoConcurrency').value?parseInt($('editTokenVideoConcurrency').value):null;if(!id)return showToast('Invalid Token ID','error');if(!st)return showToast('Enter Session Token','error');const btn=$('editTokenBtn'),btnText=$('editTokenBtnText'),btnSpinner=$('editTokenBtnSpinner');btn.disabled=true;btnText.textContent='Saving...';btnSpinner.classList.remove('hidden');try{const r=await apiRequest(`/api/tokens/${id}`,{method:'PUT',body:JSON.stringify({st:st,remark:remark||null,project_id:projectId||null,project_name:projectName||null,captcha_proxy_url:captchaProxyUrl,image_enabled:imageEnabled,video_enabled:videoEnabled,image_concurrency:imageConcurrency,video_concurrency:videoConcurrency})});if(!r){btn.disabled=false;btnText.textContent='Save';btnSpinner.classList.add('hidden');return}const d=await r.json();if(d.success){closeEditModal();await refreshTokens();showToast('Token updated successfully','success')}else{showToast('Update failed:'+(d.detail||d.message||'Unknown error'),'error')}}catch(e){showToast('Update failed:'+e.message,'error')}finally{btn.disabled=false;btnText.textContent='Save';btnSpinner.classList.add('hidden')}},
+        convertST2AT=async()=>{const st=$('addTokenST').value.trim();if(!st)return showToast('Please enter Session Token first','error');try{showToast('Converting ST to AT...','info');const r=await apiRequest('/api/tokens/st2at',{method:'POST',body:JSON.stringify({st:st})});if(!r)return;const d=await r.json();if(d.success&&d.access_token){$('addTokenAT').value=d.access_token;showToast('Conversion successful! AT auto-filled','success')}else{showToast('Conversion failed:'+(d.message||d.detail||'Unknown error'),'error')}}catch(e){showToast('Conversion failed:'+e.message,'error')}},
+        convertEditST2AT=async()=>{const st=$('editTokenST').value.trim();if(!st)return showToast('Please enter Session Token first','error');try{showToast('Converting ST to AT...','info');const r=await apiRequest('/api/tokens/st2at',{method:'POST',body:JSON.stringify({st:st})});if(!r)return;const d=await r.json();if(d.success&&d.access_token){$('editTokenAT').value=d.access_token;showToast('Conversion successful! AT auto-filled','success')}else{showToast('Conversion failed:'+(d.message||d.detail||'Unknown error'),'error')}}catch(e){showToast('Conversion failed:'+e.message,'error')}},
+        submitAddToken=async()=>{const st=$('addTokenST').value.trim(),remark=$('addTokenRemark').value.trim(),projectId=$('addTokenProjectId').value.trim(),projectName=$('addTokenProjectName').value.trim(),captchaProxyUrl=$('addTokenCaptchaProxyUrl').value.trim(),imageEnabled=$('addTokenImageEnabled').checked,videoEnabled=$('addTokenVideoEnabled').checked,imageConcurrency=parseInt($('addTokenImageConcurrency').value)||(-1),videoConcurrency=parseInt($('addTokenVideoConcurrency').value)||(-1);if(!st)return showToast('Enter Session Token','error');const btn=$('addTokenBtn'),btnText=$('addTokenBtnText'),btnSpinner=$('addTokenBtnSpinner');btn.disabled=true;btnText.textContent='Adding...';btnSpinner.classList.remove('hidden');try{const r=await apiRequest('/api/tokens',{method:'POST',body:JSON.stringify({st:st,remark:remark||null,project_id:projectId||null,project_name:projectName||null,captcha_proxy_url:captchaProxyUrl,image_enabled:imageEnabled,video_enabled:videoEnabled,image_concurrency:imageConcurrency,video_concurrency:videoConcurrency})});if(!r){btn.disabled=false;btnText.textContent='Add';btnSpinner.classList.add('hidden');return}const d=await r.json();if(d.success){closeAddModal();await refreshTokens();showToast('Token added successfully','success')}else{showToast('Add failed:'+(d.detail||d.message||'Unknown error'),'error')}}catch(e){showToast('Add failed:'+e.message,'error')}finally{btn.disabled=false;btnText.textContent='Add';btnSpinner.classList.add('hidden')}},
+        testToken=async(id)=>{try{showToast('Testing token...','info');const r=await apiRequest(`/api/tokens/${id}/test`,{method:'POST'});if(!r)return;const d=await r.json();if(d.success&&d.status==='success'){let msg=`Token is valid! User: ${d.email||'Unknown'}`;if(d.sora2_supported){const remaining=d.sora2_total_count-d.sora2_redeemed_count;msg+=`\nSora2: Supported (${remaining}/${d.sora2_total_count})`;if(d.sora2_remaining_count!==undefined){msg+=`\nAvailable uses: ${d.sora2_remaining_count}`}}showToast(msg,'success');await refreshTokens()}else{showToast(`Token is invalid: ${d.message||'Unknown error'}`,'error')}}catch(e){showToast('Test failed:'+e.message,'error')}},
+        toggleToken=async(id,isActive)=>{const action=isActive?'disable':'enable';try{const r=await apiRequest(`/api/tokens/${id}/${action}`,{method:'POST'});if(!r)return;const d=await r.json();d.success?(await refreshTokens(),showToast(isActive?'Token disabled':'Token enabled','success')):showToast('Action failed','error')}catch(e){showToast('Action failed: '+e.message,'error')}},
+        toggleTokenStatus=async(id,active)=>{try{const r=await apiRequest(`/api/tokens/${id}/status`,{method:'PUT',body:JSON.stringify({is_active:active})});if(!r)return;const d=await r.json();d.success?(await refreshTokens(),showToast('Status updated successfully','success')):showToast('Update failed','error')}catch(e){showToast('Update failed:'+e.message,'error')}},
+        deleteToken=async(id,skipConfirm=false)=>{if(!skipConfirm&&!confirm('Are you sure you want to delete this token?'))return;try{const r=await apiRequest(`/api/tokens/${id}`,{method:'DELETE'});if(!r)return;const d=await r.json();if(d.success){await refreshTokens();if(!skipConfirm)showToast('Deleted successfully','success');return true}else{if(!skipConfirm)showToast('Delete failed','error');return false}}catch(e){if(!skipConfirm)showToast('Delete failed: '+e.message,'error');return false}},
+        copySora2Code=async(code)=>{if(!code){showToast('No invite code to copy','error');return}try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(code);showToast(`Invite code copied: ${code}`,'success')}else{const textarea=document.createElement('textarea');textarea.value=code;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const success=document.execCommand('copy');document.body.removeChild(textarea);if(success){showToast(`Invite code copied: ${code}`,'success')}else{showToast('Copy failed: browser not supported','error')}}}catch(e){showToast('Copy failed: '+e.message,'error')}},
+        copyProjectId=async(projectId)=>{if(!projectId){showToast('No Project ID to copy','error');return}try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(projectId);showToast(`Project ID copied: ${projectId}`,'success')}else{const textarea=document.createElement('textarea');textarea.value=projectId;textarea.style.position='fixed';textarea.style.opacity='0';document.body.appendChild(textarea);textarea.select();const success=document.execCommand('copy');document.body.removeChild(textarea);if(success){showToast(`Project ID copied: ${projectId}`,'success')}else{showToast('Copy failed: browser not supported','error')}}}catch(e){showToast('Copy failed: '+e.message,'error')}},
         openSora2Modal=(id)=>{$('sora2TokenId').value=id;$('sora2InviteCode').value='';$('sora2Modal').classList.remove('hidden')},
         closeSora2Modal=()=>{$('sora2Modal').classList.add('hidden');$('sora2TokenId').value='';$('sora2InviteCode').value=''},
         openImportModal=()=>{$('importModal').classList.remove('hidden');$('importFile').value=''},
         closeImportModal=()=>{$('importModal').classList.add('hidden');$('importFile').value=''},
-        exportTokens=()=>{if(allTokens.length===0){showToast('没有Token可导出','error');return}const exportData=allTokens.map(t=>({email:t.email,access_token:t.token,session_token:t.st||null,is_active:t.is_active,captcha_proxy_url:t.captcha_proxy_url||'',image_enabled:t.image_enabled!==false,video_enabled:t.video_enabled!==false,image_concurrency:t.image_concurrency||(-1),video_concurrency:t.video_concurrency||(-1)}));const dataStr=JSON.stringify(exportData,null,2);const dataBlob=new Blob([dataStr],{type:'application/json'});const url=URL.createObjectURL(dataBlob);const link=document.createElement('a');link.href=url;link.download=`tokens_${new Date().toISOString().split('T')[0]}.json`;document.body.appendChild(link);link.click();document.body.removeChild(link);URL.revokeObjectURL(url);showToast(`已导出 ${allTokens.length} 个Token`,'success')},
-        submitImportTokens=async()=>{const fileInput=$('importFile');if(!fileInput.files||fileInput.files.length===0){showToast('请选择文件','error');return}const file=fileInput.files[0];if(!file.name.endsWith('.json')){showToast('请选择JSON文件','error');return}try{const fileContent=await file.text();const importData=JSON.parse(fileContent);if(!Array.isArray(importData)){showToast('JSON格式错误：应为数组','error');return}if(importData.length===0){showToast('JSON文件为空','error');return}const btn=$('importBtn'),btnText=$('importBtnText'),btnSpinner=$('importBtnSpinner');btn.disabled=true;btnText.textContent='导入中...';btnSpinner.classList.remove('hidden');try{const r=await apiRequest('/api/tokens/import',{method:'POST',body:JSON.stringify({tokens:importData})});if(!r){btn.disabled=false;btnText.textContent='导入';btnSpinner.classList.add('hidden');return}const d=await r.json();if(d.success){closeImportModal();await refreshTokens();const msg=`导入成功！新增: ${d.added||0}, 更新: ${d.updated||0}`;showToast(msg,'success')}else{showToast('导入失败: '+(d.detail||d.message||'未知错误'),'error')}}catch(e){showToast('导入失败: '+e.message,'error')}finally{btn.disabled=false;btnText.textContent='导入';btnSpinner.classList.add('hidden')}}catch(e){showToast('文件解析失败: '+e.message,'error')}},
-        submitSora2Activate=async()=>{const tokenId=parseInt($('sora2TokenId').value),inviteCode=$('sora2InviteCode').value.trim();if(!tokenId)return showToast('Token ID无效','error');if(!inviteCode)return showToast('请输入邀请码','error');if(inviteCode.length!==6)return showToast('邀请码必须是6位','error');const btn=$('sora2ActivateBtn'),btnText=$('sora2ActivateBtnText'),btnSpinner=$('sora2ActivateBtnSpinner');btn.disabled=true;btnText.textContent='激活中...';btnSpinner.classList.remove('hidden');try{showToast('正在激活Sora2...','info');const r=await apiRequest(`/api/tokens/${tokenId}/sora2/activate?invite_code=${inviteCode}`,{method:'POST'});if(!r){btn.disabled=false;btnText.textContent='激活';btnSpinner.classList.add('hidden');return}const d=await r.json();if(d.success){closeSora2Modal();await refreshTokens();if(d.already_accepted){showToast('Sora2已激活（之前已接受）','success')}else{showToast(`Sora2激活成功！邀请码: ${d.invite_code||'无'}`,'success')}}else{showToast('激活失败: '+(d.message||'未知错误'),'error')}}catch(e){showToast('激活失败: '+e.message,'error')}finally{btn.disabled=false;btnText.textContent='激活';btnSpinner.classList.add('hidden')}},
-        loadAdminConfig=async()=>{try{const r=await apiRequest('/api/admin/config');if(!r)return;const d=await r.json();$('cfgErrorBan').value=d.error_ban_threshold||3;$('cfgAdminUsername').value=d.admin_username||'admin';$('cfgCurrentAPIKey').value=d.api_key||'';$('cfgDebugEnabled').checked=d.debug_enabled||false}catch(e){console.error('加载配置失败:',e)}},
-        saveAdminConfig=async()=>{try{const r=await apiRequest('/api/admin/config',{method:'POST',body:JSON.stringify({error_ban_threshold:parseInt($('cfgErrorBan').value)||3})});if(!r)return;const d=await r.json();d.success?showToast('配置保存成功','success'):showToast('保存失败','error')}catch(e){showToast('保存失败: '+e.message,'error')}},
-        updateAdminPassword=async()=>{const username=$('cfgAdminUsername').value.trim(),oldPwd=$('cfgOldPassword').value.trim(),newPwd=$('cfgNewPassword').value.trim();if(!oldPwd||!newPwd)return showToast('请输入旧密码和新密码','error');if(newPwd.length<4)return showToast('新密码至少4个字符','error');try{const r=await apiRequest('/api/admin/password',{method:'POST',body:JSON.stringify({username:username||undefined,old_password:oldPwd,new_password:newPwd})});if(!r)return;const d=await r.json();if(d.success){showToast('密码修改成功，请重新登录','success');setTimeout(()=>{localStorage.removeItem('adminToken');location.href='/login'},2000)}else{showToast('修改失败: '+(d.detail||'未知错误'),'error')}}catch(e){showToast('修改失败: '+e.message,'error')}},
-        updateAPIKey=async()=>{const newKey=$('cfgNewAPIKey').value.trim();if(!newKey)return showToast('请输入新的 API Key','error');if(newKey.length<6)return showToast('API Key 至少6个字符','error');if(!confirm('确定要更新 API Key 吗？更新后需要通知所有客户端使用新密钥。'))return;try{const r=await apiRequest('/api/admin/apikey',{method:'POST',body:JSON.stringify({new_api_key:newKey})});if(!r)return;const d=await r.json();if(d.success){showToast('API Key 更新成功','success');$('cfgCurrentAPIKey').value=newKey;$('cfgNewAPIKey').value=''}else{showToast('更新失败: '+(d.detail||'未知错误'),'error')}}catch(e){showToast('更新失败: '+e.message,'error')}},
-        toggleDebugMode=async()=>{const enabled=$('cfgDebugEnabled').checked;try{const r=await apiRequest('/api/admin/debug',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r)return;const d=await r.json();if(d.success){showToast(enabled?'调试模式已开启':'调试模式已关闭','success')}else{showToast('操作失败: '+(d.detail||'未知错误'),'error');$('cfgDebugEnabled').checked=!enabled}}catch(e){showToast('操作失败: '+e.message,'error');$('cfgDebugEnabled').checked=!enabled}},
-        loadProxyConfig=async()=>{try{const r=await apiRequest('/api/proxy/config');if(!r)return;const d=await r.json();$('cfgProxyEnabled').checked=d.proxy_enabled||false;$('cfgProxyUrl').value=d.proxy_url||'';$('cfgMediaProxyEnabled').checked=d.media_proxy_enabled||false;$('cfgMediaProxyUrl').value=d.media_proxy_url||'';toggleMediaProxyInput()}catch(e){console.error('加载代理配置失败:',e)}},
-        saveProxyConfig=async()=>{try{const r=await apiRequest('/api/proxy/config',{method:'POST',body:JSON.stringify({proxy_enabled:$('cfgProxyEnabled').checked,proxy_url:$('cfgProxyUrl').value.trim(),media_proxy_enabled:$('cfgMediaProxyEnabled').checked,media_proxy_url:$('cfgMediaProxyUrl').value.trim()})});if(!r)return;const d=await r.json();d.success?showToast('代理配置保存成功','success'):showToast('保存失败','error')}catch(e){showToast('保存失败: '+e.message,'error')}},
+        exportTokens=()=>{if(allTokens.length===0){showToast('No tokens to export','error');return}const exportData=allTokens.map(t=>({email:t.email,access_token:t.token,session_token:t.st||null,is_active:t.is_active,captcha_proxy_url:t.captcha_proxy_url||'',image_enabled:t.image_enabled!==false,video_enabled:t.video_enabled!==false,image_concurrency:t.image_concurrency||(-1),video_concurrency:t.video_concurrency||(-1)}));const dataStr=JSON.stringify(exportData,null,2);const dataBlob=new Blob([dataStr],{type:'application/json'});const url=URL.createObjectURL(dataBlob);const link=document.createElement('a');link.href=url;link.download=`tokens_${new Date().toISOString().split('T')[0]}.json`;document.body.appendChild(link);link.click();document.body.removeChild(link);URL.revokeObjectURL(url);showToast(`Export ${allTokens.length} Token`,'success')},
+        submitImportTokens=async()=>{const fileInput=$('importFile');if(!fileInput.files||fileInput.files.length===0){showToast('Please select a file','error');return}const file=fileInput.files[0];if(!file.name.endsWith('.json')){showToast('Please select a JSON file','error');return}try{const fileContent=await file.text();const importData=JSON.parse(fileContent);if(!Array.isArray(importData)){showToast('JSON format error: expected an array','error');return}if(importData.length===0){showToast('JSON file is empty','error');return}const btn=$('importBtn'),btnText=$('importBtnText'),btnSpinner=$('importBtnSpinner');btn.disabled=true;btnText.textContent='Importing...';btnSpinner.classList.remove('hidden');try{const r=await apiRequest('/api/tokens/import',{method:'POST',body:JSON.stringify({tokens:importData})});if(!r){btn.disabled=false;btnText.textContent='Import';btnSpinner.classList.add('hidden');return}const d=await r.json();if(d.success){closeImportModal();await refreshTokens();const msg=`Import successful! Added: ${d.added||0}, Updated: ${d.updated||0}`;showToast(msg,'success')}else{showToast('Import failed:'+(d.detail||d.message||'Unknown error'),'error')}}catch(e){showToast('Import failed:'+e.message,'error')}finally{btn.disabled=false;btnText.textContent='Import';btnSpinner.classList.add('hidden')}}catch(e){showToast('File parsing failed:'+e.message,'error')}},
+        submitSora2Activate=async()=>{const tokenId=parseInt($('sora2TokenId').value),inviteCode=$('sora2InviteCode').value.trim();if(!tokenId)return showToast('Invalid Token ID','error');if(!inviteCode)return showToast('Enter invite code','error');if(inviteCode.length!==6)return showToast('Invite code must be 6 characters','error');const btn=$('sora2ActivateBtn'),btnText=$('sora2ActivateBtnText'),btnSpinner=$('sora2ActivateBtnSpinner');btn.disabled=true;btnText.textContent='Activating...';btnSpinner.classList.remove('hidden');try{showToast('Activating Sora2...','info');const r=await apiRequest(`/api/tokens/${tokenId}/sora2/activate?invite_code=${inviteCode}`,{method:'POST'});if(!r){btn.disabled=false;btnText.textContent='Activate';btnSpinner.classList.add('hidden');return}const d=await r.json();if(d.success){closeSora2Modal();await refreshTokens();if(d.already_accepted){showToast('Sora2 activated (previously accepted)','success')}else{showToast(`Sora2 activated successfully! Invite code: ${d.invite_code||'none'}`,'success')}}else{showToast('Activation failed:'+(d.message||'Unknown error'),'error')}}catch(e){showToast('Activation failed:'+e.message,'error')}finally{btn.disabled=false;btnText.textContent='Activate';btnSpinner.classList.add('hidden')}},
+        loadAdminConfig=async()=>{try{const r=await apiRequest('/api/admin/config');if(!r)return;const d=await r.json();$('cfgErrorBan').value=d.error_ban_threshold||3;$('cfgAdminUsername').value=d.admin_username||'admin';$('cfgCurrentAPIKey').value=d.api_key||'';$('cfgDebugEnabled').checked=d.debug_enabled||false}catch(e){console.error('Failed to load config:',e)}},
+        saveAdminConfig=async()=>{try{const r=await apiRequest('/api/admin/config',{method:'POST',body:JSON.stringify({error_ban_threshold:parseInt($('cfgErrorBan').value)||3})});if(!r)return;const d=await r.json();d.success?showToast('Configuration saved successfully','success'):showToast('Save failed','error')}catch(e){showToast('Save failed: '+e.message,'error')}},
+        updateAdminPassword=async()=>{const username=$('cfgAdminUsername').value.trim(),oldPwd=$('cfgOldPassword').value.trim(),newPwd=$('cfgNewPassword').value.trim();if(!oldPwd||!newPwd)return showToast('Enter old password and new password','error');if(newPwd.length<4)return showToast('New password must be at least 4 characters','error');try{const r=await apiRequest('/api/admin/password',{method:'POST',body:JSON.stringify({username:username||undefined,old_password:oldPwd,new_password:newPwd})});if(!r)return;const d=await r.json();if(d.success){showToast('Password changed successfully, please log in again','success');setTimeout(()=>{localStorage.removeItem('adminToken');location.href='/login'},2000)}else{showToast('Change failed:'+(d.detail||'Unknown error'),'error')}}catch(e){showToast('Change failed:'+e.message,'error')}},
+        updateAPIKey=async()=>{const newKey=$('cfgNewAPIKey').value.trim();if(!newKey)return showToast('Enter new API Key','error');if(newKey.length<6)return showToast('API Key must be at least 6 characters','error');if(!confirm('Are you sure you want to update the API Key? After updating, you need to notify all clients to use the new key.'))return;try{const r=await apiRequest('/api/admin/apikey',{method:'POST',body:JSON.stringify({new_api_key:newKey})});if(!r)return;const d=await r.json();if(d.success){showToast('API Key updated successfully','success');$('cfgCurrentAPIKey').value=newKey;$('cfgNewAPIKey').value=''}else{showToast('Update failed:'+(d.detail||'Unknown error'),'error')}}catch(e){showToast('Update failed:'+e.message,'error')}},
+        toggleDebugMode=async()=>{const enabled=$('cfgDebugEnabled').checked;try{const r=await apiRequest('/api/admin/debug',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r)return;const d=await r.json();if(d.success){showToast(enabled?'Debug mode enabled':'Debug mode disabled','success')}else{showToast('Action failed: '+(d.detail||'Unknown error'),'error');$('cfgDebugEnabled').checked=!enabled}}catch(e){showToast('Action failed: '+e.message,'error');$('cfgDebugEnabled').checked=!enabled}},
+        loadProxyConfig=async()=>{try{const r=await apiRequest('/api/proxy/config');if(!r)return;const d=await r.json();$('cfgProxyEnabled').checked=d.proxy_enabled||false;$('cfgProxyUrl').value=d.proxy_url||'';$('cfgMediaProxyEnabled').checked=d.media_proxy_enabled||false;$('cfgMediaProxyUrl').value=d.media_proxy_url||'';toggleMediaProxyInput()}catch(e){console.error('Failed to load proxy settings:',e)}},
+        saveProxyConfig=async()=>{try{const r=await apiRequest('/api/proxy/config',{method:'POST',body:JSON.stringify({proxy_enabled:$('cfgProxyEnabled').checked,proxy_url:$('cfgProxyUrl').value.trim(),media_proxy_enabled:$('cfgMediaProxyEnabled').checked,media_proxy_url:$('cfgMediaProxyUrl').value.trim()})});if(!r)return;const d=await r.json();d.success?showToast('Proxy settings saved successfully','success'):showToast('Save failed','error')}catch(e){showToast('Save failed: '+e.message,'error')}},
         updateProxyTestResult=(message,isSuccess)=>{const el=$('proxyTestResult');if(!el)return;el.textContent=message;el.className=`text-xs mt-2 ${isSuccess?'text-green-600':'text-red-600'}`},
-        testProxyConfig=async()=>{const tests=[];const requestProxyUrl=$('cfgProxyUrl').value.trim();const mediaProxyUrl=$('cfgMediaProxyUrl').value.trim();const testUrl='https://labs.google/';if(requestProxyUrl)tests.push({name:'请求代理',proxy_url:requestProxyUrl});if(mediaProxyUrl&&mediaProxyUrl!==requestProxyUrl)tests.push({name:'媒体代理',proxy_url:mediaProxyUrl});if(tests.length===0){updateProxyTestResult('请先填写至少一个代理地址',false);showToast('请先填写代理地址','error');return}const btn=$('btnTestProxy');if(btn){btn.disabled=true;btn.textContent='测试中...'}try{const results=[];for(const item of tests){const r=await apiRequest('/api/proxy/test',{method:'POST',body:JSON.stringify({proxy_url:item.proxy_url,test_url:testUrl})});if(!r){results.push({name:item.name,success:false,message:'请求失败'});continue}const d=await r.json();results.push({name:item.name,success:!!d.success,message:d.message||'未知结果',status_code:d.status_code,elapsed_ms:d.elapsed_ms,final_url:d.final_url})}const allPass=results.every(x=>x.success);const summary=results.map(x=>`${x.name}: ${x.success?'✅':'❌'} ${x.message}${x.status_code?` (HTTP ${x.status_code})`:''}${x.elapsed_ms!==undefined?` ${x.elapsed_ms}ms`:''}`).join(' | ');updateProxyTestResult(summary,allPass);showToast(allPass?'代理测试通过':'代理测试未全部通过',allPass?'success':'error')}catch(e){updateProxyTestResult('代理测试失败: '+e.message,false);showToast('代理测试失败: '+e.message,'error')}finally{if(btn){btn.disabled=false;btn.textContent='测试代理'}}},
+        testProxyConfig=async()=>{const tests=[];const requestProxyUrl=$('cfgProxyUrl').value.trim();const mediaProxyUrl=$('cfgMediaProxyUrl').value.trim();const testUrl='https://labs.google/';if(requestProxyUrl)tests.push({name:'Request Proxy',proxy_url:requestProxyUrl});if(mediaProxyUrl&&mediaProxyUrl!==requestProxyUrl)tests.push({name:'Media Proxy',proxy_url:mediaProxyUrl});if(tests.length===0){updateProxyTestResult('Please enter at least one proxy URL',false);showToast('Please enter a proxy URL','error');return}const btn=$('btnTestProxy');if(btn){btn.disabled=true;btn.textContent='Testing...'}try{const results=[];for(const item of tests){const r=await apiRequest('/api/proxy/test',{method:'POST',body:JSON.stringify({proxy_url:item.proxy_url,test_url:testUrl})});if(!r){results.push({name:item.name,success:false,message:'Request failed'});continue}const d=await r.json();results.push({name:item.name,success:!!d.success,message:d.message||'Unknown result',status_code:d.status_code,elapsed_ms:d.elapsed_ms,final_url:d.final_url})}const allPass=results.every(x=>x.success);const summary=results.map(x=>`${x.name}: ${x.success?'✅':'❌'} ${x.message}${x.status_code?` (HTTP ${x.status_code})`:''}${x.elapsed_ms!==undefined?` ${x.elapsed_ms}ms`:''}`).join(' | ');updateProxyTestResult(summary,allPass);showToast(allPass?'Proxy test passed':'Proxy test did not all pass',allPass?'success':'error')}catch(e){updateProxyTestResult('Proxy test failed:'+e.message,false);showToast('Proxy test failed:'+e.message,'error')}finally{if(btn){btn.disabled=false;btn.textContent='Test Proxy'}}},
         toggleMediaProxyInput=()=>{const enabled=$('cfgMediaProxyEnabled').checked;$('mediaProxyUrlInput').classList.toggle('hidden',!enabled)},
         toggleCacheOptions=()=>{const enabled=$('cfgCacheEnabled').checked;$('cacheOptions').style.display=enabled?'block':'none'},
-        loadCacheConfig=async()=>{try{console.log('开始加载缓存配置...');const r=await apiRequest('/api/cache/config');if(!r){console.error('API请求失败');return}const d=await r.json();console.log('缓存配置数据:',d);if(d.success&&d.config){const enabled=d.config.enabled!==false;const timeout=d.config.timeout??7200;const baseUrl=d.config.base_url||'';const effectiveUrl=d.config.effective_base_url||'';console.log('设置缓存启用:',enabled);console.log('设置超时时间:',timeout);console.log('设置域名:',baseUrl);console.log('生效URL:',effectiveUrl);$('cfgCacheEnabled').checked=enabled;$('cfgCacheTimeout').value=timeout;$('cfgCacheBaseUrl').value=baseUrl;if(effectiveUrl){$('cacheEffectiveUrlValue').textContent=effectiveUrl;$('cacheEffectiveUrl').classList.remove('hidden')}else{$('cacheEffectiveUrl').classList.add('hidden')}toggleCacheOptions();console.log('缓存配置加载成功')}else{console.error('缓存配置数据格式错误:',d)}}catch(e){console.error('加载缓存配置失败:',e);showToast('加载缓存配置失败: '+e.message,'error')}},
-        loadGenerationTimeout=async()=>{try{console.log('开始加载生成超时配置...');const r=await apiRequest('/api/generation/timeout');if(!r){console.error('API请求失败');return}const d=await r.json();console.log('生成超时配置数据:',d);if(d.success&&d.config){const imageTimeout=d.config.image_timeout||300;const videoTimeout=d.config.video_timeout||1500;console.log('设置图片超时:',imageTimeout);console.log('设置视频超时:',videoTimeout);$('cfgImageTimeout').value=imageTimeout;$('cfgVideoTimeout').value=videoTimeout;console.log('生成超时配置加载成功')}else{console.error('生成超时配置数据格式错误:',d)}}catch(e){console.error('加载生成超时配置失败:',e);showToast('加载生成超时配置失败: '+e.message,'error')}},
-        saveCacheConfig=async()=>{const enabled=$('cfgCacheEnabled').checked,timeoutInput=$('cfgCacheTimeout').value.trim(),timeout=timeoutInput===''?7200:parseInt(timeoutInput,10),baseUrl=$('cfgCacheBaseUrl').value.trim();console.log('保存缓存配置:',{enabled,timeout,baseUrl});if(Number.isNaN(timeout)||timeout<0||timeout>86400)return showToast('缓存超时时间必须在 0-86400 秒之间，0 表示不删除','error');if(baseUrl&&!baseUrl.startsWith('http://')&&!baseUrl.startsWith('https://'))return showToast('域名必须以 http:// 或 https:// 开头','error');try{console.log('保存缓存启用状态...');const r0=await apiRequest('/api/cache/enabled',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r0){console.error('保存缓存启用状态请求失败');return}const d0=await r0.json();console.log('缓存启用状态保存结果:',d0);if(!d0.success){console.error('保存缓存启用状态失败:',d0);return showToast('保存缓存启用状态失败','error')}console.log('保存超时时间...');const r1=await apiRequest('/api/cache/config',{method:'POST',body:JSON.stringify({timeout:timeout})});if(!r1){console.error('保存超时时间请求失败');return}const d1=await r1.json();console.log('超时时间保存结果:',d1);if(!d1.success){console.error('保存超时时间失败:',d1);return showToast('保存超时时间失败','error')}console.log('保存域名...');const r2=await apiRequest('/api/cache/base-url',{method:'POST',body:JSON.stringify({base_url:baseUrl})});if(!r2){console.error('保存域名请求失败');return}const d2=await r2.json();console.log('域名保存结果:',d2);if(d2.success){showToast('缓存配置保存成功','success');console.log('等待配置文件写入完成...');await new Promise(r=>setTimeout(r,200));console.log('重新加载配置...');await loadCacheConfig()}else{console.error('保存域名失败:',d2);showToast('保存域名失败','error')}}catch(e){console.error('保存失败:',e);showToast('保存失败: '+e.message,'error')}},
-        saveGenerationTimeout=async()=>{const imageTimeout=parseInt($('cfgImageTimeout').value)||300,videoTimeout=parseInt($('cfgVideoTimeout').value)||1500;console.log('保存生成超时配置:',{imageTimeout,videoTimeout});if(imageTimeout<60||imageTimeout>3600)return showToast('图片超时时间必须在 60-3600 秒之间','error');if(videoTimeout<60||videoTimeout>7200)return showToast('视频超时时间必须在 60-7200 秒之间','error');try{const r=await apiRequest('/api/generation/timeout',{method:'POST',body:JSON.stringify({image_timeout:imageTimeout,video_timeout:videoTimeout})});if(!r){console.error('保存请求失败');return}const d=await r.json();console.log('保存结果:',d);if(d.success){showToast('生成超时配置保存成功','success');await new Promise(r=>setTimeout(r,200));await loadGenerationTimeout()}else{console.error('保存失败:',d);showToast('保存失败','error')}}catch(e){console.error('保存失败:',e);showToast('保存失败: '+e.message,'error')}},
+        loadCacheConfig=async()=>{try{console.log('Loading cache settings...');const r=await apiRequest('/api/cache/config');if(!r){console.error('API request failed');return}const d=await r.json();console.log('Cache settings data:',d);if(d.success&&d.config){const enabled=d.config.enabled!==false;const timeout=d.config.timeout??7200;const baseUrl=d.config.base_url||'';const effectiveUrl=d.config.effective_base_url||'';console.log('Setting cache enabled:',enabled);console.log('Setting timeout:',timeout);console.log('Setting domain:',baseUrl);console.log('Effective URL:',effectiveUrl);$('cfgCacheEnabled').checked=enabled;$('cfgCacheTimeout').value=timeout;$('cfgCacheBaseUrl').value=baseUrl;if(effectiveUrl){$('cacheEffectiveUrlValue').textContent=effectiveUrl;$('cacheEffectiveUrl').classList.remove('hidden')}else{$('cacheEffectiveUrl').classList.add('hidden')}toggleCacheOptions();console.log('Cache settings loaded successfully')}else{console.error('Cache settings data format error:',d)}}catch(e){console.error('Failed to load cache settings:',e);showToast('Failed to load cache settings:'+e.message,'error')}},
+        loadGenerationTimeout=async()=>{try{console.log('Loading generation timeout settings...');const r=await apiRequest('/api/generation/timeout');if(!r){console.error('API request failed');return}const d=await r.json();console.log('Generation timeout settings data:',d);if(d.success&&d.config){const imageTimeout=d.config.image_timeout||300;const videoTimeout=d.config.video_timeout||1500;console.log('Setting image timeout:',imageTimeout);console.log('Setting video timeout:',videoTimeout);$('cfgImageTimeout').value=imageTimeout;$('cfgVideoTimeout').value=videoTimeout;console.log('Generation timeout settings loaded successfully')}else{console.error('Generation timeout settings data format error:',d)}}catch(e){console.error('Failed to load generation timeout settings:',e);showToast('Failed to load generation timeout settings:'+e.message,'error')}},
+        saveCacheConfig=async()=>{const enabled=$('cfgCacheEnabled').checked,timeoutInput=$('cfgCacheTimeout').value.trim(),timeout=timeoutInput===''?7200:parseInt(timeoutInput,10),baseUrl=$('cfgCacheBaseUrl').value.trim();console.log('Saving cache settings:',{enabled,timeout,baseUrl});if(Number.isNaN(timeout)||timeout<0||timeout>86400)return showToast('Cache timeout must be between 0-86400 seconds. 0 means no deletion.','error');if(baseUrl&&!baseUrl.startsWith('http://')&&!baseUrl.startsWith('https://'))return showToast('Domain must start with http:// or https://','error');try{console.log('Saving cache enabled status...');const r0=await apiRequest('/api/cache/enabled',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r0){console.error('Save cache enabled status request failed');return}const d0=await r0.json();console.log('Cache enabled status save result:',d0);if(!d0.success){console.error('Failed to save cache enabled status:',d0);return showToast('Failed to save cache enabled status','error')}console.log('Saving timeout...');const r1=await apiRequest('/api/cache/config',{method:'POST',body:JSON.stringify({timeout:timeout})});if(!r1){console.error('Save timeout request failed');return}const d1=await r1.json();console.log('Timeout save result:',d1);if(!d1.success){console.error('Failed to save timeout:',d1);return showToast('Failed to save timeout','error')}console.log('Saving domain...');const r2=await apiRequest('/api/cache/base-url',{method:'POST',body:JSON.stringify({base_url:baseUrl})});if(!r2){console.error('Save domain request failed');return}const d2=await r2.json();console.log('Domain save result:',d2);if(d2.success){showToast('Cache settings saved successfully','success');console.log('Waiting for config file write to complete...');await new Promise(r=>setTimeout(r,200));console.log('Reloading config...');await loadCacheConfig()}else{console.error('Failed to save domain:',d2);showToast('Failed to save domain','error')}}catch(e){console.error('Save failed:',e);showToast('Save failed: '+e.message,'error')}},
+        saveGenerationTimeout=async()=>{const imageTimeout=parseInt($('cfgImageTimeout').value)||300,videoTimeout=parseInt($('cfgVideoTimeout').value)||1500;console.log('Saving generation timeout settings:',{imageTimeout,videoTimeout});if(imageTimeout<60||imageTimeout>3600)return showToast('Image timeout must be between 60-3600 seconds','error');if(videoTimeout<60||videoTimeout>7200)return showToast('Video timeout must be between 60-7200 seconds','error');try{const r=await apiRequest('/api/generation/timeout',{method:'POST',body:JSON.stringify({image_timeout:imageTimeout,video_timeout:videoTimeout})});if(!r){console.error('Save request failed');return}const d=await r.json();console.log('Save result:',d);if(d.success){showToast('Generation timeout settings saved successfully','success');await new Promise(r=>setTimeout(r,200));await loadGenerationTimeout()}else{console.error('Save failed:',d);showToast('Save failed','error')}}catch(e){console.error('Save failed:',e);showToast('Save failed: '+e.message,'error')}},
         toggleCaptchaOptions=()=>{const method=$('cfgCaptchaMethod').value;$('yescaptchaOptions').style.display=method==='yescaptcha'?'block':'none';$('capmonsterOptions').classList.toggle('hidden',method!=='capmonster');$('ezcaptchaOptions').classList.toggle('hidden',method!=='ezcaptcha');$('capsolverOptions').classList.toggle('hidden',method!=='capsolver');$('browserCaptchaOptions').classList.toggle('hidden',method!=='browser');$('remoteBrowserOptions').classList.toggle('hidden',method!=='remote_browser')},
         toggleBrowserProxyInput=()=>{const enabled=$('cfgBrowserProxyEnabled').checked;$('browserProxyUrlInput').classList.toggle('hidden',!enabled)},
-        loadCaptchaConfig=async()=>{try{console.log('开始加载验证码配置...');const r=await apiRequest('/api/captcha/config');if(!r){console.error('API请求失败');return}const d=await r.json();console.log('验证码配置数据:',d);$('cfgCaptchaMethod').value=d.captcha_method||'yescaptcha';$('cfgYescaptchaApiKey').value=d.yescaptcha_api_key||'';$('cfgYescaptchaBaseUrl').value=d.yescaptcha_base_url||'https://api.yescaptcha.com';$('cfgCapmonsterApiKey').value=d.capmonster_api_key||'';$('cfgCapmonsterBaseUrl').value=d.capmonster_base_url||'https://api.capmonster.cloud';$('cfgEzcaptchaApiKey').value=d.ezcaptcha_api_key||'';$('cfgEzcaptchaBaseUrl').value=d.ezcaptcha_base_url||'https://api.ez-captcha.com';$('cfgCapsolverApiKey').value=d.capsolver_api_key||'';$('cfgCapsolverBaseUrl').value=d.capsolver_base_url||'https://api.capsolver.com';$('cfgRemoteBrowserBaseUrl').value=d.remote_browser_base_url||'';$('cfgRemoteBrowserApiKey').value=d.remote_browser_api_key||'';$('cfgRemoteBrowserTimeout').value=d.remote_browser_timeout||60;$('cfgBrowserProxyEnabled').checked=d.browser_proxy_enabled||false;$('cfgBrowserProxyUrl').value=d.browser_proxy_url||'';$('cfgBrowserCount').value=d.browser_count||1;toggleCaptchaOptions();toggleBrowserProxyInput();console.log('验证码配置加载成功')}catch(e){console.error('加载验证码配置失败:',e);showToast('加载验证码配置失败: '+e.message,'error')}},
-        saveCaptchaConfig=async()=>{const method=$('cfgCaptchaMethod').value,yesApiKey=$('cfgYescaptchaApiKey').value.trim(),yesBaseUrl=$('cfgYescaptchaBaseUrl').value.trim(),capApiKey=$('cfgCapmonsterApiKey').value.trim(),capBaseUrl=$('cfgCapmonsterBaseUrl').value.trim(),ezApiKey=$('cfgEzcaptchaApiKey').value.trim(),ezBaseUrl=$('cfgEzcaptchaBaseUrl').value.trim(),solverApiKey=$('cfgCapsolverApiKey').value.trim(),solverBaseUrl=$('cfgCapsolverBaseUrl').value.trim(),remoteBaseUrl=$('cfgRemoteBrowserBaseUrl').value.trim(),remoteApiKey=$('cfgRemoteBrowserApiKey').value.trim(),remoteTimeout=parseInt($('cfgRemoteBrowserTimeout').value)||60,browserProxyEnabled=$('cfgBrowserProxyEnabled').checked,browserProxyUrl=$('cfgBrowserProxyUrl').value.trim(),browserCount=parseInt($('cfgBrowserCount').value)||1;console.log('保存验证码配置:',{method,yesApiKey,yesBaseUrl,capApiKey,capBaseUrl,ezApiKey,ezBaseUrl,solverApiKey,solverBaseUrl,remoteBaseUrl,remoteApiKey,remoteTimeout,browserProxyEnabled,browserProxyUrl,browserCount});try{const r=await apiRequest('/api/captcha/config',{method:'POST',body:JSON.stringify({captcha_method:method,yescaptcha_api_key:yesApiKey,yescaptcha_base_url:yesBaseUrl,capmonster_api_key:capApiKey,capmonster_base_url:capBaseUrl,ezcaptcha_api_key:ezApiKey,ezcaptcha_base_url:ezBaseUrl,capsolver_api_key:solverApiKey,capsolver_base_url:solverBaseUrl,remote_browser_base_url:remoteBaseUrl,remote_browser_api_key:remoteApiKey,remote_browser_timeout:remoteTimeout,browser_proxy_enabled:browserProxyEnabled,browser_proxy_url:browserProxyUrl,browser_count:browserCount})});if(!r){console.error('保存请求失败');return}const d=await r.json();console.log('保存结果:',d);if(d.success){showToast('验证码配置保存成功','success');await new Promise(r=>setTimeout(r,200));await loadCaptchaConfig()}else{console.error('保存失败:',d);showToast(d.message||'保存失败','error')}}catch(e){console.error('保存失败:',e);showToast('保存失败: '+e.message,'error')}},
+        loadCaptchaConfig=async()=>{try{console.log('Loading captcha settings...');const r=await apiRequest('/api/captcha/config');if(!r){console.error('API request failed');return}const d=await r.json();console.log('Captcha settings data:',d);$('cfgCaptchaMethod').value=d.captcha_method||'yescaptcha';$('cfgYescaptchaApiKey').value=d.yescaptcha_api_key||'';$('cfgYescaptchaBaseUrl').value=d.yescaptcha_base_url||'https://api.yescaptcha.com';$('cfgCapmonsterApiKey').value=d.capmonster_api_key||'';$('cfgCapmonsterBaseUrl').value=d.capmonster_base_url||'https://api.capmonster.cloud';$('cfgEzcaptchaApiKey').value=d.ezcaptcha_api_key||'';$('cfgEzcaptchaBaseUrl').value=d.ezcaptcha_base_url||'https://api.ez-captcha.com';$('cfgCapsolverApiKey').value=d.capsolver_api_key||'';$('cfgCapsolverBaseUrl').value=d.capsolver_base_url||'https://api.capsolver.com';$('cfgRemoteBrowserBaseUrl').value=d.remote_browser_base_url||'';$('cfgRemoteBrowserApiKey').value=d.remote_browser_api_key||'';$('cfgRemoteBrowserTimeout').value=d.remote_browser_timeout||60;$('cfgBrowserProxyEnabled').checked=d.browser_proxy_enabled||false;$('cfgBrowserProxyUrl').value=d.browser_proxy_url||'';$('cfgBrowserCount').value=d.browser_count||1;toggleCaptchaOptions();toggleBrowserProxyInput();console.log('Captcha settings loaded successfully')}catch(e){console.error('Failed to load captcha settings:',e);showToast('Failed to load captcha settings:'+e.message,'error')}},
+        saveCaptchaConfig=async()=>{const method=$('cfgCaptchaMethod').value,yesApiKey=$('cfgYescaptchaApiKey').value.trim(),yesBaseUrl=$('cfgYescaptchaBaseUrl').value.trim(),capApiKey=$('cfgCapmonsterApiKey').value.trim(),capBaseUrl=$('cfgCapmonsterBaseUrl').value.trim(),ezApiKey=$('cfgEzcaptchaApiKey').value.trim(),ezBaseUrl=$('cfgEzcaptchaBaseUrl').value.trim(),solverApiKey=$('cfgCapsolverApiKey').value.trim(),solverBaseUrl=$('cfgCapsolverBaseUrl').value.trim(),remoteBaseUrl=$('cfgRemoteBrowserBaseUrl').value.trim(),remoteApiKey=$('cfgRemoteBrowserApiKey').value.trim(),remoteTimeout=parseInt($('cfgRemoteBrowserTimeout').value)||60,browserProxyEnabled=$('cfgBrowserProxyEnabled').checked,browserProxyUrl=$('cfgBrowserProxyUrl').value.trim(),browserCount=parseInt($('cfgBrowserCount').value)||1;console.log('Saving captcha settings:',{method,yesApiKey,yesBaseUrl,capApiKey,capBaseUrl,ezApiKey,ezBaseUrl,solverApiKey,solverBaseUrl,remoteBaseUrl,remoteApiKey,remoteTimeout,browserProxyEnabled,browserProxyUrl,browserCount});try{const r=await apiRequest('/api/captcha/config',{method:'POST',body:JSON.stringify({captcha_method:method,yescaptcha_api_key:yesApiKey,yescaptcha_base_url:yesBaseUrl,capmonster_api_key:capApiKey,capmonster_base_url:capBaseUrl,ezcaptcha_api_key:ezApiKey,ezcaptcha_base_url:ezBaseUrl,capsolver_api_key:solverApiKey,capsolver_base_url:solverBaseUrl,remote_browser_base_url:remoteBaseUrl,remote_browser_api_key:remoteApiKey,remote_browser_timeout:remoteTimeout,browser_proxy_enabled:browserProxyEnabled,browser_proxy_url:browserProxyUrl,browser_count:browserCount})});if(!r){console.error('Save request failed');return}const d=await r.json();console.log('Save result:',d);if(d.success){showToast('Captcha settings saved successfully','success');await new Promise(r=>setTimeout(r,200));await loadCaptchaConfig()}else{console.error('Save failed:',d);showToast(d.message||'Save failed','error')}}catch(e){console.error('Save failed:',e);showToast('Save failed: '+e.message,'error')}},
         updateCaptchaScoreTestResult=(message,isSuccess)=>{const el=$('captchaScoreTestResult');if(!el)return;el.textContent=message;el.className=`text-xs mt-2 ${isSuccess?'text-green-600':'text-red-600'}`},
-        testCaptchaScore=async()=>{const btn=$('btnTestCaptchaScore');if(btn){btn.disabled=true;btn.textContent='测试中...'}updateCaptchaScoreTestResult('正在按当前打码方式测试分数...',true);try{const r=await apiRequest('/api/captcha/score-test',{method:'POST',body:JSON.stringify({})});if(!r){updateCaptchaScoreTestResult('分数测试请求失败',false);return}const d=await r.json();const verify=d.verify_result||{};const score=verify.score!==undefined?verify.score:(d.score!==undefined?d.score:'-');const action=verify.action||d.action||'-';const hostname=verify.hostname||'-';const parts=[`方式: ${d.captcha_method||'-'}`,`score=${score}`,`action=${action}`,`hostname=${hostname}`,d.token_elapsed_ms!==undefined?`取token ${d.token_elapsed_ms}ms`:null,d.verify_elapsed_ms!==undefined?`校验 ${d.verify_elapsed_ms}ms`:null,d.elapsed_ms!==undefined?`总耗时 ${d.elapsed_ms}ms`:null,d.message||null].filter(Boolean);updateCaptchaScoreTestResult(parts.join(' | '),!!d.success);showToast(d.success?`分数测试成功: ${score}`:`分数测试失败: ${d.message||'未知错误'}`,d.success?'success':'error')}catch(e){updateCaptchaScoreTestResult('分数测试失败: '+e.message,false);showToast('分数测试失败: '+e.message,'error')}finally{if(btn){btn.disabled=false;btn.textContent='测试当前打码分数'}}},
-        loadPluginConfig=async()=>{try{const r=await apiRequest('/api/plugin/config');if(!r)return;const d=await r.json();if(d.success&&d.config){$('cfgPluginConnectionUrl').value=d.config.connection_url||'';$('cfgPluginConnectionToken').value=d.config.connection_token||'';$('cfgAutoEnableOnUpdate').checked=d.config.auto_enable_on_update||false}}catch(e){console.error('加载插件配置失败:',e);showToast('加载插件配置失败: '+e.message,'error')}},
-        savePluginConfig=async()=>{const token=$('cfgPluginConnectionToken').value.trim();const autoEnable=$('cfgAutoEnableOnUpdate').checked;try{const r=await apiRequest('/api/plugin/config',{method:'POST',body:JSON.stringify({connection_token:token,auto_enable_on_update:autoEnable})});if(!r)return;const d=await r.json();if(d.success){showToast('插件配置保存成功','success');await loadPluginConfig()}else{showToast(d.message||'保存失败','error')}}catch(e){showToast('保存失败: '+e.message,'error')}},
-        copyConnectionUrl=()=>{const url=$('cfgPluginConnectionUrl').value;if(!url){showToast('连接接口为空','error');return}navigator.clipboard.writeText(url).then(()=>showToast('连接接口已复制','success')).catch(()=>showToast('复制失败','error'))},
-        copyConnectionToken=()=>{const token=$('cfgPluginConnectionToken').value;if(!token){showToast('连接Token为空','error');return}navigator.clipboard.writeText(token).then(()=>showToast('连接Token已复制','success')).catch(()=>showToast('复制失败','error'))},
-        generateRandomToken=()=>{const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';let token='';for(let i=0;i<32;i++){token+=chars.charAt(Math.floor(Math.random()*chars.length))}$('cfgPluginConnectionToken').value=token;showToast('随机Token已生成','success')},
-        toggleATAutoRefresh=async()=>{try{const enabled=$('atAutoRefreshToggle').checked;const r=await apiRequest('/api/token-refresh/enabled',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r){$('atAutoRefreshToggle').checked=!enabled;return}const d=await r.json();if(d.success){showToast(enabled?'AT自动刷新已启用':'AT自动刷新已禁用','success')}else{showToast('操作失败: '+(d.detail||'未知错误'),'error');$('atAutoRefreshToggle').checked=!enabled}}catch(e){showToast('操作失败: '+e.message,'error');$('atAutoRefreshToggle').checked=!enabled}},
-        loadATAutoRefreshConfig=async()=>{try{const r=await apiRequest('/api/token-refresh/config');if(!r)return;const d=await r.json();if(d.success&&d.config){$('atAutoRefreshToggle').checked=d.config.at_auto_refresh_enabled||false}else{console.error('AT自动刷新配置数据格式错误:',d)}}catch(e){console.error('加载AT自动刷新配置失败:',e)}},
-        formatLogStatus=l=>{const statusText=(l.status_text||'').trim();if(statusText){const map={started:'\u5df2\u542f\u52a8',token_selected:'\u5df2\u9009\u4e2d\u8d26\u53f7',token_ready:'\u51c6\u5907\u751f\u6210\u73af\u5883',project_ready:'\u9879\u76ee\u5df2\u5c31\u7eea',uploading_images:'\u4e0a\u4f20\u53c2\u8003\u56fe\u4e2d',submitting_image:'\u56fe\u7247\u63d0\u4ea4\u4e2d',image_generated:'\u56fe\u7247\u751f\u6210\u5b8c\u6210',preparing_video:'\u51c6\u5907\u89c6\u9891\u4efb\u52a1',submitting_video:'\u89c6\u9891\u63d0\u4ea4\u4e2d',video_submitted:'\u89c6\u9891\u4efb\u52a1\u5df2\u63d0\u4ea4',video_polling:'\u89c6\u9891\u751f\u6210\u4e2d',caching_image:'\u7f13\u5b58\u56fe\u7247\u4e2d',caching_video:'\u7f13\u5b58\u89c6\u9891\u4e2d',completed:'\u5df2\u5b8c\u6210',failed:'\u5931\u8d25',processing:'\u5904\u7406\u4e2d',upsampling_2k:'\u6b63\u5728\u653e\u5927\u52302K',upsampling_4k:'\u6b63\u5728\u653e\u5927\u52304K',upsampling_1080p:'\u6b63\u5728\u653e\u5927\u52301080P'};return map[statusText]||statusText}if(l.status_code===102)return'\u5904\u7406\u4e2d';if(l.status_code===200)return'\u5df2\u5b8c\u6210';if(l.status_code&&l.status_code>=400)return'\u5931\u8d25';return'-'},
-        formatLogStatusClass=l=>{const statusText=formatLogStatus(l);if(statusText==='\u5904\u7406\u4e2d')return'bg-amber-50 text-amber-700';if(statusText==='\u5df2\u5b8c\u6210')return'bg-green-50 text-green-700';if(statusText==='\u5931\u8d25')return'bg-red-50 text-red-700';return'bg-gray-100 text-gray-700'},
+        testCaptchaScore=async()=>{const btn=$('btnTestCaptchaScore');if(btn){btn.disabled=true;btn.textContent='Testing...'}updateCaptchaScoreTestResult('Testing score with current captcha method...',true);try{const r=await apiRequest('/api/captcha/score-test',{method:'POST',body:JSON.stringify({})});if(!r){updateCaptchaScoreTestResult('Score test request failed',false);return}const d=await r.json();const verify=d.verify_result||{};const score=verify.score!==undefined?verify.score:(d.score!==undefined?d.score:'-');const action=verify.action||d.action||'-';const hostname=verify.hostname||'-';const parts=[`Method: ${d.captcha_method||'-'}`,`score=${score}`,`action=${action}`,`hostname=${hostname}`,d.token_elapsed_ms!==undefined?`Get token ${d.token_elapsed_ms}ms`:null,d.verify_elapsed_ms!==undefined?`Verify ${d.verify_elapsed_ms}ms`:null,d.elapsed_ms!==undefined?`Total duration ${d.elapsed_ms}ms`:null,d.message||null].filter(Boolean);updateCaptchaScoreTestResult(parts.join(' | '),!!d.success);showToast(d.success?`Score test passed: ${score}`:`Score test failed: ${d.message||'Unknown error'}`,d.success?'success':'error')}catch(e){updateCaptchaScoreTestResult('Score test failed: '+e.message,false);showToast('Score test failed: '+e.message,'error')}finally{if(btn){btn.disabled=false;btn.textContent='Test Current Captcha Score'}}},
+        loadPluginConfig=async()=>{try{const r=await apiRequest('/api/plugin/config');if(!r)return;const d=await r.json();if(d.success&&d.config){$('cfgPluginConnectionUrl').value=d.config.connection_url||'';$('cfgPluginConnectionToken').value=d.config.connection_token||'';$('cfgAutoEnableOnUpdate').checked=d.config.auto_enable_on_update||false}}catch(e){console.error('Failed to load plugin settings:',e);showToast('Failed to load plugin settings: '+e.message,'error')}},
+        savePluginConfig=async()=>{const token=$('cfgPluginConnectionToken').value.trim();const autoEnable=$('cfgAutoEnableOnUpdate').checked;try{const r=await apiRequest('/api/plugin/config',{method:'POST',body:JSON.stringify({connection_token:token,auto_enable_on_update:autoEnable})});if(!r)return;const d=await r.json();if(d.success){showToast('Plugin settings saved successfully','success');await loadPluginConfig()}else{showToast(d.message||'Save failed','error')}}catch(e){showToast('Save failed: '+e.message,'error')}},
+        copyConnectionUrl=()=>{const url=$('cfgPluginConnectionUrl').value;if(!url){showToast('Connection endpoint is empty','error');return}navigator.clipboard.writeText(url).then(()=>showToast('Connection endpoint copied','success')).catch(()=>showToast('Copy failed','error'))},
+        copyConnectionToken=()=>{const token=$('cfgPluginConnectionToken').value;if(!token){showToast('Connection token is empty','error');return}navigator.clipboard.writeText(token).then(()=>showToast('Connection token copied','success')).catch(()=>showToast('Copy failed','error'))},
+        generateRandomToken=()=>{const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';let token='';for(let i=0;i<32;i++){token+=chars.charAt(Math.floor(Math.random()*chars.length))}$('cfgPluginConnectionToken').value=token;showToast('Random token generated','success')},
+        toggleATAutoRefresh=async()=>{try{const enabled=$('atAutoRefreshToggle').checked;const r=await apiRequest('/api/token-refresh/enabled',{method:'POST',body:JSON.stringify({enabled:enabled})});if(!r){$('atAutoRefreshToggle').checked=!enabled;return}const d=await r.json();if(d.success){showToast(enabled?'AT auto-refresh enabled':'AT auto-refresh disabled','success')}else{showToast('Action failed: '+(d.detail||'Unknown error'),'error');$('atAutoRefreshToggle').checked=!enabled}}catch(e){showToast('Action failed: '+e.message,'error');$('atAutoRefreshToggle').checked=!enabled}},
+        loadATAutoRefreshConfig=async()=>{try{const r=await apiRequest('/api/token-refresh/config');if(!r)return;const d=await r.json();if(d.success&&d.config){$('atAutoRefreshToggle').checked=d.config.at_auto_refresh_enabled||false}else{console.error('AT auto-refresh config data format error:',d)}}catch(e){console.error('Failed to load AT auto-refresh config:',e)}},
+        formatLogStatus=l=>{const statusText=(l.status_text||'').trim();if(statusText){const map={started:'Started',token_selected:'Token Selected',token_ready:'Generation Ready',project_ready:'Project Ready',uploading_images:'Uploading Images',submitting_image:'Submitting Image',image_generated:'Image Generated',preparing_video:'Preparing Video',submitting_video:'Submitting Video',video_submitted:'Video Submitted',video_polling:'Generating Video',caching_image:'Caching Image',caching_video:'Caching Video',completed:'Completed',failed:'Failed',processing:'Processing',upsampling_2k:'Upscaling to 2K',upsampling_4k:'Upscaling to 4K',upsampling_1080p:'Upscaling to 1080P'};return map[statusText]||statusText}if(l.status_code===102)return'Processing';if(l.status_code===200)return'Completed';if(l.status_code&&l.status_code>=400)return'Failed';return'-'},
+        formatLogStatusClass=l=>{const statusText=formatLogStatus(l);if(statusText==='Processing')return'bg-amber-50 text-amber-700';if(statusText==='Completed')return'bg-green-50 text-green-700';if(statusText==='Failed')return'bg-red-50 text-red-700';return'bg-gray-100 text-gray-700'},
         formatLogProgress=l=>{if(l.progress===null||l.progress===undefined||l.progress==='')return'-';const progress=Number(l.progress);return Number.isFinite(progress)?`${Math.max(0,Math.min(100,progress))}%`:'-'},
-        getLogOperationLabel=l=>{const operation=String(l&&l.operation||'').trim();if(operation==='generate_image')return'图片';if(operation==='generate_video')return'视频';return''},
-        formatLogOutcome=l=>{const statusCode=Number(l&&l.status_code);if(statusCode===200){const operationLabel=getLogOperationLabel(l);return operationLabel?`${operationLabel}结果已返回`:'已返回结果'}if(statusCode===102)return'处理中';const errorSummary=extractLogErrorSummary(l);if(errorSummary)return truncateLogText(errorSummary,96);return statusCode>=400?'请求失败':'-'},
+        getLogOperationLabel=l=>{const operation=String(l&&l.operation||'').trim();if(operation==='generate_image')return'Image';if(operation==='generate_video')return'Video';return''},
+        formatLogOutcome=l=>{const statusCode=Number(l&&l.status_code);if(statusCode===200){const operationLabel=getLogOperationLabel(l);return operationLabel?`${operationLabel} result returned`:'Result returned'}if(statusCode===102)return'Processing';const errorSummary=extractLogErrorSummary(l);if(errorSummary)return truncateLogText(errorSummary,96);return statusCode>=400?'Request failed':'-'},
         formatLogOutcomeClass=l=>{if((l.status_code||0)>=400)return'text-red-600';if(l.status_code===200)return'text-green-700';if(l.status_code===102)return'text-amber-700';return'text-muted-foreground'},
         startLogsAutoRefresh=()=>{stopLogsAutoRefresh()},
         stopLogsAutoRefresh=()=>{if(window.logsAutoRefreshTimer){clearInterval(window.logsAutoRefreshTimer);window.logsAutoRefreshTimer=null}},
-        loadLogs=async(opts={})=>{const silent=!!opts.silent;try{const r=await apiRequest('/api/logs?limit=100');if(!r)return;const logs=await r.json();window.allLogs=logs;window.logDetailCache=window.logDetailCache||Object.create(null);window.logListMeta=Object.create(null);logs.forEach(l=>window.logListMeta[l.id]={updated_at:l.updated_at,created_at:l.created_at,status_code:l.status_code,progress:l.progress,status_text:l.status_text,error_summary:l.error_summary||''});Object.keys(window.logDetailCache).forEach(key=>{const meta=window.logListMeta[key];const cached=window.logDetailCache[key];if(!meta||!cached||cached.updated_at!==meta.updated_at)delete window.logDetailCache[key]});const tb=$('logsTableBody');if(!logs.length){tb.innerHTML='<tr><td colspan="9" class="py-8 px-3 text-center text-sm text-muted-foreground">\u6682\u65e0\u65e5\u5fd7</td></tr>';return}tb.innerHTML=logs.map(l=>{const statusText=formatLogStatus(l),progressText=formatLogProgress(l),outcomeText=formatLogOutcome(l),outcomePreview=truncateLogText(outcomeText,96),statusCodeClass=l.status_code===102?'bg-amber-50 text-amber-700':(l.status_code===200?'bg-green-50 text-green-700':'bg-red-50 text-red-700');return`<tr><td class="py-2.5 px-3">${escapeLogHtml(l.operation||'-')}</td><td class="py-2.5 px-3"><span class="text-xs ${l.token_email?'text-blue-600':'text-muted-foreground'}">${escapeLogHtml(l.token_email||'\u672a\u77e5')}</span></td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${formatLogStatusClass(l)}">${escapeLogHtml(statusText)}</span></td><td class="py-2.5 px-3 text-xs">${escapeLogHtml(progressText)}</td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${statusCodeClass}">${escapeLogHtml(l.status_code??'-')}</span></td><td class="py-2.5 px-3 align-top"><div class="w-[17rem] max-w-[17rem] text-xs leading-5 whitespace-pre-wrap break-words line-clamp-2 ${formatLogOutcomeClass(l)}" title="${escapeLogHtml(outcomeText)}">${escapeLogHtml(outcomePreview)}</div></td><td class="py-2.5 px-3">${Number(l.duration||0).toFixed(2)}</td><td class="py-2.5 px-3 text-xs text-muted-foreground">${l.created_at?new Date(l.created_at).toLocaleString('zh-CN'):'-'}</td><td class="py-2.5 px-3"><button onclick="showLogDetail(${l.id})" class="inline-flex items-center justify-center rounded-md hover:bg-blue-50 hover:text-blue-700 h-7 px-2 text-xs">&#35814;&#24773;</button></td></tr>`}).join('');if(window.activeLogDetailId&&window.logListMeta[window.activeLogDetailId])await showLogDetail(window.activeLogDetailId,{silent:true})}catch(e){console.error('load logs failed:',e);if(!silent)showToast('\u52a0\u8f7d\u65e5\u5fd7\u5931\u8d25: '+e.message,'error')}},
+        loadLogs=async(opts={})=>{const silent=!!opts.silent;try{const r=await apiRequest('/api/logs?limit=100');if(!r)return;const logs=await r.json();window.allLogs=logs;window.logDetailCache=window.logDetailCache||Object.create(null);window.logListMeta=Object.create(null);logs.forEach(l=>window.logListMeta[l.id]={updated_at:l.updated_at,created_at:l.created_at,status_code:l.status_code,progress:l.progress,status_text:l.status_text,error_summary:l.error_summary||''});Object.keys(window.logDetailCache).forEach(key=>{const meta=window.logListMeta[key];const cached=window.logDetailCache[key];if(!meta||!cached||cached.updated_at!==meta.updated_at)delete window.logDetailCache[key]});const tb=$('logsTableBody');if(!logs.length){tb.innerHTML='<tr><td colspan="9" class="py-8 px-3 text-center text-sm text-muted-foreground">No logs yet</td></tr>';return}tb.innerHTML=logs.map(l=>{const statusText=formatLogStatus(l),progressText=formatLogProgress(l),outcomeText=formatLogOutcome(l),outcomePreview=truncateLogText(outcomeText,96),statusCodeClass=l.status_code===102?'bg-amber-50 text-amber-700':(l.status_code===200?'bg-green-50 text-green-700':'bg-red-50 text-red-700');return`<tr><td class="py-2.5 px-3">${escapeLogHtml(l.operation||'-')}</td><td class="py-2.5 px-3"><span class="text-xs ${l.token_email?'text-blue-600':'text-muted-foreground'}">${escapeLogHtml(l.token_email||'Unknown')}</span></td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${formatLogStatusClass(l)}">${escapeLogHtml(statusText)}</span></td><td class="py-2.5 px-3 text-xs">${escapeLogHtml(progressText)}</td><td class="py-2.5 px-3"><span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${statusCodeClass}">${escapeLogHtml(l.status_code??'-')}</span></td><td class="py-2.5 px-3 align-top"><div class="w-[17rem] max-w-[17rem] text-xs leading-5 whitespace-pre-wrap break-words line-clamp-2 ${formatLogOutcomeClass(l)}" title="${escapeLogHtml(outcomeText)}">${escapeLogHtml(outcomePreview)}</div></td><td class="py-2.5 px-3">${Number(l.duration||0).toFixed(2)}</td><td class="py-2.5 px-3 text-xs text-muted-foreground">${l.created_at?new Date(l.created_at).toLocaleString('en-US'):'-'}</td><td class="py-2.5 px-3"><button onclick="showLogDetail(${l.id})" class="inline-flex items-center justify-center rounded-md hover:bg-blue-50 hover:text-blue-700 h-7 px-2 text-xs">Details</button></td></tr>`}).join('');if(window.activeLogDetailId&&window.logListMeta[window.activeLogDetailId])await showLogDetail(window.activeLogDetailId,{silent:true})}catch(e){console.error('load logs failed:',e);if(!silent)showToast('Failed to load logs:'+e.message,'error')}},
         refreshLogs=async()=>{await loadLogs()},
-        clearAllLogs=async()=>{if(!confirm('确定要清空所有日志吗？此操作不可恢复！'))return;try{const r=await apiRequest('/api/logs',{method:'DELETE'});if(!r)return;const d=await r.json();if(d.success){window.logDetailCache=Object.create(null);window.activeLogDetailId=null;resetLogMediaCache();showToast('日志已清空','success');await loadLogs()}else{showToast('清空失败: '+(d.message||'未知错误'),'error')}}catch(e){showToast('清空失败: '+e.message,'error')}},
-        showLogDetail=async(logId,opts={})=>{const silent=!!opts.silent;const modal=$('logDetailModal');const content=$('logDetailContent');window.logDetailCache=window.logDetailCache||Object.create(null);window.logListMeta=window.logListMeta||Object.create(null);window.logDetailRequestSeq=(window.logDetailRequestSeq||0)+1;const requestSeq=window.logDetailRequestSeq;window.activeLogDetailId=logId;modal.classList.remove('hidden');content.innerHTML='<div class="rounded-md border border-border p-4 bg-muted/30 text-sm text-muted-foreground">\u65e5\u5fd7\u8be6\u60c5\u52a0\u8f7d\u4e2d...</div>';try{const meta=window.logListMeta[logId];let log=window.logDetailCache[logId];if(!log||!meta||log.updated_at!==meta.updated_at){const r=await apiRequest(`/api/logs/${logId}`);if(!r)return;if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;if(r.status===404){content.innerHTML='<div class="rounded-md border border-red-200 p-4 bg-red-50 text-sm text-red-700">\u65e5\u5fd7\u4e0d\u5b58\u5728\u6216\u5df2\u88ab\u5220\u9664</div>';return}log=await r.json();window.logDetailCache[logId]=log}if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;renderLogDetail(log)}catch(e){if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;console.error('\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25:',e);content.innerHTML=`<div class="rounded-md border border-red-200 p-4 bg-red-50 text-sm text-red-700">\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25: ${escapeLogHtml(e.message||'\u672a\u77e5\u9519\u8bef')}</div>`;if(!silent)showToast('\u52a0\u8f7d\u65e5\u5fd7\u8be6\u60c5\u5931\u8d25: '+e.message,'error')}},
+        clearAllLogs=async()=>{if(!confirm('Are you sure you want to clear all logs? This action cannot be undone!'))return;try{const r=await apiRequest('/api/logs',{method:'DELETE'});if(!r)return;const d=await r.json();if(d.success){window.logDetailCache=Object.create(null);window.activeLogDetailId=null;resetLogMediaCache();showToast('Logs cleared','success');await loadLogs()}else{showToast('Clear failed:'+(d.message||'Unknown error'),'error')}}catch(e){showToast('Clear failed:'+e.message,'error')}},
+        showLogDetail=async(logId,opts={})=>{const silent=!!opts.silent;const modal=$('logDetailModal');const content=$('logDetailContent');window.logDetailCache=window.logDetailCache||Object.create(null);window.logListMeta=window.logListMeta||Object.create(null);window.logDetailRequestSeq=(window.logDetailRequestSeq||0)+1;const requestSeq=window.logDetailRequestSeq;window.activeLogDetailId=logId;modal.classList.remove('hidden');content.innerHTML='<div class="rounded-md border border-border p-4 bg-muted/30 text-sm text-muted-foreground">Loading log details...</div>';try{const meta=window.logListMeta[logId];let log=window.logDetailCache[logId];if(!log||!meta||log.updated_at!==meta.updated_at){const r=await apiRequest(`/api/logs/${logId}`);if(!r)return;if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;if(r.status===404){content.innerHTML='<div class="rounded-md border border-red-200 p-4 bg-red-50 text-sm text-red-700">Log does not exist or has been deleted</div>';return}log=await r.json();window.logDetailCache[logId]=log}if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;renderLogDetail(log)}catch(e){if(window.logDetailRequestSeq!==requestSeq||window.activeLogDetailId!==logId||modal.classList.contains('hidden'))return;console.error('Failed to load log details:',e);content.innerHTML=`<div class="rounded-md border border-red-200 p-4 bg-red-50 text-sm text-red-700">Failed to load log details: ${escapeLogHtml(e.message||'Unknown error')}</div>`;if(!silent)showToast('Failed to load log details: '+e.message,'error')}},
         closeLogDetailModal=()=>{window.activeLogDetailId=null;resetLogMediaCache();$('logDetailModal').classList.add('hidden')},
         showToast=(m,t='info')=>{const d=document.createElement('div'),bc={success:'bg-green-600',error:'bg-destructive',info:'bg-primary'};d.className=`fixed bottom-4 right-4 ${bc[t]||bc.info} text-white px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium z-50 animate-slide-up`;d.textContent=m;document.body.appendChild(d);setTimeout(()=>{d.style.opacity='0';d.style.transition='opacity .3s';setTimeout(()=>d.parentNode&&document.body.removeChild(d),300)},2000)},
-        logout=()=>{if(!confirm('确定要退出登录吗?'))return;localStorage.removeItem('adminToken');location.href='/login'},
+        logout=()=>{if(!confirm('Are you sure you want to log out?'))return;localStorage.removeItem('adminToken');location.href='/login'},
         switchTab=t=>{const cap=n=>n.charAt(0).toUpperCase()+n.slice(1);['tokens','settings','logs'].forEach(n=>{const active=n===t;$(`panel${cap(n)}`).classList.toggle('hidden',!active);$(`tab${cap(n)}`).classList.toggle('border-primary',active);$(`tab${cap(n)}`).classList.toggle('text-primary',active);$(`tab${cap(n)}`).classList.toggle('border-transparent',!active);$(`tab${cap(n)}`).classList.toggle('text-muted-foreground',!active)});if(t==='settings'){stopLogsAutoRefresh();loadAdminConfig();loadProxyConfig();loadCacheConfig();loadGenerationTimeout();loadCaptchaConfig();loadPluginConfig();loadATAutoRefreshConfig()}else if(t==='logs'){startLogsAutoRefresh();loadLogs()}else{stopLogsAutoRefresh()}};
 
         function escapeLogHtml(text){
@@ -899,18 +899,18 @@
 
         function extractLogSuccessSummary(log,responseBodyObj){
             if((log&&Number(log.status_code))!==200) return '';
-            if(!responseBodyObj||typeof responseBodyObj!=='object') return '生成成功，已返回结果';
+            if(!responseBodyObj||typeof responseBodyObj!=='object') return 'Generation successful, result returned';
             const assets=responseBodyObj.generated_assets;
             if(assets&&typeof assets==='object'&&assets.upscaled_image&&typeof assets.upscaled_image==='object'){
-                return `生成成功，已返回${assets.upscaled_image.resolution||'高清'}结果`;
+                return `Generation successful, ${assets.upscaled_image.resolution||'HD'} result returned`;
             }
             const directUrl=extractLogPrimaryUrl(responseBodyObj);
             if(directUrl){
-                if(isVideoUrl(directUrl)) return '生成成功，已返回视频结果';
-                if(isImageUrl(directUrl)) return '生成成功，已返回图片结果';
-                return '生成成功，已返回结果地址';
+                if(isVideoUrl(directUrl)) return 'Generation successful, video result returned';
+                if(isImageUrl(directUrl)) return 'Generation successful, image result returned';
+                return 'Generation successful, result URL returned';
             }
-            return responseBodyObj.status==='success'?'生成成功':'生成成功，已返回结果';
+            return responseBodyObj.status==='success'?'Generation successful':'Generation successful, result returned';
         }
 
         function formatLogPayload(raw){
@@ -919,16 +919,16 @@
                 return JSON.stringify(parsed,(_,value)=>{
                     if(typeof value!=='string') return value;
                     if(value.length<=4096) return value;
-                    if(/^data:(image|video)\//i.test(value)) return `[数据URL已省略，长度=${value.length}]`;
+                    if(/^data:(image|video)\//i.test(value)) return `[Data URL omitted, length=${value.length}]`;
                     const sample=value.slice(0,256);
-                    if(/^[A-Za-z0-9+/=\r\n]+$/.test(sample)) return `[大体积Base64已省略，长度=${value.length}]`;
-                    return `${value.slice(0,800)}... [已截断，长度=${value.length}]`;
+                    if(/^[A-Za-z0-9+/=\r\n]+$/.test(sample)) return `[Large Base64 omitted, length=${value.length}]`;
+                    return `${value.slice(0,800)}... [Truncated, length=${value.length}]`;
                 },2);
             }
-            if(!raw) return '无';
+            if(!raw) return 'none';
             const text=String(raw);
             if(text.length<=6000) return text;
-            return `${text.slice(0,1200)}... [已截断，长度=${text.length}]`;
+            return `${text.slice(0,1200)}... [Truncated, length=${text.length}]`;
         }
 
         function resetLogMediaCache(){
@@ -995,7 +995,7 @@
             if(!url) return '';
             const normalizedUrl=normalizeLogMediaUrl(url);
             if(/^data:/i.test(String(normalizedUrl))){
-                return `<p class="text-xs"><span class="font-medium">${label}:</span> <span class="text-muted-foreground">data URL（长度 ${String(normalizedUrl).length}）</span></p>`;
+                return `<p class="text-xs"><span class="font-medium">${label}:</span> <span class="text-muted-foreground">data URL (length ${String(normalizedUrl).length})</span></p>`;
             }
             const safeUrl=escapeLogHtml(normalizedUrl);
             return `<p class="text-xs"><span class="font-medium">${label}:</span> <a href="${safeUrl}" target="_blank" class="text-blue-600 hover:underline break-all">${safeUrl}</a></p>`;
@@ -1020,15 +1020,15 @@
             const previewUrl=normalizeLogMediaUrl(url);
             const mediaType=isVideoUrl(previewUrl)?'video':(isImageUrl(previewUrl)?'image':'');
             const mediaKey=mediaType?cacheLogMediaUrl(previewUrl):'';
-            const previewTrigger=mediaType?`<button onclick="loadLogMediaPreview(this)" data-media-key="${mediaKey}" data-label="${escapeLogHtml(label)}" data-media-type="${mediaType}" class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">点击加载预览</button><div class="space-y-2"></div>`:'';
+            const previewTrigger=mediaType?`<button onclick="loadLogMediaPreview(this)" data-media-key="${mediaKey}" data-label="${escapeLogHtml(label)}" data-media-type="${mediaType}" class="inline-flex items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">Click to load preview</button><div class="space-y-2"></div>`:'';
             return `<div class="space-y-2"><p class="text-xs font-medium">${escapeLogHtml(label)}</p>${withUrl?renderLogLink('URL',previewUrl):''}${previewTrigger}</div>`;
         }
 
         function handleLogMediaPreviewError(node){
             if(!node) return;
             const mediaUrl=node.dataset.mediaUrl||'';
-            const mediaLabel=node.dataset.mediaLabel||'媒体';
-            node.outerHTML=`<div class="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700 space-y-2"><p>${escapeLogHtml(mediaLabel)}预览加载失败，请直接打开链接查看。</p>${renderLogLink('URL',mediaUrl)}</div>`;
+            const mediaLabel=node.dataset.mediaLabel||'Media';
+            node.outerHTML=`<div class="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700 space-y-2"><p>${escapeLogHtml(mediaLabel)}Preview failed to load. Please open the link directly to view.</p>${renderLogLink('URL',mediaUrl)}</div>`;
         }
 
         function loadLogMediaPreview(button){
@@ -1048,7 +1048,7 @@
         }
 
         function renderLogDetail(log){
-            if(!log){showToast('日志不存在','error');return}
+            if(!log){showToast('Log not found','error');return}
             resetLogMediaCache();
             const responseBodyObj=parseLogJson(log.response_body);
             const requestPayloadText=formatLogPayload(log.request_body);
@@ -1058,16 +1058,16 @@
             const successSummary=extractLogSuccessSummary(log,responseBodyObj);
             let detailHtml='';
 
-            detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">请求数据</h4><pre class="rounded-md border border-border p-3 bg-muted/30 text-xs overflow-x-auto">${escapeLogHtml(requestPayloadText)}</pre></div>`;
+            detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">Request Data</h4><pre class="rounded-md border border-border p-3 bg-muted/30 text-xs overflow-x-auto">${escapeLogHtml(requestPayloadText)}</pre></div>`;
 
             if(log.status_code===200){
                 if(successSummary){
-                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-green-700">结果摘要</h4><div class="rounded-md border border-green-200 p-3 bg-green-50"><p class="text-sm text-green-700">${escapeLogHtml(successSummary)}</p></div></div>`;
+                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-green-700">Result Summary</h4><div class="rounded-md border border-green-200 p-3 bg-green-50"><p class="text-sm text-green-700">${escapeLogHtml(successSummary)}</p></div></div>`;
                 }
                 if(responseBodyObj){
                     const directUrl=extractLogPrimaryUrl(responseBodyObj);
                     if(directUrl){
-                        detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">生成结果</h4><div class="rounded-md border border-border p-3 bg-muted/30 space-y-3">${renderMediaPreview('主结果',directUrl)}</div></div>`;
+                        detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">Generated Result</h4><div class="rounded-md border border-border p-3 bg-muted/30 space-y-3">${renderMediaPreview('Primary Result',directUrl)}</div></div>`;
                     }
 
                     const assets=responseBodyObj.generated_assets;
@@ -1076,38 +1076,38 @@
 
                         if(assets.upscaled_image&&typeof assets.upscaled_image==='object'){
                             const up=assets.upscaled_image;
-                            const upResolution=up.resolution||'放大';
+                            const upResolution=up.resolution||'Upscaled';
                             const upPreviewUrl=up.local_url||up.url||null;
-                            assetsHtml+=`<p class="text-xs"><span class="font-medium">放大分辨率:</span> ${escapeLogHtml(upResolution)}</p>`;
+                            assetsHtml+=`<p class="text-xs"><span class="font-medium">Upscaled resolution:</span> ${escapeLogHtml(upResolution)}</p>`;
                             if(upPreviewUrl){
-                                assetsHtml+=renderMediaPreview(`${upResolution}结果`,upPreviewUrl,!/^data:/i.test(String(upPreviewUrl||'')));
+                                assetsHtml+=renderMediaPreview(`${upResolution} Result`,upPreviewUrl,!/^data:/i.test(String(upPreviewUrl||'')));
                             }
                             if(up.base64){
                                 const preview=String(up.base64).length>600?`${String(up.base64).slice(0,600)}...`:String(up.base64);
-                                assetsHtml+=`<p class="text-xs"><span class="font-medium">Base64长度:</span> ${String(up.base64).length}</p><details class="rounded border border-border p-2 bg-background"><summary class="cursor-pointer text-xs text-muted-foreground">查看Base64预览</summary><pre class="mt-2 text-xs overflow-x-auto">${escapeLogHtml(preview)}</pre></details>`;
+                                assetsHtml+=`<p class="text-xs"><span class="font-medium">Base64 length:</span> ${String(up.base64).length}</p><details class="rounded border border-border p-2 bg-background"><summary class="cursor-pointer text-xs text-muted-foreground">View Base64 Preview</summary><pre class="mt-2 text-xs overflow-x-auto">${escapeLogHtml(preview)}</pre></details>`;
                             }
                         }else{
                             const extraMediaUrl=assets.final_video_url||assets.final_image_url||null;
                             if(extraMediaUrl&&extraMediaUrl!==directUrl){
-                                assetsHtml+=renderMediaPreview('额外结果',extraMediaUrl,false);
+                                assetsHtml+=renderMediaPreview('Additional Result',extraMediaUrl,false);
                             }
                         }
 
-                        detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">2K/4K 资产信息</h4><div class="rounded-md border border-border p-3 bg-muted/30 space-y-2">${assetsHtml||'<p class="text-xs text-muted-foreground">无资产详情</p>'}</div></div>`;
+                        detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">2K/4K Asset Information</h4><div class="rounded-md border border-border p-3 bg-muted/30 space-y-2">${assetsHtml||'<p class="text-xs text-muted-foreground">No asset details</p>'}</div></div>`;
                     }
 
-                    detailHtml+=`<details class="space-y-2"><summary class="cursor-pointer text-sm font-medium">完整响应（大字段已截断）</summary><pre class="mt-2 rounded-md border border-border p-3 bg-muted/30 text-xs overflow-x-auto">${escapeLogHtml(responsePayloadText)}</pre></details>`;
+                    detailHtml+=`<details class="space-y-2"><summary class="cursor-pointer text-sm font-medium">Full Response (large fields truncated)</summary><pre class="mt-2 rounded-md border border-border p-3 bg-muted/30 text-xs overflow-x-auto">${escapeLogHtml(responsePayloadText)}</pre></details>`;
                 }else{
-                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">响应数据</h4><pre class="rounded-md border border-border p-3 bg-muted/30 text-xs overflow-x-auto">${escapeLogHtml(responsePayloadText)}</pre></div>`;
+                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm">Response Data</h4><pre class="rounded-md border border-border p-3 bg-muted/30 text-xs overflow-x-auto">${escapeLogHtml(responsePayloadText)}</pre></div>`;
                 }
             }else{
                 if(errorSummary){
-                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-red-600">错误原因</h4><div class="rounded-md border border-red-200 p-3 bg-red-50"><p class="text-sm text-red-700 break-all">${escapeLogHtml(errorSummary)}</p></div></div>`;
+                    detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-red-600">Error Reason</h4><div class="rounded-md border border-red-200 p-3 bg-red-50"><p class="text-sm text-red-700 break-all">${escapeLogHtml(errorSummary)}</p></div></div>`;
                 }
-                detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-red-600">错误响应</h4><pre class="rounded-md border border-red-200 p-3 bg-red-50 text-xs overflow-x-auto">${escapeLogHtml(responsePayloadText)}</pre></div>`;
+                detailHtml+=`<div class="space-y-2"><h4 class="font-medium text-sm text-red-600">Error Response</h4><pre class="rounded-md border border-red-200 p-3 bg-red-50 text-xs overflow-x-auto">${escapeLogHtml(responsePayloadText)}</pre></div>`;
             }
 
-            detailHtml+=`<div class="space-y-2 pt-4 border-t border-border"><h4 class="font-medium text-sm">基本信息</h4><div class="grid grid-cols-2 gap-2 text-sm"><div><span class="text-muted-foreground">操作:</span> ${escapeLogHtml(log.operation||'-')}</div><div><span class="text-muted-foreground">状态:</span> ${escapeLogHtml(formatLogStatus(log))}</div><div><span class="text-muted-foreground">状态码:</span> <span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${log.status_code===200?'bg-green-50 text-green-700':(log.status_code===102?'bg-amber-50 text-amber-700':'bg-red-50 text-red-700')}">${escapeLogHtml(log.status_code??'-')}</span></div><div><span class="text-muted-foreground">耗时:</span> ${Number(log.duration||0).toFixed(2)}秒</div><div><span class="text-muted-foreground">时间:</span> ${log.created_at?new Date(log.created_at).toLocaleString('zh-CN'):'-'}</div><div><span class="text-muted-foreground">Token:</span> ${escapeLogHtml(log.token_email||log.token_username||'未知')}</div><div><span class="text-muted-foreground">日志ID:</span> ${escapeLogHtml(log.id??'-')}</div><div><span class="text-muted-foreground">进度:</span> ${escapeLogHtml(formatLogProgress(log))}</div></div></div>`;
+            detailHtml+=`<div class="space-y-2 pt-4 border-t border-border"><h4 class="font-medium text-sm">Basic Information</h4><div class="grid grid-cols-2 gap-2 text-sm"><div><span class="text-muted-foreground">Actions:</span> ${escapeLogHtml(log.operation||'-')}</div><div><span class="text-muted-foreground">Status:</span> ${escapeLogHtml(formatLogStatus(log))}</div><div><span class="text-muted-foreground">Status Code:</span> <span class="inline-flex items-center rounded px-2 py-0.5 text-xs ${log.status_code===200?'bg-green-50 text-green-700':(log.status_code===102?'bg-amber-50 text-amber-700':'bg-red-50 text-red-700')}">${escapeLogHtml(log.status_code??'-')}</span></div><div><span class="text-muted-foreground">Duration:</span> ${Number(log.duration||0).toFixed(2)}s</div><div><span class="text-muted-foreground">Time:</span> ${log.created_at?new Date(log.created_at).toLocaleString('en-US'):'-'}</div><div><span class="text-muted-foreground">Token:</span> ${escapeLogHtml(log.token_email||log.token_username||'Unknown')}</div><div><span class="text-muted-foreground">Log ID:</span> ${escapeLogHtml(log.id??'-')}</div><div><span class="text-muted-foreground">Progress:</span> ${escapeLogHtml(formatLogProgress(log))}</div></div></div>`;
 
             const detailContent=$('logDetailContent');detailContent.dataset.logId=String(log.id??'');detailContent.innerHTML=detailHtml;syncLogDetailViewState();
         }

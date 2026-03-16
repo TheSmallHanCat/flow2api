@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="h-full">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - Flow2API</title>
+    <title>Login - Flow2API</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes slide-up{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -18,7 +18,7 @@
         <div class="sm:mx-auto sm:w-full sm:max-w-md">
             <div class="text-center">
                 <h1 class="text-4xl font-bold">Flow2API</h1>
-                <p class="mt-2 text-sm text-muted-foreground">管理员控制台</p>
+                <p class="mt-2 text-sm text-muted-foreground">Admin Console</p>
             </div>
         </div>
 
@@ -26,14 +26,14 @@
             <div class="bg-background py-8 px-4 sm:px-10 rounded-lg">
                 <form id="loginForm" class="space-y-6">
                     <div class="space-y-2">
-                        <label for="username" class="text-sm font-medium">账户</label>
-                        <input type="text" id="username" name="username" required class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" placeholder="请输入账户">
+                        <label for="username" class="text-sm font-medium">Username</label>
+                        <input type="text" id="username" name="username" required class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" placeholder="Enter username">
                     </div>
                     <div class="space-y-2">
-                        <label for="password" class="text-sm font-medium">密码</label>
-                        <input type="password" id="password" name="password" required class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" placeholder="请输入密码">
+                        <label for="password" class="text-sm font-medium">Password</label>
+                        <input type="password" id="password" name="password" required class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50" placeholder="Enter password">
                     </div>
-                    <button type="submit" id="loginButton" class="inline-flex items-center justify-center rounded-md font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-full disabled:opacity-50">登录</button>
+                    <button type="submit" id="loginButton" class="inline-flex items-center justify-center rounded-md font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-full disabled:opacity-50">Login</button>
                 </form>
 
                 <div class="mt-6 text-center text-xs text-muted-foreground">
@@ -45,7 +45,7 @@
 
     <script>
         const form=document.getElementById('loginForm'),btn=document.getElementById('loginButton');
-        form.addEventListener('submit',async(e)=>{e.preventDefault();btn.disabled=true;btn.textContent='登录中...';try{const fd=new FormData(form),r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:fd.get('username'),password:fd.get('password')})});const d=await r.json();d.success?(localStorage.setItem('adminToken',d.token),location.href='/manage'):showToast(d.message||'登录失败','error')}catch(e){showToast('网络错误,请稍后重试','error')}finally{btn.disabled=false;btn.textContent='登录'}});
+        form.addEventListener('submit',async(e)=>{e.preventDefault();btn.disabled=true;btn.textContent='Logging in...';try{const fd=new FormData(form),r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:fd.get('username'),password:fd.get('password')})});const d=await r.json();d.success?(localStorage.setItem('adminToken',d.token),location.href='/manage'):showToast(d.message||'Login failed','error')}catch(e){showToast('Network error, please try again later','error')}finally{btn.disabled=false;btn.textContent='Login'}});
         function showToast(m,t='error'){const d=document.createElement('div'),bc={success:'bg-green-600',error:'bg-destructive',info:'bg-primary'};d.className=`fixed bottom-4 right-4 ${bc[t]||bc.error} text-white px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium z-50 animate-slide-up`;d.textContent=m;document.body.appendChild(d);setTimeout(()=>{d.style.opacity='0';d.style.transition='opacity .3s';setTimeout(()=>d.parentNode&&document.body.removeChild(d),300)},2000)}
         window.addEventListener('DOMContentLoaded',()=>{const t=localStorage.getItem('adminToken');t&&fetch('/api/stats',{headers:{Authorization:`Bearer ${t}`}}).then(r=>{if(r.ok)location.href='/manage'})});
     </script>
