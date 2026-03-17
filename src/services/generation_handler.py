@@ -1148,7 +1148,18 @@ class GenerationHandler:
 
             # 调用生成API
             if stream:
-                yield self._create_stream_chunk("正在生成图片...\n")
+                if images and len(images) > 0:
+                    yield self._create_stream_chunk("参考图片上传完成，正在进行打码验证...\n")
+                else:
+                    yield self._create_stream_chunk("正在进行打码验证并提交图片生成请求...\n")
+
+            async def _image_progress_callback(status_text: str, progress: int):
+                await self._update_request_log_progress(
+                    request_log_state,
+                    token_id=token.id,
+                    status_text=status_text,
+                    progress=progress,
+                )
 
             generate_started_at = time.time()
             result, generation_session_id, upstream_trace = await self.flow_client.generate_image(
@@ -1160,6 +1171,7 @@ class GenerationHandler:
                 image_inputs=image_inputs,
                 token_id=token.id,
                 token_image_concurrency=token.image_concurrency,
+                progress_callback=_image_progress_callback,
             )
             if image_trace is not None:
                 image_trace["generate_api_ms"] = int((time.time() - generate_started_at) * 1000)
@@ -1169,6 +1181,12 @@ class GenerationHandler:
                     first_attempt = attempts[0] if isinstance(attempts[0], dict) else {}
                     image_trace["launch_queue_wait_ms"] = int(first_attempt.get("launch_queue_ms") or 0)
                     image_trace["launch_stagger_wait_ms"] = int(first_attempt.get("launch_stagger_ms") or 0)
+            await self._update_request_log_progress(
+                request_log_state,
+                token_id=token.id,
+                status_text="image_generated",
+                progress=72,
+            )
 
             # 提取URL和mediaId
             media = result.get("media", [])
@@ -1228,6 +1246,12 @@ class GenerationHandler:
 
                             if config.cache_enabled:
                                 try:
+                                    await self._update_request_log_progress(
+                                        request_log_state,
+                                        token_id=token.id,
+                                        status_text="caching_image",
+                                        progress=90,
+                                    )
                                     if stream:
                                         yield self._create_stream_chunk(f"缓存 {resolution_name} 图片中...\n")
                                     cached_filename = await self.file_cache.cache_base64_image(encoded_image, resolution_name)

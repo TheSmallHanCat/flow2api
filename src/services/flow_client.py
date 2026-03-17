@@ -7,7 +7,7 @@ import uuid
 import random
 import base64
 import ssl
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Callable, Awaitable
 from urllib.parse import quote
 import urllib.error
 import urllib.request
@@ -895,6 +895,7 @@ class FlowClient:
         image_inputs: Optional[List[Dict]] = None,
         token_id: Optional[int] = None,
         token_image_concurrency: Optional[int] = None,
+        progress_callback: Optional[Callable[[str, int], Awaitable[None]]] = None,
     ) -> tuple[dict, str, Dict[str, Any]]:
         """生成图片(同步返回)
 
@@ -930,6 +931,8 @@ class FlowClient:
             attempt_started_at = time.time()
             # 每次重试都重新获取 reCAPTCHA token
             recaptcha_started_at = time.time()
+            if progress_callback is not None:
+                await progress_callback("solving_image_captcha", 38)
             launch_gate_acquired = False
             launch_ok, launch_queue_ms, launch_stagger_ms = await self._acquire_image_launch_gate(
                 token_id=token_id,
@@ -973,6 +976,8 @@ class FlowClient:
                 if should_retry:
                     continue
                 raise last_error
+            if progress_callback is not None:
+                await progress_callback("submitting_image", 48)
             session_id = self._generate_session_id()
 
             # 构建请求 - 新版接口在外层和 requests 内都带 clientContext

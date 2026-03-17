@@ -55,6 +55,8 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
+> 说明：Compose 已默认挂载 `./tmp:/app/tmp`。如果把缓存超时设为 `0`，语义是“不自动过期删除”；若希望容器重建后仍保留缓存文件，也需要保留这个 `tmp` 挂载。
+
 #### WARP 模式（使用代理）
 
 ```bash
@@ -87,7 +89,7 @@ docker compose -f docker-compose.headed.yml logs -f
 ```bash
 # 克隆项目
 git clone https://github.com/TheSmallHanCat/flow2api.git
-cd sora2api
+cd flow2api
 
 # 创建虚拟环境
 python -m venv venv

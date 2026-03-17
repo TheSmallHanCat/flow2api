@@ -147,3 +147,28 @@ def test_models_generate_content_supports_system_instruction_and_file_data(clien
     assert response.json()["modelVersion"] == "gemini-3.1-flash-image"
     assert fake_handler.calls[0]["prompt"] == "answer in English\n\ndraw a cat"
     assert len(fake_handler.calls[0]["images"]) == 1
+
+
+def test_models_root_lists_gemini_models_for_newapi_compatibility(client):
+    response = client.get("/models")
+
+    assert response.status_code == 200
+    body = response.json()
+    names = {item["name"] for item in body["models"]}
+
+    assert "models/gemini-3.0-pro-image" in names
+    assert "models/gemini-3.1-flash-image" in names
+    assert any(
+        item["name"] == "models/gemini-3.1-flash-image"
+        and item["supportedGenerationMethods"] == ["generateContent", "streamGenerateContent"]
+        for item in body["models"]
+    )
+
+
+def test_v1beta_models_root_lists_gemini_models(client):
+    response = client.get("/v1beta/models")
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert any(item["name"] == "models/gemini-3.0-pro-image" for item in body["models"])

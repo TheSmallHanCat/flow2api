@@ -67,6 +67,56 @@ def _ensure_generation_handler() -> GenerationHandler:
     return generation_handler
 
 
+def _build_model_description(model_config: Dict[str, Any]) -> str:
+    """Build a human-readable description for model listing endpoints."""
+    description = f"{model_config['type'].capitalize()} generation"
+    if model_config["type"] == "image":
+        description += f" - {model_config['model_name']}"
+    else:
+        description += f" - {model_config['model_key']}"
+    return description
+
+
+def _get_openai_model_catalog() -> List[Dict[str, str]]:
+    """Collect OpenAI-compatible model list entries."""
+    return [
+        {
+            "id": model_id,
+            "description": _build_model_description(model_config),
+        }
+        for model_id, model_config in MODEL_CONFIG.items()
+    ]
+
+
+def _get_gemini_model_catalog() -> Dict[str, str]:
+    """Collect Gemini-compatible model metadata for /models endpoints."""
+    catalog: Dict[str, str] = {}
+
+    for alias_id, description in get_base_model_aliases().items():
+        catalog[alias_id] = description
+
+    for model_id, model_config in MODEL_CONFIG.items():
+        catalog.setdefault(model_id, _build_model_description(model_config))
+
+    return catalog
+
+
+def _build_gemini_model_resource(model_id: str, description: str) -> Dict[str, Any]:
+    """Build a Gemini-compatible model resource payload."""
+    return {
+        "name": f"models/{model_id}",
+        "displayName": model_id,
+        "description": description,
+        "version": "flow2api",
+        "inputTokenLimit": 0,
+        "outputTokenLimit": 0,
+        "supportedGenerationMethods": [
+            "generateContent",
+            "streamGenerateContent",
+        ],
+    }
+
+
 def _decode_data_url(data_url: str) -> tuple[str, bytes]:
     match = DATA_URL_RE.match(data_url)
     if not match:
@@ -601,23 +651,15 @@ async def _iterate_gemini_stream(
 @router.get("/v1/models")
 async def list_models(api_key: str = Depends(verify_api_key_flexible)):
     """List available models."""
-    models = []
-
-    for model_id, config in MODEL_CONFIG.items():
-        description = f"{config['type'].capitalize()} generation"
-        if config["type"] == "image":
-            description += f" - {config['model_name']}"
-        else:
-            description += f" - {config['model_key']}"
-
-        models.append(
-            {
-                "id": model_id,
-                "object": "model",
-                "owned_by": "flow2api",
-                "description": description,
-            }
-        )
+    models = [
+        {
+            "id": model["id"],
+            "object": "model",
+            "owned_by": "flow2api",
+            "description": model["description"],
+        }
+        for model in _get_openai_model_catalog()
+    ]
 
     return {"object": "list", "data": models}
 
@@ -638,6 +680,34 @@ async def list_model_aliases(api_key: str = Depends(verify_api_key_flexible)):
             }
         )
     return {"object": "list", "data": alias_models}
+
+
+@router.get("/v1beta/models")
+@router.get("/models")
+async def list_gemini_models(api_key: str = Depends(verify_api_key_flexible)):
+    """List available models using Gemini-compatible response shape."""
+    catalog = _get_gemini_model_catalog()
+    return {
+        "models": [
+            _build_gemini_model_resource(model_id, description)
+            for model_id, description in catalog.items()
+        ]
+    }
+
+
+@router.get("/v1beta/models/{model}")
+@router.get("/models/{model}")
+async def get_gemini_model(model: str, api_key: str = Depends(verify_api_key_flexible)):
+    """Return a single model using Gemini-compatible response shape."""
+    catalog = _get_gemini_model_catalog()
+    description = catalog.get(model)
+    if not description:
+        return JSONResponse(
+            status_code=404,
+            content=_build_gemini_error_payload(404, f"Model not found: {model}"),
+        )
+
+    return _build_gemini_model_resource(model, description)
 
 
 @router.post("/v1/chat/completions")
