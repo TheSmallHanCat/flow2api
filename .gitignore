@@ -36,6 +36,7 @@ logs.txt
 # IDE
 .vscode/
 .idea/
+flow2api.iml
 .lh/
 *.swp
 *.swo

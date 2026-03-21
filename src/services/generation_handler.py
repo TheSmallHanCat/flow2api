@@ -1,21 +1,20 @@
 """Generation handler for Flow2API"""
 import asyncio
-import base64
+import hashlib
 import json
 import time
 from typing import Optional, AsyncGenerator, List, Dict, Any
-from ..core.logger import debug_logger
-from ..core.config import config
-from ..core.models import Task, RequestLog
+
+from .file_cache import FileCache
 from ..core.account_tiers import (
-    PAYGATE_TIER_NOT_PAID,
     get_paygate_tier_label,
     get_required_paygate_tier_for_model,
     normalize_user_paygate_tier,
     supports_model_for_tier,
 )
-from .file_cache import FileCache
-
+from ..core.config import config
+from ..core.logger import debug_logger
+from ..core.models import Task, RequestLog
 
 # Model configuration
 MODEL_CONFIG = {
@@ -686,6 +685,8 @@ class GenerationHandler:
         )
         self._last_generated_url = None
         self._last_generation_assets = None
+        self._uploaded_image_cache_locks: Dict[str, asyncio.Lock] = {}
+        self._uploaded_image_cache_locks_guard = asyncio.Lock()
 
     def _create_generation_result(self) -> Dict[str, Any]:
         """????????????????"""
@@ -711,6 +712,244 @@ class GenerationHandler:
         if len(text) <= max_length:
             return text
         return f"{text[:max_length - 3]}..."
+
+    def _normalize_upload_aspect_ratio(self, aspect_ratio: str) -> str:
+        """Align upload cache keys with Flow upload semantics."""
+        if aspect_ratio.startswith("VIDEO_"):
+            return aspect_ratio.replace("VIDEO_", "IMAGE_", 1)
+        return aspect_ratio
+
+    async def _get_uploaded_image_cache_lock(self, cache_key: str) -> asyncio.Lock:
+        """Get or create a per-key in-process upload dedupe lock."""
+        async with self._uploaded_image_cache_locks_guard:
+            upload_lock = self._uploaded_image_cache_locks.get(cache_key)
+            if upload_lock is None:
+                upload_lock = asyncio.Lock()
+                self._uploaded_image_cache_locks[cache_key] = upload_lock
+            return upload_lock
+
+    def _build_uploaded_image_cache_key(
+            self,
+            email: str,
+            project_id: str,
+            image_hash: str,
+            aspect_ratio: str,
+    ) -> Dict[str, str]:
+        """Build the SQLite cache key for uploaded images."""
+        return {
+            "email": email,
+            "project_id": project_id,
+            "image_hash": image_hash,
+            "aspect_ratio": self._normalize_upload_aspect_ratio(aspect_ratio),
+        }
+
+    async def _get_or_upload_cached_media_id(
+            self,
+            token,
+            project_id: str,
+            image_bytes: bytes,
+            aspect_ratio: str,
+    ) -> Dict[str, Any]:
+        """Resolve an uploaded image media id via cache or upstream upload."""
+        email = str(getattr(token, "email", "") or "").strip()
+        if not email:
+            raise ValueError("Token email is required for uploaded image caching")
+
+        image_hash = hashlib.sha256(image_bytes).hexdigest()
+        cache_key = self._build_uploaded_image_cache_key(
+            email=email,
+            project_id=project_id,
+            image_hash=image_hash,
+            aspect_ratio=aspect_ratio,
+        )
+        cache_key_id = "|".join(
+            (
+                cache_key["email"],
+                cache_key["project_id"],
+                cache_key["image_hash"],
+                cache_key["aspect_ratio"],
+            )
+        )
+
+        cached_entry = await self.db.get_uploaded_image_cache(**cache_key)
+        if cached_entry:
+            await self.db.touch_uploaded_image_cache(**cache_key)
+            return {
+                "media_id": cached_entry["media_id"],
+                "cache_key": cache_key,
+                "was_cached": True,
+                "image_bytes": image_bytes,
+            }
+
+        upload_lock = await self._get_uploaded_image_cache_lock(cache_key_id)
+        async with upload_lock:
+            cached_entry = await self.db.get_uploaded_image_cache(**cache_key)
+            if cached_entry:
+                await self.db.touch_uploaded_image_cache(**cache_key)
+                return {
+                    "media_id": cached_entry["media_id"],
+                    "cache_key": cache_key,
+                    "was_cached": True,
+                    "image_bytes": image_bytes,
+                }
+
+            media_id = await self.flow_client.upload_image(
+                token.at,
+                image_bytes,
+                cache_key["aspect_ratio"],
+                project_id=project_id,
+            )
+            await self.db.upsert_uploaded_image_cache(
+                media_id=media_id,
+                **cache_key,
+            )
+            return {
+                "media_id": media_id,
+                "cache_key": cache_key,
+                "was_cached": False,
+                "image_bytes": image_bytes,
+            }
+
+    async def _resolve_uploaded_media_records(
+            self,
+            token,
+            project_id: str,
+            images: List[bytes],
+            aspect_ratio: str,
+    ) -> List[Dict[str, Any]]:
+        """Resolve media ids for input images using upload cache."""
+        upload_records: List[Dict[str, Any]] = []
+        for image_bytes in images:
+            upload_records.append(
+                await self._get_or_upload_cached_media_id(
+                    token=token,
+                    project_id=project_id,
+                    image_bytes=image_bytes,
+                    aspect_ratio=aspect_ratio,
+                )
+            )
+        return upload_records
+
+    def _build_image_inputs_from_upload_records(
+            self,
+            upload_records: List[Dict[str, Any]],
+    ) -> List[Dict[str, str]]:
+        """Convert cached upload records into image-generation inputs."""
+        return [
+            {
+                "name": upload_record["media_id"],
+                "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE",
+            }
+            for upload_record in upload_records
+        ]
+
+    def _build_reference_images_from_upload_records(
+            self,
+            upload_records: List[Dict[str, Any]],
+    ) -> List[Dict[str, str]]:
+        """Convert cached upload records into reference-image inputs."""
+        return [
+            {
+                "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
+                "mediaId": upload_record["media_id"],
+            }
+            for upload_record in upload_records
+        ]
+
+    def _has_cached_uploaded_media(self, upload_records: List[Dict[str, Any]]) -> bool:
+        """Whether a request used any cached media ids."""
+        return any(upload_record.get("was_cached") for upload_record in upload_records)
+
+    def _is_asset_like_cache_invalidation_error(self, error: Exception) -> bool:
+        """Detect asset-reference errors that justify evicting cached media ids."""
+        error_lower = str(error or "").lower()
+        if not error_lower:
+            return False
+
+        if any(
+                keyword in error_lower
+                for keyword in [
+                    "403",
+                    "429",
+                    "recaptcha",
+                    "timed out",
+                    "timeout",
+                    "network",
+                    "tls",
+                    "public_error",
+                    "internal error",
+                    "server error",
+                    "http error 500",
+                ]
+        ):
+            return False
+
+        if not any(
+                keyword in error_lower
+                for keyword in [
+                    "invalid_argument",
+                    "not_found",
+                    "http error 400",
+                    "http error 404",
+                    "bad request",
+                    "not found",
+                ]
+        ):
+            return False
+
+        return any(
+            keyword in error_lower
+            for keyword in [
+                "media",
+                "mediaid",
+                "media id",
+                "imageinput",
+                "image input",
+                "imageinputs",
+                "referenceimage",
+                "reference image",
+                "referenceimages",
+                "startimage",
+                "start image",
+                "endimage",
+                "end image",
+                "asset",
+            ]
+        )
+
+    async def _evict_uploaded_media_records(self, upload_records: List[Dict[str, Any]]):
+        """Evict cached upload records used by a failed generation request."""
+        seen_keys = set()
+        for upload_record in upload_records:
+            if not upload_record.get("was_cached"):
+                continue
+            cache_key = upload_record.get("cache_key") or {}
+            cache_key_id = (
+                cache_key.get("email"),
+                cache_key.get("project_id"),
+                cache_key.get("image_hash"),
+                cache_key.get("aspect_ratio"),
+            )
+            if cache_key_id in seen_keys:
+                continue
+            seen_keys.add(cache_key_id)
+            await self.db.delete_uploaded_image_cache(**cache_key)
+
+    async def _refresh_uploaded_media_records(
+            self,
+            token,
+            project_id: str,
+            upload_records: List[Dict[str, Any]],
+            aspect_ratio: str,
+    ) -> List[Dict[str, Any]]:
+        """Evict cached media ids and rebuild media records once."""
+        await self._evict_uploaded_media_records(upload_records)
+        return await self._resolve_uploaded_media_records(
+            token=token,
+            project_id=project_id,
+            images=[upload_record["image_bytes"] for upload_record in upload_records],
+            aspect_ratio=aspect_ratio,
+        )
 
     async def _fail_video_task(self, operations: Optional[List[Dict[str, Any]]], error_message: str):
         """将视频任务收口到失败态，避免残留 processing。"""
@@ -1124,28 +1363,27 @@ class GenerationHandler:
 
         try:
             # 上传图片 (如果有)
-            upload_started_at = time.time()
+            upload_elapsed_ms = 0
+            upload_records: List[Dict[str, Any]] = []
             image_inputs = []
             if images and len(images) > 0:
                 if stream:
                     yield self._create_stream_chunk(f"上传 {len(images)} 张参考图片...\n")
 
-                # 支持多图输入
-                for idx, image_bytes in enumerate(images):
-                    media_id = await self.flow_client.upload_image(
-                        token.at,
-                        image_bytes,
-                        model_config["aspect_ratio"],
-                        project_id=project_id
-                    )
-                    image_inputs.append({
-                        "name": media_id,
-                        "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
-                    })
+                upload_started_at = time.time()
+                upload_records = await self._resolve_uploaded_media_records(
+                    token=token,
+                    project_id=project_id,
+                    images=images,
+                    aspect_ratio=model_config["aspect_ratio"],
+                )
+                upload_elapsed_ms += int((time.time() - upload_started_at) * 1000)
+                image_inputs = self._build_image_inputs_from_upload_records(upload_records)
+                for idx in range(len(upload_records)):
                     if stream:
                         yield self._create_stream_chunk(f"已上传第 {idx + 1}/{len(images)} 张图片\n")
             if image_trace is not None:
-                image_trace["upload_images_ms"] = int((time.time() - upload_started_at) * 1000)
+                image_trace["upload_images_ms"] = upload_elapsed_ms
 
             # 调用生成API
             if stream:
@@ -1163,19 +1401,54 @@ class GenerationHandler:
                 )
 
             generate_started_at = time.time()
-            result, generation_session_id, upstream_trace = await self.flow_client.generate_image(
-                at=token.at,
-                project_id=project_id,
-                prompt=prompt,
-                model_name=model_config["model_name"],
-                aspect_ratio=model_config["aspect_ratio"],
-                image_inputs=image_inputs,
-                token_id=token.id,
-                token_image_concurrency=token.image_concurrency,
-                progress_callback=_image_progress_callback,
-            )
+            refresh_attempted = False
+            while True:
+                try:
+                    result, generation_session_id, upstream_trace = await self.flow_client.generate_image(
+                        at=token.at,
+                        project_id=project_id,
+                        prompt=prompt,
+                        model_name=model_config["model_name"],
+                        aspect_ratio=model_config["aspect_ratio"],
+                        image_inputs=image_inputs,
+                        token_id=token.id,
+                        token_image_concurrency=token.image_concurrency,
+                        progress_callback=_image_progress_callback,
+                    )
+                    break
+                except Exception as exc:
+                    if (
+                            refresh_attempted
+                            or not upload_records
+                            or not self._has_cached_uploaded_media(upload_records)
+                            or not self._is_asset_like_cache_invalidation_error(exc)
+                    ):
+                        raise
+
+                    refresh_attempted = True
+                    debug_logger.log_warning(
+                        f"[IMAGE CACHE] Cached media rejected by upstream, evicting and retrying once: {exc}"
+                    )
+                    await self._update_request_log_progress(
+                        request_log_state,
+                        token_id=token.id,
+                        status_text="uploading_images",
+                        progress=28,
+                    )
+                    if stream:
+                        yield self._create_stream_chunk("缓存的参考图片已失效，正在重新上传并重试...\n")
+                    upload_started_at = time.time()
+                    upload_records = await self._refresh_uploaded_media_records(
+                        token=token,
+                        project_id=project_id,
+                        upload_records=upload_records,
+                        aspect_ratio=model_config["aspect_ratio"],
+                    )
+                    upload_elapsed_ms += int((time.time() - upload_started_at) * 1000)
+                    image_inputs = self._build_image_inputs_from_upload_records(upload_records)
             if image_trace is not None:
                 image_trace["generate_api_ms"] = int((time.time() - generate_started_at) * 1000)
+                image_trace["upload_images_ms"] = upload_elapsed_ms
                 image_trace["upstream_trace"] = upstream_trace
                 attempts = upstream_trace.get("generation_attempts") if isinstance(upstream_trace, dict) else None
                 if isinstance(attempts, list) and attempts:
@@ -1467,6 +1740,8 @@ class GenerationHandler:
             start_media_id = None
             end_media_id = None
             reference_images = []
+            upload_records: List[Dict[str, Any]] = []
+            upload_elapsed_ms = 0
 
             # I2V: 首尾帧处理
             if video_type == "i2v" and images:
@@ -1474,21 +1749,31 @@ class GenerationHandler:
                     # 只有1张图: 仅作为首帧
                     if stream:
                         yield self._create_stream_chunk("上传首帧图片...\n")
-                    start_media_id = await self.flow_client.upload_image(
-                        token.at, images[0], model_config["aspect_ratio"], project_id=project_id
+                    upload_started_at = time.time()
+                    upload_records = await self._resolve_uploaded_media_records(
+                        token=token,
+                        project_id=project_id,
+                        images=[images[0]],
+                        aspect_ratio=model_config["aspect_ratio"],
                     )
+                    upload_elapsed_ms += int((time.time() - upload_started_at) * 1000)
+                    start_media_id = upload_records[0]["media_id"]
                     debug_logger.log_info(f"[I2V] 仅上传首帧: {start_media_id}")
 
                 elif image_count == 2:
                     # 2张图: 首帧+尾帧
                     if stream:
                         yield self._create_stream_chunk("上传首帧和尾帧图片...\n")
-                    start_media_id = await self.flow_client.upload_image(
-                        token.at, images[0], model_config["aspect_ratio"], project_id=project_id
+                    upload_started_at = time.time()
+                    upload_records = await self._resolve_uploaded_media_records(
+                        token=token,
+                        project_id=project_id,
+                        images=images[:2],
+                        aspect_ratio=model_config["aspect_ratio"],
                     )
-                    end_media_id = await self.flow_client.upload_image(
-                        token.at, images[1], model_config["aspect_ratio"], project_id=project_id
-                    )
+                    upload_elapsed_ms += int((time.time() - upload_started_at) * 1000)
+                    start_media_id = upload_records[0]["media_id"]
+                    end_media_id = upload_records[1]["media_id"]
                     debug_logger.log_info(f"[I2V] 上传首尾帧: {start_media_id}, {end_media_id}")
 
             # R2V: 多图处理
@@ -1496,83 +1781,124 @@ class GenerationHandler:
                 if stream:
                     yield self._create_stream_chunk(f"上传 {image_count} 张参考图片...\n")
 
-                for img in images:
-                    media_id = await self.flow_client.upload_image(
-                        token.at, img, model_config["aspect_ratio"], project_id=project_id
-                    )
-                    reference_images.append({
-                        "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
-                        "mediaId": media_id
-                    })
+                upload_started_at = time.time()
+                upload_records = await self._resolve_uploaded_media_records(
+                    token=token,
+                    project_id=project_id,
+                    images=images,
+                    aspect_ratio=model_config["aspect_ratio"],
+                )
+                upload_elapsed_ms += int((time.time() - upload_started_at) * 1000)
+                reference_images = self._build_reference_images_from_upload_records(upload_records)
                 debug_logger.log_info(f"[R2V] 上传了 {len(reference_images)} 张参考图片")
+            if video_trace is not None:
+                video_trace["upload_images_ms"] = upload_elapsed_ms
 
             # ========== 调用生成API ==========
             if stream:
                 yield self._create_stream_chunk("提交视频生成任务...\n")
             submit_started_at = time.time()
 
-            # I2V: 首尾帧生成
-            if video_type == "i2v" and start_media_id:
-                if end_media_id:
-                    # 有首尾帧
-                    result = await self.flow_client.generate_video_start_end(
-                        at=token.at,
-                        project_id=project_id,
-                        prompt=prompt,
-                        model_key=model_config["model_key"],
-                        aspect_ratio=model_config["aspect_ratio"],
-                        start_media_id=start_media_id,
-                        end_media_id=end_media_id,
-                        user_paygate_tier=normalized_tier,
-                        token_id=token.id,
-                        token_video_concurrency=token.video_concurrency,
-                    )
-                else:
-                    # 只有首帧 - 需要去掉 model_key 中的 _fl
-                    # 情况1: _fl_ 在中间 (如 veo_3_1_i2v_s_fast_fl_ultra_relaxed -> veo_3_1_i2v_s_fast_ultra_relaxed)
-                    # 情况2: _fl 在结尾 (如 veo_3_1_i2v_s_fast_ultra_fl -> veo_3_1_i2v_s_fast_ultra)
+            async def _submit_video_generation(current_upload_records: List[Dict[str, Any]]) -> Dict[str, Any]:
+                current_reference_images = self._build_reference_images_from_upload_records(current_upload_records)
+                current_start_media_id = current_upload_records[0]["media_id"] if current_upload_records else None
+                current_end_media_id = current_upload_records[1]["media_id"] if len(
+                    current_upload_records) > 1 else None
+
+                # I2V: 首尾帧生成
+                if video_type == "i2v" and current_start_media_id:
+                    if current_end_media_id:
+                        return await self.flow_client.generate_video_start_end(
+                            at=token.at,
+                            project_id=project_id,
+                            prompt=prompt,
+                            model_key=model_config["model_key"],
+                            aspect_ratio=model_config["aspect_ratio"],
+                            start_media_id=current_start_media_id,
+                            end_media_id=current_end_media_id,
+                            user_paygate_tier=normalized_tier,
+                            token_id=token.id,
+                            token_video_concurrency=token.video_concurrency,
+                        )
+
                     actual_model_key = model_config["model_key"].replace("_fl_", "_")
                     if actual_model_key.endswith("_fl"):
                         actual_model_key = actual_model_key[:-3]
                     debug_logger.log_info(f"[I2V] 单帧模式，model_key: {model_config['model_key']} -> {actual_model_key}")
-                    result = await self.flow_client.generate_video_start_image(
+                    return await self.flow_client.generate_video_start_image(
                         at=token.at,
                         project_id=project_id,
                         prompt=prompt,
                         model_key=actual_model_key,
                         aspect_ratio=model_config["aspect_ratio"],
-                        start_media_id=start_media_id,
+                        start_media_id=current_start_media_id,
                         user_paygate_tier=normalized_tier,
                         token_id=token.id,
                         token_video_concurrency=token.video_concurrency,
                     )
 
-            # R2V: 多图生成
-            elif video_type == "r2v" and reference_images:
-                result = await self.flow_client.generate_video_reference_images(
+                # R2V: 多图生成
+                if video_type == "r2v" and current_reference_images:
+                    return await self.flow_client.generate_video_reference_images(
+                        at=token.at,
+                        project_id=project_id,
+                        prompt=prompt,
+                        model_key=model_config["model_key"],
+                        aspect_ratio=model_config["aspect_ratio"],
+                        reference_images=current_reference_images,
+                        user_paygate_tier=normalized_tier,
+                        token_id=token.id,
+                        token_video_concurrency=token.video_concurrency,
+                    )
+
+                # T2V 或 R2V无图: 纯文本生成
+                return await self.flow_client.generate_video_text(
                     at=token.at,
                     project_id=project_id,
                     prompt=prompt,
                     model_key=model_config["model_key"],
                     aspect_ratio=model_config["aspect_ratio"],
-                    reference_images=reference_images,
                     user_paygate_tier=normalized_tier,
                     token_id=token.id,
                     token_video_concurrency=token.video_concurrency,
                 )
 
-            # T2V 或 R2V无图: 纯文本生成
-            else:
-                result = await self.flow_client.generate_video_text(
-                    at=token.at,
-                    project_id=project_id,
-                    prompt=prompt,
-                    model_key=model_config["model_key"],
-                    aspect_ratio=model_config["aspect_ratio"],
-                    user_paygate_tier=normalized_tier,
-                    token_id=token.id,
-                    token_video_concurrency=token.video_concurrency,
-                )
+            refresh_attempted = False
+            while True:
+                try:
+                    result = await _submit_video_generation(upload_records)
+                    break
+                except Exception as exc:
+                    if (
+                            refresh_attempted
+                            or not upload_records
+                            or not self._has_cached_uploaded_media(upload_records)
+                            or not self._is_asset_like_cache_invalidation_error(exc)
+                    ):
+                        raise
+
+                    refresh_attempted = True
+                    debug_logger.log_warning(
+                        f"[VIDEO CACHE] Cached media rejected by upstream, evicting and retrying once: {exc}"
+                    )
+                    await self._update_request_log_progress(
+                        request_log_state,
+                        token_id=token.id,
+                        status_text="preparing_video",
+                        progress=24,
+                    )
+                    if stream:
+                        yield self._create_stream_chunk("缓存的参考图片已失效，正在重新上传并重试...\n")
+                    upload_started_at = time.time()
+                    upload_records = await self._refresh_uploaded_media_records(
+                        token=token,
+                        project_id=project_id,
+                        upload_records=upload_records,
+                        aspect_ratio=model_config["aspect_ratio"],
+                    )
+                    upload_elapsed_ms += int((time.time() - upload_started_at) * 1000)
+                    if video_trace is not None:
+                        video_trace["upload_images_ms"] = upload_elapsed_ms
             if video_trace is not None:
                 video_trace["submit_generation_ms"] = int((time.time() - submit_started_at) * 1000)
 
