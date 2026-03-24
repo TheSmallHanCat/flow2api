@@ -1,10 +1,12 @@
 """Database storage layer for Flow2API"""
+from pathlib import Path
+
 import aiosqlite
 import json
-from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pathlib import Path
-from .models import Token, TokenStats, Task, RequestLog, AdminConfig, ProxyConfig, GenerationConfig, CacheConfig, Project, CaptchaConfig, PluginConfig, CallLogicConfig
+
+from .models import Token, TokenStats, Task, RequestLog, AdminConfig, ProxyConfig, GenerationConfig, CacheConfig, \
+    Project, CaptchaConfig, PluginConfig, CallLogicConfig
 
 
 class Database:
@@ -325,6 +327,25 @@ class Database:
                     )
                 """)
 
+            # Check and create uploaded_image_cache table if missing
+            if not await self._table_exists(db, "uploaded_image_cache"):
+                print("  ✓ Creating missing table: uploaded_image_cache")
+                await db.execute("""
+                                 CREATE TABLE uploaded_image_cache
+                                 (
+                                     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                                     email        TEXT NOT NULL,
+                                     project_id   TEXT NOT NULL,
+                                     image_hash   TEXT NOT NULL,
+                                     aspect_ratio TEXT NOT NULL,
+                                     media_id     TEXT NOT NULL,
+                                     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                     updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                     last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                     UNIQUE (email, project_id, image_hash, aspect_ratio)
+                                 )
+                                 """)
+
             # ========== Step 2: Add missing columns to existing tables ==========
             # Check and add missing columns to tokens table
             if await self._table_exists(db, "tokens"):
@@ -543,6 +564,23 @@ class Database:
                 )
             """)
 
+            # Uploaded image media cache table
+            await db.execute("""
+                             CREATE TABLE IF NOT EXISTS uploaded_image_cache
+                             (
+                                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                                 email        TEXT NOT NULL,
+                                 project_id   TEXT NOT NULL,
+                                 image_hash   TEXT NOT NULL,
+                                 aspect_ratio TEXT NOT NULL,
+                                 media_id     TEXT NOT NULL,
+                                 created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                 updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                 last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                 UNIQUE (email, project_id, image_hash, aspect_ratio)
+                             )
+                             """)
+
             # Admin config table
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS admin_config (
@@ -656,6 +694,8 @@ class Database:
             await db.execute("CREATE INDEX IF NOT EXISTS idx_project_id ON projects(project_id)")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email)")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_tokens_is_active_last_used_at ON tokens(is_active, last_used_at)")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_uploaded_image_cache_lookup ON uploaded_image_cache(email, project_id, image_hash, aspect_ratio)")
 
             # Migrate request_logs table if needed
             await self._migrate_request_logs(db)
@@ -942,6 +982,101 @@ class Database:
         """Delete project"""
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM projects WHERE project_id = ?", (project_id,))
+            await db.commit()
+
+    # Uploaded image cache operations
+    async def get_uploaded_image_cache(
+            self,
+            email: str,
+            project_id: str,
+            image_hash: str,
+            aspect_ratio: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get cached uploaded media metadata by cache key."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT *
+                FROM uploaded_image_cache
+                WHERE email = ?
+                  AND project_id = ?
+                  AND image_hash = ?
+                  AND aspect_ratio = ?
+                """,
+                (email, project_id, image_hash, aspect_ratio),
+            )
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+    async def upsert_uploaded_image_cache(
+            self,
+            email: str,
+            project_id: str,
+            image_hash: str,
+            aspect_ratio: str,
+            media_id: str,
+    ):
+        """Insert or update cached uploaded media metadata."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO uploaded_image_cache (email, project_id, image_hash, aspect_ratio, media_id)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(email, project_id, image_hash, aspect_ratio)
+                    DO UPDATE SET media_id     = excluded.media_id,
+                                  updated_at   = CURRENT_TIMESTAMP,
+                                  last_used_at = CURRENT_TIMESTAMP
+                """,
+                (email, project_id, image_hash, aspect_ratio, media_id),
+            )
+            await db.commit()
+
+    async def touch_uploaded_image_cache(
+            self,
+            email: str,
+            project_id: str,
+            image_hash: str,
+            aspect_ratio: str,
+    ):
+        """Update cache entry usage timestamps."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE uploaded_image_cache
+                SET updated_at   = CURRENT_TIMESTAMP,
+                    last_used_at = CURRENT_TIMESTAMP
+                WHERE email = ?
+                  AND project_id = ?
+                  AND image_hash = ?
+                  AND aspect_ratio = ?
+                """,
+                (email, project_id, image_hash, aspect_ratio),
+            )
+            await db.commit()
+
+    async def delete_uploaded_image_cache(
+            self,
+            email: str,
+            project_id: str,
+            image_hash: str,
+            aspect_ratio: str,
+    ):
+        """Delete cached uploaded media metadata by cache key."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                DELETE
+                FROM uploaded_image_cache
+                WHERE email = ?
+                  AND project_id = ?
+                  AND image_hash = ?
+                  AND aspect_ratio = ?
+                """,
+                (email, project_id, image_hash, aspect_ratio),
+            )
             await db.commit()
 
     # Task operations
