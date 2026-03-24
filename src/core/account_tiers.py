@@ -33,7 +33,7 @@ def get_paygate_tier_label(user_paygate_tier: Optional[str]) -> str:
         return "Ult"
     if normalized == PAYGATE_TIER_ONE:
         return "Pro"
-    return "Normal"
+    return "Free"
 
 
 def get_required_paygate_tier_for_model(model_name: Optional[str]) -> str:

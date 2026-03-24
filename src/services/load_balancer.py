@@ -275,3 +275,43 @@ class LoadBalancer:
 
         debug_logger.log_info(f"[LOAD_BALANCER] ❌ 候选Token均不可用 (图片生成={for_image_generation}, 视频生成={for_video_generation})")
         return None
+
+    async def get_unavailable_reason(
+        self,
+        *,
+        for_image_generation: bool = False,
+        for_video_generation: bool = False,
+        model: Optional[str] = None,
+    ) -> Optional[str]:
+        """给出更明确的“无可用账号”原因，优先用于分辨率/tier 档位提示。"""
+        active_tokens = await self.token_manager.get_active_tokens()
+        if not active_tokens:
+            return None
+
+        required_tier = get_required_paygate_tier_for_model(model)
+        supported_tokens = []
+        for token in active_tokens:
+            normalized_tier = normalize_user_paygate_tier(token.user_paygate_tier)
+            if model and not supports_model_for_tier(model, normalized_tier):
+                continue
+            supported_tokens.append(token)
+
+        if model and not supported_tokens:
+            tier_label = get_paygate_tier_label(required_tier)
+            return f"当前模型需要 {tier_label} 账号，但没有可用的 {tier_label} 账号: {model}"
+
+        capability_tokens = []
+        for token in supported_tokens:
+            if for_image_generation and not token.image_enabled:
+                continue
+            if for_video_generation and not token.video_enabled:
+                continue
+            capability_tokens.append(token)
+
+        if supported_tokens and not capability_tokens:
+            if for_image_generation:
+                return "当前有符合档位的账号，但图片生成功能已全部禁用。"
+            if for_video_generation:
+                return "当前有符合档位的账号，但视频生成功能已全部禁用。"
+
+        return None

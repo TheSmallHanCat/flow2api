@@ -126,6 +126,13 @@ class FlowClient:
         """设置当前请求链路的浏览器指纹上下文。"""
         self._request_fingerprint_ctx.set(dict(fingerprint) if fingerprint else None)
 
+    def get_request_fingerprint(self) -> Optional[Dict[str, Any]]:
+        """获取当前请求链路绑定的浏览器指纹快照。"""
+        fingerprint = self._request_fingerprint_ctx.get()
+        if not isinstance(fingerprint, dict) or not fingerprint:
+            return None
+        return dict(fingerprint)
+
     def clear_request_fingerprint(self):
         """清理请求链路绑定的浏览器指纹。"""
         self._set_request_fingerprint(None)

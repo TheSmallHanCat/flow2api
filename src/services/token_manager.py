@@ -403,7 +403,8 @@ class TokenManager:
                 credits_result = await self.flow_client.get_credits(new_at)
                 await self.db.update_token(
                     token_id,
-                    credits=credits_result.get("credits", 0)
+                    credits=credits_result.get("credits", 0),
+                    user_paygate_tier=credits_result.get("userPaygateTier"),
                 )
                 debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT 验证成功（余额: {credits_result.get('credits', 0)}）")
                 return True
@@ -619,9 +620,14 @@ class TokenManager:
         try:
             result = await self.flow_client.get_credits(token.at)
             credits = result.get("credits", 0)
+            user_paygate_tier = result.get("userPaygateTier")
 
             # 更新数据库
-            await self.db.update_token(token_id, credits=credits)
+            await self.db.update_token(
+                token_id,
+                credits=credits,
+                user_paygate_tier=user_paygate_tier,
+            )
 
             return credits
         except Exception as e:
