@@ -84,6 +84,26 @@ docker compose -f docker-compose.headed.yml logs -f
 - API 端口：`8000`
 - 进入管理后台后，将验证码方式设为 `browser` 或 `personal`
 
+#### Docker 浏览器插件打码模式（extension）
+
+> 通过 Chrome Extension + WebSocket 长连接实时获取 reCAPTCHA token，无需第三方打码 API 费用。 支持本地浏览器安装插件，或使用 Docker 容器运行。
+> 容器内运行 Chromium + Xvfb，插件自动连接 flow2api 的 `/ws/captcha` WebSocket 端点。  
+> 默认启动 2 个 solver 实例，Round-Robin 负载均衡。
+
+```bash
+# 启动插件打码模式（首次建议带 --build）
+docker compose -f docker-compose.captcha.yml up -d --build
+
+# 查看日志
+docker compose -f docker-compose.captcha.yml logs -f
+
+# 调整实例数量（如需 3 个）
+docker compose -f docker-compose.captcha.yml up -d --scale captcha-solver=3
+```
+
+- API 端口：`8000`
+- 进入管理后台后，将验证码方式设为 `extension`，可在状态面板查看连接客户端数
+
 ### 方式二：本地部署
 
 ```bash

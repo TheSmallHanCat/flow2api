@@ -1530,6 +1530,29 @@ async def get_captcha_config(token: str = Depends(verify_admin_token)):
     }
 
 
+@router.get("/api/captcha/extension-status")
+async def get_extension_status(token: str = Depends(verify_admin_token)):
+    """获取浏览器插件打码服务状态"""
+    try:
+        from ..services.extension_captcha import ExtensionCaptchaService
+        service = ExtensionCaptchaService.get_instance()
+        return {
+            "success": True,
+            "connected_clients": service.stats["clients"],
+            "total_requests": service.stats["total_requests"],
+            "success_count": service.stats["success"],
+            "error_count": service.stats["errors"],
+            "has_clients": service.has_clients,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e),
+            "connected_clients": 0,
+            "has_clients": False,
+        }
+
+
 @router.post("/api/captcha/score-test")
 async def test_captcha_score(
     request: Optional[CaptchaScoreTestRequest] = None,

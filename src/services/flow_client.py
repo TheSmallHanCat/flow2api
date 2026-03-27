@@ -1982,6 +1982,7 @@ class FlowClient:
                 )
             except Exception as e:
                 debug_logger.log_warning(f"[reCAPTCHA RemoteBrowser] 上报 error 失败: {e}")
+        # extension 模式无需上报错误（插件无状态）
 
     async def _notify_browser_captcha_request_finished(self, browser_id: Optional[Union[int, str]] = None):
         """通知有头浏览器：上游图片/视频请求已结束，可关闭对应打码浏览器。"""
@@ -2002,6 +2003,7 @@ class FlowClient:
                 )
             except Exception as e:
                 debug_logger.log_warning(f"[reCAPTCHA RemoteBrowser] 上报 finish 失败: {e}")
+        # extension 模式无需上报 finish（插件无状态）
 
     def _generate_session_id(self) -> str:
         """生成sessionId: ;timestamp"""
@@ -2216,6 +2218,18 @@ class FlowClient:
                 return token, str(session_id)
             except Exception as e:
                 debug_logger.log_error(f"[reCAPTCHA RemoteBrowser] 错误: {str(e)}")
+                self._set_request_fingerprint(None)
+                return None, None
+        elif captcha_method == "extension":
+            # 浏览器插件打码（Chrome Extension + WebSocket）
+            try:
+                from .extension_captcha import ExtensionCaptchaService
+                service = ExtensionCaptchaService.get_instance()
+                token = await service.get_token(action=action)
+                self._set_request_fingerprint(None)
+                return token, None
+            except Exception as e:
+                debug_logger.log_error(f"[reCAPTCHA Extension] 错误: {str(e)}")
                 self._set_request_fingerprint(None)
                 return None, None
         # API打码服务
