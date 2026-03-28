@@ -1,0 +1,52 @@
+FROM python:3.11-slim-bookworm
+
+# 安装运行依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  fonts-liberation fonts-noto-cjk \
+  xvfb dbus dbus-x11 procps xdotool fluxbox \
+  libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+  libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
+  libpango-1.0-0 libcairo2 libasound2 libxshmfence1 \
+  && rm -rf /var/lib/apt/lists/*
+
+# 安装 CloakBrowser Python 包
+RUN pip install --no-cache-dir cloakbrowser
+
+# 预下载二进制（ensure_binary 会在最后验证运行，build 阶段无 X11 会 segfault，忽略即可）
+RUN mkdir -p /opt/cloakbrowser \
+  && HOME=/opt/cloakbrowser python -c "from cloakbrowser import ensure_binary; ensure_binary()" || true
+
+# 创建软链接（二进制已下载到 /opt/cloakbrowser/.cloakbrowser/*/chrome）
+RUN CLOAK_BIN=$(find /opt/cloakbrowser -name "chrome" -type f | head -1) \
+  && echo "CloakBrowser binary: $CLOAK_BIN" \
+  && ln -sf "$CLOAK_BIN" /usr/local/bin/cloakbrowser-bin \
+  && chmod -R a+rX /opt/cloakbrowser
+
+# 生成 machine-id
+RUN dbus-uuidgen > /etc/machine-id
+
+# 预创建 X11 socket 目录
+RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+
+# 创建非 root 用户
+RUN groupadd -r chrome && useradd -r -g chrome -G audio,video chrome \
+  && mkdir -p /home/chrome/extension /home/chrome/data \
+  && chown -R chrome:chrome /home/chrome
+
+# 复制插件文件
+COPY chrome-extension/ /home/chrome/extension/
+RUN chown -R chrome:chrome /home/chrome/extension
+
+# 复制启动脚本
+COPY docker/entrypoint.captcha.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV DISPLAY=:99
+ENV WS_URL=""
+ENV AUTH_KEY=""
+ENV PROXY_URL=""
+
+USER chrome
+WORKDIR /home/chrome
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -1530,6 +1530,92 @@ async def get_captcha_config(token: str = Depends(verify_admin_token)):
     }
 
 
+@router.get("/api/captcha/extension-status")
+async def get_extension_status(token: str = Depends(verify_admin_token)):
+    """获取浏览器插件打码服务状态（含客户端列表）"""
+    try:
+        from ..services.extension_captcha import ExtensionCaptchaService
+        service = ExtensionCaptchaService.get_instance()
+        return {
+            "success": True,
+            "connected_clients": service.stats["clients"],
+            "total_requests": service.stats["total_requests"],
+            "success_count": service.stats["success"],
+            "error_count": service.stats["errors"],
+            "has_clients": service.has_clients,
+            "refresh_interval": service.refresh_interval,
+            "max_consecutive_errors": service.max_consecutive_errors,
+            "clients": service.get_clients_info(),
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e),
+            "connected_clients": 0,
+            "has_clients": False,
+        }
+
+
+@router.post("/api/captcha/extension-client-toggle")
+async def toggle_extension_client(request: Request, token: str = Depends(verify_admin_token)):
+    """启用/禁用指定的插件客户端"""
+    try:
+        data = await request.json()
+        client_id = data.get("client_id")
+        enabled = data.get("enabled", True)
+        if client_id is None:
+            return {"success": False, "message": "缺少 client_id"}
+
+        from ..services.extension_captcha import ExtensionCaptchaService
+        service = ExtensionCaptchaService.get_instance()
+        ok = service.set_client_enabled(int(client_id), bool(enabled))
+        return {"success": ok, "message": "操作成功" if ok else "未找到该客户端"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@router.post("/api/captcha/extension-config")
+async def update_extension_config(request: Request, token: str = Depends(verify_admin_token)):
+    """更新插件打码配置（刷新间隔、自动禁用阈值等），持久化并下发给所有客户端"""
+    try:
+        data = await request.json()
+        from ..services.extension_captcha import ExtensionCaptchaService
+        service = ExtensionCaptchaService.get_instance()
+
+        if "refresh_interval" in data:
+            service.refresh_interval = max(1, int(data["refresh_interval"]))
+
+        if "max_consecutive_errors" in data:
+            service.max_consecutive_errors = int(data["max_consecutive_errors"])
+
+        # 下发配置给所有在线客户端
+        await service.broadcast_config()
+        return {
+            "success": True,
+            "refresh_interval": service.refresh_interval,
+            "max_consecutive_errors": service.max_consecutive_errors,
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+@router.post("/api/captcha/extension-client-test")
+async def test_extension_client(request: Request, token: str = Depends(verify_admin_token)):
+    """测试指定客户端的 Token 获取能力"""
+    try:
+        data = await request.json()
+        client_id = data.get("client_id")
+        if client_id is None:
+            return {"success": False, "message": "缺少 client_id"}
+
+        from ..services.extension_captcha import ExtensionCaptchaService
+        service = ExtensionCaptchaService.get_instance()
+        result = await service.test_client(int(client_id))
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @router.post("/api/captcha/score-test")
 async def test_captcha_score(
     request: Optional[CaptchaScoreTestRequest] = None,

@@ -1,0 +1,29 @@
+services:
+  flow2api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flow2api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    restart: unless-stopped
+
+  captcha-solver:
+    build:
+      context: .
+      dockerfile: Dockerfile.captcha
+    environment:
+      - WS_URL=ws://flow2api:8000/ws/captcha
+      - AUTH_KEY=
+    depends_on:
+      - flow2api
+    restart: unless-stopped
+    shm_size: '512m'
+    deploy:
+      replicas: 2 # 2个实例
+      resources:
+        limits:
+          memory: 1G

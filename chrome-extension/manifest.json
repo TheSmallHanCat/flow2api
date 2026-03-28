@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Flow2API reCAPTCHA Helper",
+  "version": "1.0.0",
+  "description": "为 Flow2API 提供 reCAPTCHA Enterprise token 获取能力",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "alarms",
+    "proxy"
+  ],
+  "host_permissions": [
+    "https://labs.google/*",
+    "https://*.google.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Flow2API reCAPTCHA Helper"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://labs.google/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

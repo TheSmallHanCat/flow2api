@@ -84,6 +84,24 @@ docker compose -f docker-compose.headed.yml logs -f
 - API 端口：`8000`
 - 进入管理后台后，将验证码方式设为 `browser` 或 `personal`
 
+#### Docker 浏览器插件打码模式（extension）
+
+> 支持在 PC 浏览器或安卓 Kiwi 浏览器中作为插件安装，也可直接通过 Docker 容器运行。
+> 容器内默认使用 [CloakBrowser](https://github.com/CloakHQ/CloakBrowser) + Xvfb ，插件自动连接到 `/ws/captcha`。
+> 默认启动 2 个 solver 实例，后端根据客户端状态自动进行负载均衡。
+
+```bash
+# 启动插件打码模式（首次启动需带 --build 编译指纹环境）
+docker compose -f docker-compose.captcha.yml up -d --build
+
+# 查看日志
+docker compose -f docker-compose.captcha.yml logs -f captcha-solver
+
+# 调整实例数量（如需 3 个并发处理容器）
+docker compose -f docker-compose.captcha.yml up -d --scale captcha-solver=3
+```
+
+- **安卓手机节点**：手机端可用 [Kiwi Browser](https://kiwibrowser.com/) 安装插件。必须在系统设置中允许 Kiwi **自启动**，并将省电策略设为**无限制**（极其关键，否则锁屏必然断网掉线）。
 ### 方式二：本地部署
 
 ```bash

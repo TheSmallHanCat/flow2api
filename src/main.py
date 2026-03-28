@@ -1,5 +1,5 @@
 """FastAPI application initialization"""
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -110,6 +110,11 @@ async def lifespan(app: FastAPI):
         browser_service = await BrowserCaptchaService.get_instance(db)
         await browser_service.warmup_browser_slots()
         print("? Browser captcha service initialized (headed mode)")
+    elif captcha_config.captcha_method == "extension":
+        from .services.extension_captcha import ExtensionCaptchaService
+        ext_service = ExtensionCaptchaService.get_instance()
+        ext_service.set_auth_key(getattr(captcha_config, 'extension_auth_key', ''))
+        print("✓ Extension captcha service initialized (waiting for browser plugin connections)")
 
     # Initialize concurrency manager
     tokens = await token_manager.get_all_tokens()
@@ -200,6 +205,14 @@ app.add_middleware(
 # Include routers
 app.include_router(routes.router)
 app.include_router(admin.router)
+
+
+# WebSocket 路由：浏览器插件打码
+@app.websocket("/ws/captcha")
+async def ws_captcha(websocket: WebSocket):
+    from .services.extension_captcha import ExtensionCaptchaService
+    service = ExtensionCaptchaService.get_instance()
+    await service.handle_websocket(websocket)
 
 # Static files - serve tmp directory for cached files
 tmp_dir = Path(__file__).parent.parent / "tmp"
