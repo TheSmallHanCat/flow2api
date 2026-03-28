@@ -1,0 +1,37 @@
+FROM debian:bookworm-slim
+
+# 安装 Chromium（支持 --load-extension，Google Chrome 正式版不支持）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    chromium-sandbox \
+    fonts-liberation fonts-noto-cjk \
+    xvfb dbus dbus-x11 procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# 生成 machine-id（消除 dbus 警告）
+RUN dbus-uuidgen > /etc/machine-id
+
+# 预创建 X11 socket 目录
+RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+
+# 创建非 root 用户
+RUN groupadd -r chrome && useradd -r -g chrome -G audio,video chrome \
+    && mkdir -p /home/chrome/extension /home/chrome/data \
+    && chown -R chrome:chrome /home/chrome
+
+# 复制插件文件
+COPY chrome-extension/ /home/chrome/extension/
+RUN chown -R chrome:chrome /home/chrome/extension
+
+# 复制启动脚本
+COPY docker/entrypoint.captcha.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV DISPLAY=:99
+ENV WS_URL=""
+ENV AUTH_KEY=""
+
+USER chrome
+WORKDIR /home/chrome
+
+ENTRYPOINT ["/entrypoint.sh"]
