@@ -2397,6 +2397,8 @@ class FlowClient:
         page_action = action
 
         try:
+            # Do not use curl_cffi impersonation for captcha API JSON endpoints: some ASGI
+            # servers (for example FastAPI/Uvicorn) may receive an empty body and return 422.
             async with AsyncSession() as session:
                 create_url = f"{base_url}/createTask"
                 create_data = {
@@ -2409,7 +2411,7 @@ class FlowClient:
                     }
                 }
 
-                result = await session.post(create_url, json=create_data, impersonate="chrome110")
+                result = await session.post(create_url, json=create_data)
                 result_json = result.json()
                 task_id = result_json.get('taskId')
 
@@ -2426,7 +2428,7 @@ class FlowClient:
                         "clientKey": client_key,
                         "taskId": task_id
                     }
-                    result = await session.post(get_url, json=get_data, impersonate="chrome110")
+                    result = await session.post(get_url, json=get_data)
                     result_json = result.json()
 
                     debug_logger.log_info(f"[reCAPTCHA {method}] polling #{i+1}: {result_json}")
