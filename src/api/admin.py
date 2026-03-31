@@ -369,11 +369,12 @@ async def _solve_recaptcha_with_api_service(
     create_url = f"{base_url.rstrip('/')}/createTask"
     get_url = f"{base_url.rstrip('/')}/getTaskResult"
 
+    # Do not use curl_cffi impersonation for captcha API JSON endpoints: some ASGI servers
+    # (for example FastAPI/Uvicorn) may receive an empty body and return 422.
     async with AsyncSession() as session:
         create_resp = await session.post(
             create_url,
             json={"clientKey": client_key, "task": task},
-            impersonate="chrome120",
             timeout=30
         )
         create_json = create_resp.json()
@@ -387,7 +388,6 @@ async def _solve_recaptcha_with_api_service(
             poll_resp = await session.post(
                 get_url,
                 json={"clientKey": client_key, "taskId": task_id},
-                impersonate="chrome120",
                 timeout=30
             )
             poll_json = poll_resp.json()
