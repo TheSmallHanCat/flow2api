@@ -809,11 +809,12 @@ class FlowClient:
         ext = "png" if "png" in mime_type else "jpg"
         upload_file_name = f"flow2api_upload_{int(time.time() * 1000)}.{ext}"
         new_url = f"{self.api_base_url}/flow/uploadImage"
+        normalized_project_id = str(project_id or "").strip()
         new_client_context = {
             "tool": "PINHOLE"
         }
-        if project_id:
-            new_client_context["projectId"] = project_id
+        if normalized_project_id:
+            new_client_context["projectId"] = normalized_project_id
 
         new_json_data = {
             "clientContext": new_client_context,
@@ -860,6 +861,23 @@ class FlowClient:
                 raise Exception(f"Invalid upload response: missing media id, keys={list(new_result.keys())}")
             except Exception as new_upload_error:
                 last_error = new_upload_error
+                retry_reason = "网络超时" if self._is_timeout_error(new_upload_error) else self._get_retry_reason(str(new_upload_error))
+
+                # 旧接口不携带 projectId，带项目上下文的上传一旦回退就可能把图片挂到错误项目。
+                if normalized_project_id:
+                    if retry_reason and retry_attempt < max_retries - 1:
+                        debug_logger.log_warning(
+                            f"[UPLOAD] Project-scoped upload 遇到{retry_reason}，准备重试新版接口 "
+                            f"({retry_attempt + 2}/{max_retries}, project_id={normalized_project_id})..."
+                        )
+                        await asyncio.sleep(1)
+                        continue
+                    raise RuntimeError(
+                        "Project-scoped image upload failed via /flow/uploadImage; "
+                        "legacy :uploadUserImage fallback is disabled because it may attach media "
+                        f"to a different project (project_id={normalized_project_id})."
+                    ) from new_upload_error
+
                 debug_logger.log_warning(
                     f"[UPLOAD] New upload API failed, fallback to legacy endpoint: {new_upload_error}"
                 )
