@@ -19,6 +19,9 @@ from typing import Optional, Dict, Any, Iterable
 from ..core.logger import debug_logger
 from ..core.config import config
 
+# 复用 browser 模式的浏览器缓存目录约定，避免容器内每次换位置。
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
+
 
 # ==================== Docker 环境检测 ====================
 def _is_running_in_docker() -> bool:
@@ -118,6 +121,111 @@ def _ensure_nodriver_installed() -> bool:
     return False
 
 
+def _run_playwright_install(use_mirror: bool = False) -> bool:
+    """安装 playwright chromium 浏览器，复用 browser 模式的安装方式。"""
+    cmd = [sys.executable, '-m', 'playwright', 'install', 'chromium']
+    env = os.environ.copy()
+
+    if use_mirror:
+        env['PLAYWRIGHT_DOWNLOAD_HOST'] = 'https://npmmirror.com/mirrors/playwright'
+
+    try:
+        debug_logger.log_info("[BrowserCaptcha] 正在安装 chromium 浏览器...")
+        print("[BrowserCaptcha] 正在安装 chromium 浏览器...")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
+        if result.returncode == 0:
+            debug_logger.log_info("[BrowserCaptcha] ✅ chromium 浏览器安装成功")
+            print("[BrowserCaptcha] ✅ chromium 浏览器安装成功")
+            return True
+
+        debug_logger.log_warning(f"[BrowserCaptcha] chromium 安装失败: {result.stderr[:200]}")
+        return False
+    except Exception as e:
+        debug_logger.log_warning(f"[BrowserCaptcha] chromium 安装异常: {e}")
+        return False
+
+
+def _ensure_playwright_installed() -> bool:
+    """确保 playwright 可用，便于复用其 chromium 二进制。"""
+    try:
+        import playwright  # noqa: F401
+        debug_logger.log_info("[BrowserCaptcha] playwright 已安装")
+        return True
+    except ImportError:
+        pass
+
+    debug_logger.log_info("[BrowserCaptcha] playwright 未安装，开始自动安装...")
+    print("[BrowserCaptcha] playwright 未安装，开始自动安装...")
+
+    if _run_pip_install('playwright', use_mirror=False):
+        return True
+
+    debug_logger.log_info("[BrowserCaptcha] 官方源安装失败，尝试国内镜像...")
+    print("[BrowserCaptcha] 官方源安装失败，尝试国内镜像...")
+    if _run_pip_install('playwright', use_mirror=True):
+        return True
+
+    debug_logger.log_error("[BrowserCaptcha] ❌ playwright 自动安装失败，请手动安装: pip install playwright")
+    print("[BrowserCaptcha] ❌ playwright 自动安装失败，请手动安装: pip install playwright")
+    return False
+
+
+def _detect_playwright_browser_path() -> Optional[str]:
+    """读取 playwright 管理的 chromium 可执行文件路径。"""
+    detect_script = (
+        "from playwright.sync_api import sync_playwright\n"
+        "with sync_playwright() as p:\n"
+        "    print(p.chromium.executable_path or '')\n"
+    )
+    env = os.environ.copy()
+    env.setdefault("PLAYWRIGHT_BROWSERS_PATH", os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "0") or "0")
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", detect_script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
+        browser_path_lines = (result.stdout or "").strip().splitlines()
+        browser_path = browser_path_lines[-1].strip() if browser_path_lines else ""
+        if result.returncode == 0 and browser_path and os.path.exists(browser_path):
+            debug_logger.log_info(f"[BrowserCaptcha] 检测到 playwright chromium: {browser_path}")
+            return browser_path
+
+        stderr_text = (result.stderr or "").strip()
+        if stderr_text:
+            debug_logger.log_warning(f"[BrowserCaptcha] 检测 playwright chromium 失败: {stderr_text[:200]}")
+    except Exception as e:
+        debug_logger.log_info(f"[BrowserCaptcha] 检测 playwright chromium 时出错: {e}")
+
+    return None
+
+
+def _ensure_playwright_browser_path() -> Optional[str]:
+    """确保存在可复用的 chromium 二进制，并返回路径。"""
+    browser_path = _detect_playwright_browser_path()
+    if browser_path:
+        return browser_path
+
+    if not _ensure_playwright_installed():
+        return None
+
+    debug_logger.log_info("[BrowserCaptcha] playwright chromium 未安装，开始自动安装...")
+    print("[BrowserCaptcha] playwright chromium 未安装，开始自动安装...")
+
+    if not _run_playwright_install(use_mirror=False):
+        debug_logger.log_info("[BrowserCaptcha] 官方源安装失败，尝试国内镜像...")
+        print("[BrowserCaptcha] 官方源安装失败，尝试国内镜像...")
+        if not _run_playwright_install(use_mirror=True):
+            debug_logger.log_error("[BrowserCaptcha] ❌ chromium 浏览器自动安装失败，请手动安装: python -m playwright install chromium")
+            print("[BrowserCaptcha] ❌ chromium 浏览器自动安装失败，请手动安装: python -m playwright install chromium")
+            return None
+
+    return _detect_playwright_browser_path()
+
+
 # 尝试导入 nodriver
 uc = None
 NODRIVER_AVAILABLE = False
@@ -126,14 +234,15 @@ _NODRIVER_RUNTIME_PATCHED = False
 if DOCKER_HEADED_BLOCKED:
     debug_logger.log_warning(
         "[BrowserCaptcha] 检测到 Docker 环境，默认禁用内置浏览器打码。"
-        "如需启用请设置 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb。"
+        "如需启用请设置 ALLOW_DOCKER_HEADED_CAPTCHA=true。"
+        "personal 模式默认支持无头，不强制依赖 DISPLAY/Xvfb。"
     )
     print("[BrowserCaptcha] ⚠️ 检测到 Docker 环境，默认禁用内置浏览器打码")
-    print("[BrowserCaptcha] 如需启用请设置 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb")
+    print("[BrowserCaptcha] 如需启用请设置 ALLOW_DOCKER_HEADED_CAPTCHA=true")
 else:
     if IS_DOCKER and ALLOW_DOCKER_HEADED:
         debug_logger.log_warning(
-            "[BrowserCaptcha] Docker 内置浏览器打码白名单已启用，请确保 DISPLAY/Xvfb 可用"
+            "[BrowserCaptcha] Docker 内置浏览器打码白名单已启用，personal 模式将按 headless 配置决定是否需要 DISPLAY/Xvfb"
         )
         print("[BrowserCaptcha] ✅ Docker 内置浏览器打码白名单已启用")
     if _ensure_nodriver_installed():
@@ -549,14 +658,18 @@ class BrowserCaptchaService:
         except Exception:
             self._fingerprint_cache_ttl_seconds = 3600.0
 
+    def _requires_virtual_display(self) -> bool:
+        """仅在显式有头模式下要求 Docker/Linux 提供 DISPLAY/Xvfb。"""
+        return bool(IS_DOCKER and os.name == "posix" and not self.headless)
+
     def _check_available(self):
         """检查服务是否可用"""
         if DOCKER_HEADED_BLOCKED:
             raise RuntimeError(
                 "检测到 Docker 环境，默认禁用内置浏览器打码。"
-                "如需启用请设置环境变量 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb。"
+                "如需启用请设置环境变量 ALLOW_DOCKER_HEADED_CAPTCHA=true。"
             )
-        if IS_DOCKER and not os.environ.get("DISPLAY"):
+        if self._requires_virtual_display() and not os.environ.get("DISPLAY"):
             raise RuntimeError(
                 "Docker 内置浏览器打码已启用，但 DISPLAY 未设置。"
                 "请设置 DISPLAY（例如 :99）并启动 Xvfb。"
@@ -1294,6 +1407,13 @@ class BrowserCaptchaService:
                         f"[BrowserCaptcha] 指定浏览器不存在，改为自动发现: {browser_executable_path}"
                     )
                     browser_executable_path = None
+                if not browser_executable_path:
+                    playwright_browser_path = _ensure_playwright_browser_path()
+                    if playwright_browser_path:
+                        browser_executable_path = playwright_browser_path
+                        debug_logger.log_info(
+                            f"[BrowserCaptcha] 复用 playwright chromium 作为 nodriver 浏览器: {browser_executable_path}"
+                        )
                 if browser_executable_path:
                     debug_logger.log_info(
                         f"[BrowserCaptcha] 使用指定浏览器可执行文件: {browser_executable_path}"
@@ -1361,7 +1481,8 @@ class BrowserCaptchaService:
                     browser_args.append('--disable-extensions')
 
                 effective_launch_args = list(browser_args)
-                await self._wait_for_display_ready(display_value)
+                if self._requires_virtual_display():
+                    await self._wait_for_display_ready(display_value)
 
                 effective_uid = "n/a"
                 if hasattr(os, "geteuid"):

@@ -4,33 +4,14 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    ALLOW_DOCKER_HEADED_CAPTCHA=true
+    ALLOW_DOCKER_HEADED_CAPTCHA=true \
+    PLAYWRIGHT_BROWSERS_PATH=0
 
-# 安装 Chrome 运行依赖（无头模式仍需要这些系统库）
+# 在镜像构建阶段预装 Playwright Chromium，供 personal/browser 模式复用
 COPY requirements.txt ./
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        libnss3 \
-        libnspr4 \
-        libatk1.0-0 \
-        libatk-bridge2.0-0 \
-        libcups2 \
-        libdrm2 \
-        libxkbcommon0 \
-        libxcomposite1 \
-        libxdamage1 \
-        libxfixes3 \
-        libxrandr2 \
-        libgbm1 \
-        libpango-1.0-0 \
-        libcairo2 \
-        libasound2 \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
+RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt \
+    && python -m playwright install --with-deps chromium
 
 COPY . .
 COPY docker/entrypoint.headed.sh /usr/local/bin/entrypoint.headed.sh
