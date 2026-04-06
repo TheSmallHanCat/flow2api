@@ -183,6 +183,8 @@ python main.py
 | `veo_3_1_t2v_fast_ultra_relaxed` | 文生视频 | 横屏 |
 | `veo_3_1_t2v_portrait` | 文生视频 | 竖屏 |
 | `veo_3_1_t2v_landscape` | 文生视频 | 横屏 |
+| `veo_3_1_t2v_lite_portrait` | 文生视频 Lite | 竖屏 |
+| `veo_3_1_t2v_lite_landscape` | 文生视频 Lite | 横屏 |
 
 #### 首尾帧模型 (I2V - Image to Video)
 📸 **支持1-2张图片：1张作为首帧，2张作为首尾帧**
@@ -190,6 +192,8 @@ python main.py
 > 💡 **自动适配**：系统会根据图片数量自动选择对应的 model_key
 > - **单帧模式**（1张图）：使用首帧生成视频
 > - **双帧模式**（2张图）：使用首帧+尾帧生成过渡视频
+> - `veo_3_1_i2v_lite_*` 仅支持 **1 张** 首帧图片
+> - `veo_3_1_interpolation_lite_*` 仅支持 **2 张** 首尾帧图片
 
 | 模型名称 | 说明| 尺寸 |
 |---------|---------|--------|
@@ -205,6 +209,10 @@ python main.py
 | `veo_3_1_i2v_s_fast_ultra_relaxed` | 图生视频 | 横屏 |
 | `veo_3_1_i2v_s_portrait` | 图生视频 | 竖屏 |
 | `veo_3_1_i2v_s_landscape` | 图生视频 | 横屏 |
+| `veo_3_1_i2v_lite_portrait` | 图生视频 Lite（仅首帧） | 竖屏 |
+| `veo_3_1_i2v_lite_landscape` | 图生视频 Lite（仅首帧） | 横屏 |
+| `veo_3_1_interpolation_lite_portrait` | 图生视频 Lite（首尾帧过渡） | 竖屏 |
+| `veo_3_1_interpolation_lite_landscape` | 图生视频 Lite（首尾帧过渡） | 横屏 |
 
 #### 多图生成 (R2V - Reference Images to Video)
 🖼️ **支持多张图片**
