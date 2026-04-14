@@ -883,9 +883,7 @@ class BrowserCaptchaService:
             timeout_seconds or self._command_timeout_seconds,
             label,
         )
-        if return_by_value:
-            return self._normalize_nodriver_evaluate_result(result)
-        return result
+        return self._normalize_nodriver_evaluate_result(result)
 
     async def _tab_get(self, tab, url: str, label: str, timeout_seconds: Optional[float] = None):
         return await self._run_with_timeout(
@@ -2304,7 +2302,7 @@ class BrowserCaptchaService:
         """从 nodriver 标签页提取浏览器指纹信息。"""
         try:
             fingerprint = await self._tab_evaluate(tab, """
-                () => {
+                (() => {
                     const ua = navigator.userAgent || "";
                     const lang = navigator.language || "";
                     const uaData = navigator.userAgentData || null;
@@ -2331,7 +2329,7 @@ class BrowserCaptchaService:
                         sec_ch_ua_mobile: secChUaMobile,
                         sec_ch_ua_platform: secChUaPlatform,
                     };
-                }
+                })()
             """, label="extract_tab_fingerprint", timeout_seconds=8.0)
             if not isinstance(fingerprint, dict):
                 return None
