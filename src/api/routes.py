@@ -28,6 +28,31 @@ router = APIRouter()
 MARKDOWN_IMAGE_RE = re.compile(r"!\[.*?\]\((.*?)\)")
 HTML_VIDEO_RE = re.compile(r"<video[^>]+src=['\"](.*?)['\"]", re.IGNORECASE)
 DATA_URL_RE = re.compile(r"^data:(?P<mime>[^;]+);base64,(?P<data>.+)$", re.DOTALL)
+MEDIA_PROMPT_TOOL_BLOCK_RE = re.compile(r"<tools>.*?</tools>", re.IGNORECASE | re.DOTALL)
+MEDIA_SYSTEM_INSTRUCTION_MARKERS = (
+    "<tools>",
+    "</tools>",
+    "function calling ai model",
+    "function signatures",
+    "\"$schema\"",
+    "\"additionalproperties\"",
+)
+MEDIA_PROMPT_PREAMBLE_PATTERNS = (
+    re.compile(r"^you are a function calling ai model\.?$", re.IGNORECASE),
+    re.compile(
+        r"^you are provided with function signatures within .* xml tags\.?$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^you may call one or more functions to assist with the user query\.?$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^don't make assumptions about what values to plug into functions\.?$",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^here are the available tools:.*$", re.IGNORECASE),
+)
 GEMINI_STATUS_MAP = {
     400: "INVALID_ARGUMENT",
     401: "UNAUTHENTICATED",
@@ -225,6 +250,40 @@ def _extract_text_from_gemini_content(content: Optional[GeminiContent]) -> str:
     return "\n".join(part for part in text_parts if part).strip()
 
 
+def _should_ignore_media_system_instruction(system_instruction: str) -> bool:
+    """Drop agent/tool scaffolding before sending media prompts upstream."""
+    if not system_instruction:
+        return False
+
+    normalized = system_instruction.lower()
+    if len(system_instruction) > 1200:
+        return True
+
+    return any(marker in normalized for marker in MEDIA_SYSTEM_INSTRUCTION_MARKERS)
+
+
+def _sanitize_media_prompt(prompt: str) -> str:
+    """Strip agent/tool scaffolding that image/video models cannot use."""
+    if not prompt:
+        return ""
+
+    sanitized = MEDIA_PROMPT_TOOL_BLOCK_RE.sub(" ", prompt.strip())
+    cleaned_lines: List[str] = []
+    for raw_line in sanitized.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if cleaned_lines and cleaned_lines[-1] != "":
+                cleaned_lines.append("")
+            continue
+        if any(pattern.fullmatch(line) for pattern in MEDIA_PROMPT_PREAMBLE_PATTERNS):
+            continue
+        cleaned_lines.append(line)
+
+    sanitized = "\n".join(cleaned_lines).strip()
+    sanitized = re.sub(r"\n{3,}", "\n\n", sanitized)
+    return sanitized.strip()
+
+
 async def _extract_prompt_and_images_from_openai_messages(
     messages: List[ChatMessage],
 ) -> tuple[str, List[bytes]]:
@@ -382,13 +441,27 @@ async def _normalize_gemini_request(
     model: str,
     request: GeminiGenerateContentRequest,
 ) -> NormalizedGenerationRequest:
+    resolved_model = _resolve_request_model(model, request)
     prompt, images = await _extract_prompt_and_images_from_gemini_contents(request.contents)
     system_instruction = _extract_text_from_gemini_content(request.systemInstruction)
+    model_config = MODEL_CONFIG.get(resolved_model)
+    media_model = bool(model_config and model_config.get("type") in {"image", "video"})
+
+    if media_model:
+        prompt = _sanitize_media_prompt(prompt)
+
     if system_instruction:
-        prompt = f"{system_instruction}\n\n{prompt}".strip()
+        if media_model and _should_ignore_media_system_instruction(system_instruction):
+            debug_logger.log_warning(
+                f"[GEMINI] 忽略媒体模型的 systemInstruction: model={resolved_model}, len={len(system_instruction)}"
+            )
+        else:
+            if media_model:
+                system_instruction = _sanitize_media_prompt(system_instruction)
+            prompt = f"{system_instruction}\n\n{prompt}".strip()
 
     return NormalizedGenerationRequest(
-        model=_resolve_request_model(model, request),
+        model=resolved_model,
         prompt=prompt,
         images=images,
     )
