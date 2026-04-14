@@ -872,7 +872,7 @@ class BrowserCaptchaService:
         timeout_seconds: Optional[float] = None,
         *,
         await_promise: bool = False,
-        return_by_value: bool = False,
+        return_by_value: bool = True,
     ):
         result = await self._run_with_timeout(
             tab.evaluate(
@@ -883,7 +883,9 @@ class BrowserCaptchaService:
             timeout_seconds or self._command_timeout_seconds,
             label,
         )
-        return self._normalize_nodriver_evaluate_result(result)
+        if return_by_value:
+            return self._normalize_nodriver_evaluate_result(result)
+        return result
 
     async def _tab_get(self, tab, url: str, label: str, timeout_seconds: Optional[float] = None):
         return await self._run_with_timeout(
