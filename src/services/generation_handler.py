@@ -1321,8 +1321,8 @@ class GenerationHandler:
                 if stream:
                     yield self._create_stream_chunk(f"正在放大图片到 {resolution_name}...\n")
 
-                # 4K/2K 图片重试逻辑 - 最多重试3次
-                max_retries = 3
+                # 4K/2K 图片重试逻辑 - 使用配置的最大重试次数
+                max_retries = config.flow_max_retries
                 for retry_attempt in range(max_retries):
                     try:
                         # 调用 upsample API

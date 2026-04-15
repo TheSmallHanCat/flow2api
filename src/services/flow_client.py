@@ -631,7 +631,7 @@ class FlowClient:
                 "toolName": "PINHOLE"
             }
         }
-        max_retries = max(2, min(4, int(getattr(config, "flow_max_retries", 3) or 3)))
+        max_retries = config.flow_max_retries
         request_timeout = max(self._get_control_plane_timeout(), min(self.timeout, 15))
         last_error: Optional[Exception] = None
 
@@ -839,7 +839,7 @@ class FlowClient:
                 "tool": "ASSET_MANAGER"
             }
         }
-        max_retries = max(1, getattr(config, "flow_max_retries", 3))
+        max_retries = config.flow_max_retries
         last_error: Optional[Exception] = None
 
         for retry_attempt in range(max_retries):
@@ -1106,8 +1106,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/flow/upsampleImage"
 
-        # 403/reCAPTCHA/500 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA/500 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
 
         for retry_attempt in range(max_retries):
@@ -1226,8 +1226,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoText"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1350,8 +1350,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoReferenceImages"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1483,8 +1483,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoStartAndEndImage"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1614,8 +1614,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoStartImage"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1742,8 +1742,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoUpsampleVideo"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1855,7 +1855,7 @@ class FlowClient:
         json_data = {
             "operations": operations
         }
-        max_retries = max(1, getattr(config, "flow_max_retries", 3))
+        max_retries = config.flow_max_retries
         last_error: Optional[Exception] = None
 
         for retry_attempt in range(max_retries):

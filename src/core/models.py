@@ -138,6 +138,7 @@ class GenerationConfig(BaseModel):
     id: int = 1
     image_timeout: int = 300  # seconds
     video_timeout: int = 1500  # seconds
+    max_retries: int = 3  # 请求最大重试次数
 
 
 class CallLogicConfig(BaseModel):

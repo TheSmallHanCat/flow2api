@@ -68,6 +68,16 @@ class Config:
         except Exception:
             return 3
 
+    def set_flow_max_retries(self, retries: int):
+        """Set flow max retries"""
+        if "flow" not in self._config:
+            self._config["flow"] = {}
+        try:
+            normalized = max(1, int(retries))
+        except Exception:
+            normalized = 3
+        self._config["flow"]["max_retries"] = normalized
+
     @property
     def flow_image_request_timeout(self) -> int:
         """图片生成单次 HTTP 请求超时(秒)。"""

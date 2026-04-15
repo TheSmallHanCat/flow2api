@@ -130,16 +130,24 @@ class Database:
         if count[0] == 0:
             image_timeout = 300
             video_timeout = 1500
+            max_retries = 3
 
             if config_dict:
                 generation_config = config_dict.get("generation", {})
+                flow_config = config_dict.get("flow", {})
                 image_timeout = generation_config.get("image_timeout", 300)
                 video_timeout = generation_config.get("video_timeout", 1500)
+                max_retries = flow_config.get("max_retries", 3)
+
+            try:
+                max_retries = max(1, int(max_retries))
+            except Exception:
+                max_retries = 3
 
             await db.execute("""
-                INSERT INTO generation_config (id, image_timeout, video_timeout)
-                VALUES (1, ?, ?)
-            """, (image_timeout, video_timeout))
+                INSERT INTO generation_config (id, image_timeout, video_timeout, max_retries)
+                VALUES (1, ?, ?, ?)
+            """, (image_timeout, video_timeout, max_retries))
 
         # Ensure call_logic_config has a row
         cursor = await db.execute("SELECT COUNT(*) FROM call_logic_config")
@@ -432,6 +440,20 @@ class Database:
                         except Exception as e:
                             print(f"  ✗ Failed to add column '{col_name}': {e}")
 
+            # Check and add missing columns to generation_config table
+            if await self._table_exists(db, "generation_config"):
+                generation_columns_to_add = [
+                    ("max_retries", "INTEGER DEFAULT 3"),
+                ]
+
+                for col_name, col_type in generation_columns_to_add:
+                    if not await self._column_exists(db, "generation_config", col_name):
+                        try:
+                            await db.execute(f"ALTER TABLE generation_config ADD COLUMN {col_name} {col_type}")
+                            print(f"  ✓ Added column '{col_name}' to generation_config table")
+                        except Exception as e:
+                            print(f"  ✗ Failed to add column '{col_name}': {e}")
+
             # Check and add missing columns to captcha_config table
             if await self._table_exists(db, "captcha_config"):
                 captcha_columns_to_add = [
@@ -647,6 +669,7 @@ class Database:
                     id INTEGER PRIMARY KEY DEFAULT 1,
                     image_timeout INTEGER DEFAULT 300,
                     video_timeout INTEGER DEFAULT 1500,
+                    max_retries INTEGER DEFAULT 3,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -1292,14 +1315,49 @@ class Database:
                 return GenerationConfig(**dict(row))
             return None
 
-    async def update_generation_config(self, image_timeout: int, video_timeout: int):
+    async def update_generation_config(
+        self,
+        image_timeout: Optional[int] = None,
+        video_timeout: Optional[int] = None,
+        max_retries: Optional[int] = None,
+    ):
         """Update generation configuration"""
         async with self._connect(write=True) as db:
-            await db.execute("""
-                UPDATE generation_config
-                SET image_timeout = ?, video_timeout = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = 1
-            """, (image_timeout, video_timeout))
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM generation_config WHERE id = 1")
+            row = await cursor.fetchone()
+            current = dict(row) if row else {}
+
+            normalized_image_timeout = (
+                image_timeout
+                if image_timeout is not None
+                else current.get("image_timeout", 300)
+            )
+            normalized_video_timeout = (
+                video_timeout
+                if video_timeout is not None
+                else current.get("video_timeout", 1500)
+            )
+            try:
+                normalized_max_retries = (
+                    max(1, int(max_retries))
+                    if max_retries is not None
+                    else max(1, int(current.get("max_retries", 3)))
+                )
+            except Exception:
+                normalized_max_retries = 3
+
+            if row:
+                await db.execute("""
+                    UPDATE generation_config
+                    SET image_timeout = ?, video_timeout = ?, max_retries = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = 1
+                """, (normalized_image_timeout, normalized_video_timeout, normalized_max_retries))
+            else:
+                await db.execute("""
+                    INSERT INTO generation_config (id, image_timeout, video_timeout, max_retries)
+                    VALUES (1, ?, ?, ?)
+                """, (normalized_image_timeout, normalized_video_timeout, normalized_max_retries))
             await db.commit()
 
     async def get_call_logic_config(self) -> CallLogicConfig:
@@ -1531,6 +1589,7 @@ class Database:
         if generation_config:
             config.set_image_timeout(generation_config.image_timeout)
             config.set_video_timeout(generation_config.video_timeout)
+            config.set_flow_max_retries(generation_config.max_retries)
 
         # Reload call logic config
         call_logic_config = await self.get_call_logic_config()
