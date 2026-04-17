@@ -72,6 +72,7 @@ docker-compose -f docker-compose.warp.yml logs -f
 > 适用于你有虚拟化桌面需求、希望在容器里启用有头浏览器打码的场景。  
 > 该模式默认启动 `Xvfb + Fluxbox` 实现容器内部可视化，并设置 `ALLOW_DOCKER_HEADED_CAPTCHA=true`。  
 > 仅开放应用端口，不提供任何远程桌面连接端口。
+> `personal` 内置浏览器现在默认按有头模式启动；如需临时切回无头，可额外设置环境变量 `PERSONAL_BROWSER_HEADLESS=true`。
 
 ```bash
 # 启动有头模式（首次建议带 --build）

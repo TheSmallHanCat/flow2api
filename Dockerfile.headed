@@ -5,7 +5,17 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     ALLOW_DOCKER_HEADED_CAPTCHA=true \
+    DISPLAY=:99 \
+    PERSONAL_BROWSER_HEADLESS=0 \
     PLAYWRIGHT_BROWSERS_PATH=0
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        fluxbox \
+        x11-utils \
+        xauth \
+        xvfb \
+    && rm -rf /var/lib/apt/lists/*
 
 # 在镜像构建阶段预装 Playwright Chromium，供 personal/browser 模式复用
 COPY requirements.txt ./

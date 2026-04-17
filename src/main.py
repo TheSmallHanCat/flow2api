@@ -144,6 +144,12 @@ async def lifespan(app: FastAPI):
         await auto_unban_task_handle
     except asyncio.CancelledError:
         pass
+    # Close shared HTTP session pools
+    try:
+        await flow_client.close()
+        print("✓ Flow client HTTP session closed")
+    except Exception as e:
+        print(f"⚠ Flow client close failed: {e}")
     # Close browser if initialized
     if browser_service:
         await browser_service.close()

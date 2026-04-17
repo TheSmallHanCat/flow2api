@@ -52,6 +52,20 @@ def _is_truthy_env(name: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _get_optional_bool_env(name: str) -> Optional[bool]:
+    """读取可选布尔环境变量，未设置或无法识别时返回 None。"""
+    value = os.environ.get(name)
+    if value is None:
+        return None
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
 ALLOW_DOCKER_HEADED = (
     _is_truthy_env("ALLOW_DOCKER_HEADED_CAPTCHA")
     or _is_truthy_env("ALLOW_DOCKER_BROWSER_CAPTCHA")
@@ -555,7 +569,7 @@ class BrowserCaptchaService:
 
     def __init__(self, db=None):
         """初始化服务"""
-        self.headless = True  # 无头模式
+        self.headless = self._resolve_headless_mode()  # 默认改为有头，可用环境变量回退到无头
         self.browser = None
         self._initialized = False
         self.website_key = "6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV"
@@ -639,6 +653,18 @@ class BrowserCaptchaService:
             f"probe_ttl {old_probe_ttl}s->{self._health_probe_ttl_seconds}s, "
             f"fingerprint_ttl {old_fingerprint_ttl}s->{self._fingerprint_cache_ttl_seconds}s"
         )
+
+    def _resolve_headless_mode(self) -> bool:
+        """personal 模式默认改为有头，仅在显式环境变量要求时回退到无头。"""
+        for env_name in ("PERSONAL_BROWSER_HEADLESS", "FLOW2API_PERSONAL_HEADLESS"):
+            override = _get_optional_bool_env(env_name)
+            if override is not None:
+                debug_logger.log_info(
+                    f"[BrowserCaptcha] Personal headless 模式由环境变量 {env_name} 控制: {override}"
+                )
+                return override
+
+        return False
 
     def _refresh_runtime_tunables(self):
         """刷新运行时调优参数，缺省时使用保守的低开销默认值。"""
@@ -1454,6 +1480,7 @@ class BrowserCaptchaService:
                     self._proxy_url = f"{protocol}://{host}:{port}"
                     debug_logger.log_info(f"[BrowserCaptcha] Personal 浏览器代理: {self._proxy_url}")
 
+                launch_in_background = bool(getattr(config, "browser_launch_background", True))
                 browser_args = [
                     '--disable-quic',
                     '--disable-features=UseDnsHttpsSvcb',
@@ -1463,7 +1490,6 @@ class BrowserCaptchaService:
                     '--disable-infobars',
                     '--hide-scrollbars',
                     '--window-size=1280,720',
-                    '--window-position=3000,3000',
                     '--profile-directory=Default',
                     '--disable-background-networking',
                     '--disable-sync',
@@ -1473,6 +1499,20 @@ class BrowserCaptchaService:
                     '--no-default-browser-check',
                     '--no-zygote',
                 ]
+                if launch_in_background and not self.headless:
+                    browser_args.extend([
+                        '--start-minimized',
+                        '--disable-background-timer-throttling',
+                        '--disable-renderer-backgrounding',
+                        '--disable-backgrounding-occluded-windows',
+                    ])
+                    if sys.platform.startswith("win"):
+                        browser_args.append('--window-position=-32000,-32000')
+                    else:
+                        browser_args.append('--window-position=3000,3000')
+                    debug_logger.log_info("[BrowserCaptcha] Personal 有头浏览器将以后台模式启动")
+                elif not self.headless:
+                    debug_logger.log_info("[BrowserCaptcha] Personal 有头浏览器将以可见窗口模式启动")
                 if proxy_server_arg:
                     browser_args.append(proxy_server_arg)
                 if self._proxy_ext_dir:
@@ -1503,7 +1543,7 @@ class BrowserCaptchaService:
                 debug_logger.log_info(
                     "[BrowserCaptcha] nodriver 启动上下文: "
                     f"docker={IS_DOCKER}, display={display_value or '<empty>'}, "
-                    f"uid={effective_uid}, headless={self.headless}, sandbox=False, "
+                    f"uid={effective_uid}, headless={self.headless}, background={launch_in_background}, sandbox=False, "
                     f"executable={browser_executable_path or '<auto>'}, "
                     f"args={' '.join(effective_launch_args)}"
                 )

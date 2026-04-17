@@ -508,8 +508,9 @@ class CaptchaScoreTestRequest(BaseModel):
 
 
 class GenerationConfigRequest(BaseModel):
-    image_timeout: int
-    video_timeout: int
+    image_timeout: Optional[int] = None
+    video_timeout: Optional[int] = None
+    max_retries: Optional[int] = None
 
 
 class CallLogicConfigRequest(BaseModel):
@@ -1132,7 +1133,8 @@ async def get_generation_config(token: str = Depends(verify_admin_token)):
         "success": True,
         "config": {
             "image_timeout": config.image_timeout,
-            "video_timeout": config.video_timeout
+            "video_timeout": config.video_timeout,
+            "max_retries": config.max_retries,
         }
     }
 
@@ -1143,7 +1145,11 @@ async def update_generation_config(
     token: str = Depends(verify_admin_token)
 ):
     """Update generation timeout configuration"""
-    await db.update_generation_config(request.image_timeout, request.video_timeout)
+    await db.update_generation_config(
+        image_timeout=request.image_timeout,
+        video_timeout=request.video_timeout,
+        max_retries=request.max_retries,
+    )
 
     # 🔥 Hot reload: sync database config to memory
     await db.reload_config_to_memory()
@@ -1390,7 +1396,11 @@ async def update_generation_timeout(
     token: str = Depends(verify_admin_token)
 ):
     """Update generation timeout configuration"""
-    await db.update_generation_config(request.image_timeout, request.video_timeout)
+    await db.update_generation_config(
+        image_timeout=request.image_timeout,
+        video_timeout=request.video_timeout,
+        max_retries=request.max_retries,
+    )
 
     # 🔥 Hot reload: sync database config to memory
     await db.reload_config_to_memory()

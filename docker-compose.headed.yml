@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   flow2api-headed:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile.headed
@@ -16,5 +17,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - ALLOW_DOCKER_HEADED_CAPTCHA=true
+      - DISPLAY=:99
+      - XVFB_SCREEN=1440x900x24
     shm_size: "2gb"
     restart: unless-stopped

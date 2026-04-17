@@ -55,6 +55,7 @@ base_url = ""   # 缓存文件访问的基础URL, 留空则使用服务器地址
 
 [captcha]
 captcha_method = "browser"  # 打码方式: yescaptcha/browser/personal/remote_browser
+browser_launch_background = true  # 有头浏览器是否默认后台启动；设为 false 可直接看到窗口
 browser_recaptcha_settle_seconds = 3.0  # reload/clr 就绪后的额外稳态等待
 browser_count = 1  # browser 模式的有头浏览器实例数量
 personal_project_pool_size = 4  # personal 模式下单个 Token 默认维护的项目池数量（仅影响项目轮换，不决定打码标签页数量）

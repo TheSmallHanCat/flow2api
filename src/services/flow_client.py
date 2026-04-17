@@ -38,6 +38,17 @@ class FlowClient:
             default=None
         )
         self._remote_browser_prefill_last_sent: Dict[str, float] = {}
+        self._http_session: Optional[AsyncSession] = None
+        self._http_session_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._http_session_lock = asyncio.Lock()
+        self._image_launch_condition = asyncio.Condition()
+        self._video_launch_condition = asyncio.Condition()
+        self._image_launch_inflight = 0
+        self._video_launch_inflight = 0
+        self._image_launch_stagger_lock = asyncio.Lock()
+        self._video_launch_stagger_lock = asyncio.Lock()
+        self._image_launch_next_at = 0.0
+        self._video_launch_next_at = 0.0
 
         # Default "real browser" headers (Android Chrome style) to reduce upstream 4xx/5xx instability.
         # These will be applied as defaults (won't override caller-provided headers).
@@ -252,65 +263,65 @@ class FlowClient:
         start_time = time.time()
 
         try:
-            async with AsyncSession() as session:
-                if method.upper() == "GET":
-                    response = await session.get(
-                        url,
-                        headers=headers,
-                        proxy=proxy_url,
-                        timeout=request_timeout,
-                        impersonate="chrome110"
-                    )
-                else:  # POST
-                    response = await session.post(
-                        url,
-                        headers=headers,
-                        json=json_data,
-                        proxy=proxy_url,
-                        timeout=request_timeout,
-                        impersonate="chrome110"
-                    )
+            session = await self._get_http_session()
+            if method.upper() == "GET":
+                response = await session.get(
+                    url,
+                    headers=headers,
+                    proxy=proxy_url,
+                    timeout=request_timeout,
+                    impersonate="chrome110"
+                )
+            else:  # POST
+                response = await session.post(
+                    url,
+                    headers=headers,
+                    json=json_data,
+                    proxy=proxy_url,
+                    timeout=request_timeout,
+                    impersonate="chrome110"
+                )
 
-                duration_ms = (time.time() - start_time) * 1000
+            duration_ms = (time.time() - start_time) * 1000
 
-                # Log response
-                if config.debug_enabled:
-                    debug_logger.log_response(
-                        status_code=response.status_code,
-                        headers=dict(response.headers),
-                        body=response.text,
-                        duration_ms=duration_ms
-                    )
+            # Log response
+            if config.debug_enabled:
+                debug_logger.log_response(
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    body=response.text,
+                    duration_ms=duration_ms
+                )
 
-                # 检查HTTP错误
-                if response.status_code >= 400:
-                    # 解析错误响应
-                    error_reason = f"HTTP Error {response.status_code}"
-                    try:
-                        error_body = response.json()
-                        # 提取 Google API 错误格式中的 reason
-                        if "error" in error_body:
-                            error_info = error_body["error"]
-                            error_message = error_info.get("message", "")
-                            # 从 details 中提取 reason
-                            details = error_info.get("details", [])
-                            for detail in details:
-                                if detail.get("reason"):
-                                    error_reason = detail.get("reason")
-                                    break
-                            if error_message:
-                                error_reason = f"{error_reason}: {error_message}"
-                    except:
-                        error_reason = f"HTTP Error {response.status_code}: {response.text[:200]}"
-                    
-                    # 失败时输出请求体和错误内容到控制台
-                    debug_logger.log_error(f"[API FAILED] URL: {url}")
-                    debug_logger.log_error(f"[API FAILED] Request Body: {json_data}")
-                    debug_logger.log_error(f"[API FAILED] Response: {response.text}")
-                    
-                    raise Exception(error_reason)
+            # 检查HTTP错误
+            if response.status_code >= 400:
+                # 解析错误响应
+                error_reason = f"HTTP Error {response.status_code}"
+                try:
+                    error_body = response.json()
+                    # 提取 Google API 错误格式中的 reason
+                    if "error" in error_body:
+                        error_info = error_body["error"]
+                        error_message = error_info.get("message", "")
+                        # 从 details 中提取 reason
+                        details = error_info.get("details", [])
+                        for detail in details:
+                            if detail.get("reason"):
+                                error_reason = detail.get("reason")
+                                break
+                        if error_message:
+                            error_reason = f"{error_reason}: {error_message}"
+                except Exception:
+                    error_reason = f"HTTP Error {response.status_code}: {response.text[:200]}"
 
-                return response.json()
+                # 失败时输出请求体和错误内容到控制台
+                debug_logger.log_error(f"[API FAILED] URL: {url}")
+                debug_logger.log_error(f"[API FAILED] Request Body: {json_data}")
+                debug_logger.log_error(f"[API FAILED] Response: {response.text}")
+
+                raise Exception(error_reason)
+
+            return response.json()
 
         except Exception as e:
             duration_ms = (time.time() - start_time) * 1000
@@ -462,29 +473,232 @@ class FlowClient:
         """控制轻量控制面请求的超时，避免认证/项目接口长时间挂起。"""
         return max(5, min(int(self.timeout or 0) or 120, 10))
 
+    def _get_http_pool_size(self) -> int:
+        """根据软并发配置决定复用连接池大小，避免瞬时创建过多 socket。"""
+        configured_limits: list[int] = []
+        for raw_value in (
+            getattr(config, "flow_image_launch_soft_limit", 0),
+            getattr(config, "flow_video_launch_soft_limit", 0),
+        ):
+            try:
+                configured_limits.append(max(0, int(raw_value or 0)))
+            except Exception:
+                configured_limits.append(0)
+
+        peak_limit = max(configured_limits + [10])
+        return max(10, min(64, peak_limit))
+
+    async def _get_http_session(self) -> AsyncSession:
+        """复用上游 HTTP 会话，减少 Docker 内高并发时的临时端口占用。"""
+        current_loop = asyncio.get_running_loop()
+        if self._http_session is not None and self._http_session_loop is current_loop:
+            return self._http_session
+
+        async with self._http_session_lock:
+            if self._http_session is not None and self._http_session_loop is not current_loop:
+                try:
+                    await self._http_session.close()
+                except Exception:
+                    pass
+                self._http_session = None
+                self._http_session_loop = None
+
+            if self._http_session is None:
+                max_clients = self._get_http_pool_size()
+                self._http_session = AsyncSession(max_clients=max_clients)
+                self._http_session_loop = current_loop
+                debug_logger.log_info(
+                    f"[HTTP] 已创建复用 AsyncSession (max_clients={max_clients})"
+                )
+
+            return self._http_session
+
+    async def close(self):
+        """关闭复用 HTTP 会话。"""
+        async with self._http_session_lock:
+            session = self._http_session
+            self._http_session = None
+            self._http_session_loop = None
+
+        if session is not None:
+            try:
+                await session.close()
+            except Exception as e:
+                debug_logger.log_warning(f"[HTTP] 关闭复用 AsyncSession 失败: {e}")
+
+    async def _apply_launch_stagger(self, generation_type: str, stagger_ms: int) -> int:
+        """进入打码前做轻量错峰，减少同一时刻批量占满端口。"""
+        try:
+            normalized_stagger_ms = max(0, int(stagger_ms or 0))
+        except Exception:
+            normalized_stagger_ms = 0
+
+        if normalized_stagger_ms <= 0:
+            return 0
+
+        interval_seconds = normalized_stagger_ms / 1000.0
+        lock = (
+            self._image_launch_stagger_lock
+            if generation_type == "image"
+            else self._video_launch_stagger_lock
+        )
+        next_attr = (
+            "_image_launch_next_at"
+            if generation_type == "image"
+            else "_video_launch_next_at"
+        )
+
+        async with lock:
+            now = time.monotonic()
+            next_available_at = float(getattr(self, next_attr, 0.0) or 0.0)
+            scheduled_at = max(now, next_available_at)
+            setattr(self, next_attr, scheduled_at + interval_seconds)
+
+        wait_seconds = max(0.0, scheduled_at - time.monotonic())
+        if wait_seconds > 0:
+            await asyncio.sleep(wait_seconds)
+        return int(wait_seconds * 1000)
+
+    async def _acquire_launch_gate(
+        self,
+        *,
+        generation_type: str,
+        token_id: Optional[int],
+        soft_limit: int,
+        wait_timeout_seconds: float,
+        stagger_ms: int,
+    ) -> tuple[bool, int, int]:
+        """控制进入打码阶段的软并发，降低 Docker 内短时端口/线程压力。"""
+        try:
+            normalized_limit = max(0, int(soft_limit or 0))
+        except Exception:
+            normalized_limit = 0
+
+        if normalized_limit <= 0:
+            return True, 0, 0
+
+        wait_started_at = time.monotonic()
+        deadline = wait_started_at + max(1.0, float(wait_timeout_seconds or 0))
+        condition = (
+            self._image_launch_condition
+            if generation_type == "image"
+            else self._video_launch_condition
+        )
+        inflight_attr = (
+            "_image_launch_inflight"
+            if generation_type == "image"
+            else "_video_launch_inflight"
+        )
+        current_inflight = 0
+
+        while True:
+            async with condition:
+                current_inflight = int(getattr(self, inflight_attr, 0) or 0)
+                if current_inflight < normalized_limit:
+                    current_inflight += 1
+                    setattr(self, inflight_attr, current_inflight)
+                    break
+
+                remaining_seconds = deadline - time.monotonic()
+                if remaining_seconds <= 0:
+                    waited_ms = int((time.monotonic() - wait_started_at) * 1000)
+                    debug_logger.log_warning(
+                        f"[LAUNCH_GATE] {generation_type} 等待超时 "
+                        f"(token={token_id}, inflight={current_inflight}/{normalized_limit}, waited={waited_ms}ms)"
+                    )
+                    return False, waited_ms, 0
+
+                try:
+                    await asyncio.wait_for(condition.wait(), timeout=remaining_seconds)
+                except asyncio.TimeoutError:
+                    waited_ms = int((time.monotonic() - wait_started_at) * 1000)
+                    debug_logger.log_warning(
+                        f"[LAUNCH_GATE] {generation_type} 等待超时 "
+                        f"(token={token_id}, inflight={current_inflight}/{normalized_limit}, waited={waited_ms}ms)"
+                    )
+                    return False, waited_ms, 0
+
+        waited_ms = int((time.monotonic() - wait_started_at) * 1000)
+        try:
+            stagger_wait_ms = await self._apply_launch_stagger(
+                generation_type=generation_type,
+                stagger_ms=stagger_ms,
+            )
+        except Exception:
+            await self._release_launch_gate(generation_type=generation_type, token_id=token_id)
+            raise
+
+        debug_logger.log_info(
+            f"[LAUNCH_GATE] {generation_type} 已放行 "
+            f"(token={token_id}, inflight={current_inflight}/{normalized_limit}, "
+            f"queue_wait={waited_ms}ms, stagger_wait={stagger_wait_ms}ms)"
+        )
+        return True, waited_ms, stagger_wait_ms
+
+    async def _release_launch_gate(self, *, generation_type: str, token_id: Optional[int]):
+        condition = (
+            self._image_launch_condition
+            if generation_type == "image"
+            else self._video_launch_condition
+        )
+        inflight_attr = (
+            "_image_launch_inflight"
+            if generation_type == "image"
+            else "_video_launch_inflight"
+        )
+
+        async with condition:
+            current_inflight = int(getattr(self, inflight_attr, 0) or 0)
+            if current_inflight <= 0:
+                setattr(self, inflight_attr, 0)
+                debug_logger.log_warning(
+                    f"[LAUNCH_GATE] {generation_type} release 时 inflight 已为 0 (token={token_id})"
+                )
+                return
+
+            new_inflight = current_inflight - 1
+            setattr(self, inflight_attr, new_inflight)
+            condition.notify(1)
+
+        debug_logger.log_info(
+            f"[LAUNCH_GATE] {generation_type} 已释放 (token={token_id}, inflight={new_inflight})"
+        )
+
     async def _acquire_image_launch_gate(
         self,
         token_id: Optional[int],
         token_image_concurrency: Optional[int],
     ) -> tuple[bool, int, int]:
-        """图片请求不再做本地发车排队，直接进入取 token 并提交上游。"""
-        return True, 0, 0
+        """图片请求进入打码前的软并发整形。"""
+        return await self._acquire_launch_gate(
+            generation_type="image",
+            token_id=token_id,
+            soft_limit=getattr(config, "flow_image_launch_soft_limit", 0),
+            wait_timeout_seconds=getattr(config, "flow_image_launch_wait_timeout", 180),
+            stagger_ms=getattr(config, "flow_image_launch_stagger_ms", 0),
+        )
 
     async def _release_image_launch_gate(self, token_id: Optional[int]):
-        """保留接口形状，当前无需释放任何本地发车状态。"""
-        return
+        """释放图片发车软并发槽位。"""
+        await self._release_launch_gate(generation_type="image", token_id=token_id)
 
     async def _acquire_video_launch_gate(
         self,
         token_id: Optional[int],
         token_video_concurrency: Optional[int],
     ) -> tuple[bool, int, int]:
-        """视频请求不再做本地发车排队，直接进入取 token 并提交上游。"""
-        return True, 0, 0
+        """视频请求进入打码前的软并发整形。"""
+        return await self._acquire_launch_gate(
+            generation_type="video",
+            token_id=token_id,
+            soft_limit=getattr(config, "flow_video_launch_soft_limit", 0),
+            wait_timeout_seconds=getattr(config, "flow_video_launch_wait_timeout", 180),
+            stagger_ms=getattr(config, "flow_video_launch_stagger_ms", 0),
+        )
 
     async def _release_video_launch_gate(self, token_id: Optional[int]):
-        """保留接口形状，当前无需释放任何本地发车状态。"""
-        return
+        """释放视频发车软并发槽位。"""
+        await self._release_launch_gate(generation_type="video", token_id=token_id)
 
     async def _make_image_generation_request(
         self,
@@ -631,7 +845,7 @@ class FlowClient:
                 "toolName": "PINHOLE"
             }
         }
-        max_retries = max(2, min(4, int(getattr(config, "flow_max_retries", 3) or 3)))
+        max_retries = config.flow_max_retries
         request_timeout = max(self._get_control_plane_timeout(), min(self.timeout, 15))
         last_error: Optional[Exception] = None
 
@@ -839,7 +1053,7 @@ class FlowClient:
                 "tool": "ASSET_MANAGER"
             }
         }
-        max_retries = max(1, getattr(config, "flow_max_retries", 3))
+        max_retries = config.flow_max_retries
         last_error: Optional[Exception] = None
 
         for retry_attempt in range(max_retries):
@@ -1106,8 +1320,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/flow/upsampleImage"
 
-        # 403/reCAPTCHA/500 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA/500 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
 
         for retry_attempt in range(max_retries):
@@ -1226,8 +1440,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoText"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1350,8 +1564,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoReferenceImages"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1483,8 +1697,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoStartAndEndImage"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1614,8 +1828,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoStartImage"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1742,8 +1956,8 @@ class FlowClient:
         """
         url = f"{self.api_base_url}/video:batchAsyncGenerateVideoUpsampleVideo"
 
-        # 403/reCAPTCHA 重试逻辑 - 最多重试3次
-        max_retries = 3
+        # 403/reCAPTCHA 重试逻辑 - 使用配置的最大重试次数
+        max_retries = config.flow_max_retries
         last_error = None
         
         for retry_attempt in range(max_retries):
@@ -1855,7 +2069,7 @@ class FlowClient:
         json_data = {
             "operations": operations
         }
-        max_retries = max(1, getattr(config, "flow_max_retries", 3))
+        max_retries = config.flow_max_retries
         last_error: Optional[Exception] = None
 
         for retry_attempt in range(max_retries):
@@ -2445,52 +2659,52 @@ class FlowClient:
         try:
             # Do not use curl_cffi impersonation for captcha API JSON endpoints: some ASGI
             # servers (for example FastAPI/Uvicorn) may receive an empty body and return 422.
-            async with AsyncSession() as session:
-                create_url = f"{base_url}/createTask"
-                create_data = {
-                    "clientKey": client_key,
-                    "task": {
-                        "websiteURL": website_url,
-                        "websiteKey": website_key,
-                        "type": task_type,
-                        "pageAction": page_action
-                    }
+            session = await self._get_http_session()
+            create_url = f"{base_url}/createTask"
+            create_data = {
+                "clientKey": client_key,
+                "task": {
+                    "websiteURL": website_url,
+                    "websiteKey": website_key,
+                    "type": task_type,
+                    "pageAction": page_action
                 }
+            }
 
-                result = await session.post(create_url, json=create_data)
-                result_json = result.json()
-                task_id = result_json.get('taskId')
+            result = await session.post(create_url, json=create_data)
+            result_json = result.json()
+            task_id = result_json.get('taskId')
 
-                debug_logger.log_info(f"[reCAPTCHA {method}] created task_id: {task_id}")
+            debug_logger.log_info(f"[reCAPTCHA {method}] created task_id: {task_id}")
 
-                if not task_id:
-                    error_desc = result_json.get('errorDescription', 'Unknown error')
-                    debug_logger.log_error(f"[reCAPTCHA {method}] Failed to create task: {error_desc}")
-                    return None
-
-                get_url = f"{base_url}/getTaskResult"
-                for i in range(40):
-                    get_data = {
-                        "clientKey": client_key,
-                        "taskId": task_id
-                    }
-                    result = await session.post(get_url, json=get_data)
-                    result_json = result.json()
-
-                    debug_logger.log_info(f"[reCAPTCHA {method}] polling #{i+1}: {result_json}")
-
-                    status = result_json.get('status')
-                    if status == 'ready':
-                        solution = result_json.get('solution', {})
-                        response = solution.get('gRecaptchaResponse')
-                        if response:
-                            debug_logger.log_info(f"[reCAPTCHA {method}] Token获取成功")
-                            return response
-
-                    await asyncio.sleep(3)
-
-                debug_logger.log_error(f"[reCAPTCHA {method}] Timeout waiting for token")
+            if not task_id:
+                error_desc = result_json.get('errorDescription', 'Unknown error')
+                debug_logger.log_error(f"[reCAPTCHA {method}] Failed to create task: {error_desc}")
                 return None
+
+            get_url = f"{base_url}/getTaskResult"
+            for i in range(40):
+                get_data = {
+                    "clientKey": client_key,
+                    "taskId": task_id
+                }
+                result = await session.post(get_url, json=get_data)
+                result_json = result.json()
+
+                debug_logger.log_info(f"[reCAPTCHA {method}] polling #{i+1}: {result_json}")
+
+                status = result_json.get('status')
+                if status == 'ready':
+                    solution = result_json.get('solution', {})
+                    response = solution.get('gRecaptchaResponse')
+                    if response:
+                        debug_logger.log_info(f"[reCAPTCHA {method}] Token获取成功")
+                        return response
+
+                await asyncio.sleep(3)
+
+            debug_logger.log_error(f"[reCAPTCHA {method}] Timeout waiting for token")
+            return None
 
         except Exception as e:
             debug_logger.log_error(f"[reCAPTCHA {method}] error: {str(e)}")
