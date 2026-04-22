@@ -1,6 +1,6 @@
 """FastAPI application initialization"""
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .core.config import config
 from .core.database import Database
+from .core.monitoring import CONTENT_TYPE_LATEST, render_main_metrics
 from .services.flow_client import FlowClient
 from .services.proxy_manager import ProxyManager
 from .services.token_manager import TokenManager
@@ -236,3 +237,10 @@ async def test_page():
     if test_file.exists():
         return FileResponse(str(test_file))
     return HTMLResponse(content="<h1>Test Page Not Found</h1>", status_code=404)
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint for the main Flow2API service."""
+    payload = await render_main_metrics(db, concurrency_manager=concurrency_manager)
+    return Response(content=payload, media_type=CONTENT_TYPE_LATEST)

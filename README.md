@@ -115,6 +115,14 @@ python main.py
 - **用户名**: `admin`
 - **密码**: `admin`
 
+## 📈 监控接口
+
+- `GET /health`：公开健康检查，返回服务是否存活、活跃 Token 数、即将过期 Token 数、已过期 Token 数、429 禁用数等摘要
+- `GET /metrics`：Prometheus 指标接口
+- `GET /api/tokens`：管理接口，返回 `at_expires`、`at_expired`、`at_expiring_within_1h`、`ban_reason`、`consecutive_error_count` 等 Token 状态
+
+Prometheus 可直接抓 `/metrics`。如果部署到 Kubernetes，建议只在集群内抓取，并在 Ingress/Gateway 层单独限制 `/metrics` 的外部访问。
+
 ### 模型测试页面
 
 访问 **http://localhost:8000/test** 可打开内置的模型测试页面，支持：

@@ -906,7 +906,10 @@ class Database:
                     t.*,
                     COALESCE(ts.image_count, 0) AS image_count,
                     COALESCE(ts.video_count, 0) AS video_count,
-                    COALESCE(ts.error_count, 0) AS error_count
+                    COALESCE(ts.error_count, 0) AS error_count,
+                    COALESCE(ts.today_error_count, 0) AS today_error_count,
+                    COALESCE(ts.consecutive_error_count, 0) AS consecutive_error_count,
+                    ts.last_error_at AS last_error_at
                 FROM tokens t
                 LEFT JOIN token_stats ts ON ts.token_id = t.id
                 ORDER BY t.created_at DESC
@@ -987,9 +990,8 @@ class Database:
             params = []
 
             for key, value in kwargs.items():
-                if value is not None:
-                    updates.append(f"{key} = ?")
-                    params.append(value)
+                updates.append(f"{key} = ?")
+                params.append(value)
 
             if updates:
                 params.append(token_id)

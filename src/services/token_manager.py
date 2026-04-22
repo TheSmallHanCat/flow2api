@@ -6,6 +6,7 @@ from ..core.database import Database
 from ..core.config import config
 from ..core.models import Token, Project
 from ..core.logger import debug_logger
+from ..core.monitoring import record_token_refresh
 from .flow_client import FlowClient
 from .proxy_manager import ProxyManager
 
@@ -188,7 +189,7 @@ class TokenManager:
     async def enable_token(self, token_id: int):
         """Enable a token and reset error count"""
         # Enable the token
-        await self.db.update_token(token_id, is_active=True)
+        await self.db.update_token(token_id, is_active=True, ban_reason=None, banned_at=None)
         # Reset error count when enabling (only reset total error_count, keep today_error_count)
         await self.db.reset_error_count(token_id)
 
@@ -519,20 +520,24 @@ class TokenManager:
                     user_paygate_tier=credits_result.get("userPaygateTier"),
                 )
                 debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT 验证成功（余额: {credits_result.get('credits', 0)}）")
+                record_token_refresh("at", "success")
                 return True
             except Exception as verify_err:
                 # AT 验证失败（可能返回 401），说明 ST 已过期
                 error_msg = str(verify_err)
                 if "401" in error_msg or "UNAUTHENTICATED" in error_msg:
                     debug_logger.log_warning(f"[AT_REFRESH] Token {token_id}: AT 验证失败 (401)，ST 可能已过期")
+                    record_token_refresh("at", "failure")
                     return False
                 else:
                     # 其他错误（如网络问题），仍视为成功
                     debug_logger.log_warning(f"[AT_REFRESH] Token {token_id}: AT 验证时发生非认证错误: {error_msg}")
+                    record_token_refresh("at", "success")
                     return True
 
         except Exception as e:
             debug_logger.log_error(f"[AT_REFRESH] Token {token_id}: AT刷新失败 - {str(e)}")
+            record_token_refresh("at", "failure")
             return False
 
     async def _try_refresh_st(self, token_id: int, token) -> Optional[str]:
@@ -574,21 +579,26 @@ class TokenManager:
                 debug_logger.log_error(
                     f"[ST_REFRESH] Token {token_id}: 刷新 ST 超时 ({refresh_timeout_seconds:.0f}s)"
                 )
+                record_token_refresh("st", "failure")
                 return None
             if new_st and new_st != token.st:
                 # 更新数据库中的 ST
                 await self.db.update_token(token_id, st=new_st)
                 debug_logger.log_info(f"[ST_REFRESH] Token {token_id}: ST 已自动更新")
+                record_token_refresh("st", "success")
                 return new_st
             elif new_st == token.st:
                 debug_logger.log_warning(f"[ST_REFRESH] Token {token_id}: 获取到的 ST 与原 ST 相同，可能登录已失效")
+                record_token_refresh("st", "failure")
                 return None
             else:
                 debug_logger.log_warning(f"[ST_REFRESH] Token {token_id}: 无法获取新 ST")
+                record_token_refresh("st", "failure")
                 return None
 
         except Exception as e:
             debug_logger.log_error(f"[ST_REFRESH] Token {token_id}: 刷新 ST 失败 - {str(e)}")
+            record_token_refresh("st", "failure")
             return None
 
     async def ensure_project_exists(self, token_id: int) -> str:

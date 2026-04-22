@@ -1,6 +1,7 @@
 """Admin API routes"""
 import asyncio
 import json
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -15,6 +16,7 @@ from curl_cffi.requests import AsyncSession
 from ..core.auth import AuthManager
 from ..core.database import Database
 from ..core.config import config
+from ..core.monitoring import build_public_health_snapshot
 from ..services.token_manager import TokenManager
 from ..services.proxy_manager import ProxyManager
 from ..services.concurrency_manager import ConcurrencyManager
@@ -639,12 +641,31 @@ async def get_tokens(token: str = Depends(verify_admin_token)):
     """Get all tokens with statistics"""
     token_rows = await db.get_all_tokens_with_stats()
     to_iso = lambda value: value.isoformat() if hasattr(value, "isoformat") else value
+    now = datetime.now(timezone.utc)
+
+    def normalize_dt(value):
+        if not value:
+            return None
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except Exception:
+                return None
+        if getattr(value, "tzinfo", None) is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     return [{
         "id": row.get("id"),
         "st": row.get("st"),  # Session Token for editing
         "at": row.get("at"),  # Access Token for editing (从ST转换而来)
         "at_expires": to_iso(row.get("at_expires")) if row.get("at_expires") else None,  # 🆕 AT过期时间
+        "at_expired": bool(normalize_dt(row.get("at_expires")) and normalize_dt(row.get("at_expires")) <= now),
+        "at_expiring_within_1h": bool(
+            normalize_dt(row.get("at_expires"))
+            and normalize_dt(row.get("at_expires")) > now
+            and (normalize_dt(row.get("at_expires")) - now).total_seconds() < 3600
+        ),
         "token": row.get("at"),  # 兼容前端 token.token 的访问方式
         "email": row.get("email"),
         "name": row.get("name"),
@@ -664,7 +685,12 @@ async def get_tokens(token: str = Depends(verify_admin_token)):
         "video_concurrency": row.get("video_concurrency"),
         "image_count": row.get("image_count", 0),
         "video_count": row.get("video_count", 0),
-        "error_count": row.get("error_count", 0)
+        "error_count": row.get("error_count", 0),
+        "today_error_count": row.get("today_error_count", 0),
+        "consecutive_error_count": row.get("consecutive_error_count", 0),
+        "last_error_at": to_iso(row.get("last_error_at")) if row.get("last_error_at") else None,
+        "ban_reason": row.get("ban_reason"),
+        "banned_at": to_iso(row.get("banned_at")) if row.get("banned_at") else None,
     } for row in token_rows]  # 直接返回数组,兼容前端
 
 
@@ -1232,11 +1258,9 @@ async def logout(token: str = Depends(verify_admin_token)):
 async def health_check():
     """Public health check endpoint - no auth required"""
     try:
-        stats = await db.get_dashboard_stats()
-        has_active_tokens = stats.get("active_tokens", 0) > 0
+        return await build_public_health_snapshot(db)
     except Exception:
         return {"backend_running": True, "has_active_tokens": False}
-    return {"backend_running": True, "has_active_tokens": has_active_tokens}
 
 
 @router.get("/api/stats")
