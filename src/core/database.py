@@ -3,7 +3,7 @@ import asyncio
 import aiosqlite
 import json
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from .models import Token, TokenStats, Task, RequestLog, AdminConfig, ProxyConfig, GenerationConfig, CacheConfig, Project, CaptchaConfig, PluginConfig, CallLogicConfig
@@ -31,6 +31,10 @@ class Database:
         """Apply SQLite runtime settings for better concurrent behavior."""
         await db.execute(f"PRAGMA busy_timeout = {self._busy_timeout_ms}")
         await db.execute("PRAGMA foreign_keys = ON")
+
+    def _current_stats_date(self) -> str:
+        """Return the logical date used by daily token statistics."""
+        return date.today().isoformat()
 
     @asynccontextmanager
     async def _connect(self, *, write: bool = False):
@@ -901,19 +905,22 @@ class Database:
         """Get all tokens with merged statistics in one query"""
         async with self._connect() as db:
             db.row_factory = aiosqlite.Row
+            today = self._current_stats_date()
             cursor = await db.execute("""
                 SELECT
                     t.*,
                     COALESCE(ts.image_count, 0) AS image_count,
                     COALESCE(ts.video_count, 0) AS video_count,
                     COALESCE(ts.error_count, 0) AS error_count,
-                    COALESCE(ts.today_error_count, 0) AS today_error_count,
+                    COALESCE(CASE WHEN ts.today_date = ? THEN ts.today_image_count ELSE 0 END, 0) AS today_image_count,
+                    COALESCE(CASE WHEN ts.today_date = ? THEN ts.today_video_count ELSE 0 END, 0) AS today_video_count,
+                    COALESCE(CASE WHEN ts.today_date = ? THEN ts.today_error_count ELSE 0 END, 0) AS today_error_count,
                     COALESCE(ts.consecutive_error_count, 0) AS consecutive_error_count,
                     ts.last_error_at AS last_error_at
                 FROM tokens t
                 LEFT JOIN token_stats ts ON ts.token_id = t.id
                 ORDER BY t.created_at DESC
-            """)
+            """, (today, today, today))
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
@@ -921,6 +928,7 @@ class Database:
         """Get dashboard counters with aggregated SQL queries"""
         async with self._connect() as db:
             db.row_factory = aiosqlite.Row
+            today = self._current_stats_date()
 
             token_cursor = await db.execute("""
                 SELECT
@@ -935,11 +943,11 @@ class Database:
                     COALESCE(SUM(image_count), 0) AS total_images,
                     COALESCE(SUM(video_count), 0) AS total_videos,
                     COALESCE(SUM(error_count), 0) AS total_errors,
-                    COALESCE(SUM(today_image_count), 0) AS today_images,
-                    COALESCE(SUM(today_video_count), 0) AS today_videos,
-                    COALESCE(SUM(today_error_count), 0) AS today_errors
+                    COALESCE(SUM(CASE WHEN today_date = ? THEN today_image_count ELSE 0 END), 0) AS today_images,
+                    COALESCE(SUM(CASE WHEN today_date = ? THEN today_video_count ELSE 0 END), 0) AS today_videos,
+                    COALESCE(SUM(CASE WHEN today_date = ? THEN today_error_count ELSE 0 END), 0) AS today_errors
                 FROM token_stats
-            """)
+            """, (today, today, today))
             stats_row = await stats_cursor.fetchone()
 
             token_data = dict(token_row) if token_row else {}
@@ -1116,19 +1124,20 @@ class Database:
 
     async def increment_image_count(self, token_id: int):
         """Increment image generation count with daily reset"""
-        from datetime import date
         async with self._connect(write=True) as db:
-            today = str(date.today())
+            today = self._current_stats_date()
             # Get current stats
             cursor = await db.execute("SELECT today_date FROM token_stats WHERE token_id = ?", (token_id,))
             row = await cursor.fetchone()
 
-            # If date changed, reset today's count
+            # If date changed, reset all daily counters before recording today's image usage.
             if row and row[0] != today:
                 await db.execute("""
                     UPDATE token_stats
                     SET image_count = image_count + 1,
                         today_image_count = 1,
+                        today_video_count = 0,
+                        today_error_count = 0,
                         today_date = ?
                     WHERE token_id = ?
                 """, (today, token_id))
@@ -1145,19 +1154,20 @@ class Database:
 
     async def increment_video_count(self, token_id: int):
         """Increment video generation count with daily reset"""
-        from datetime import date
         async with self._connect(write=True) as db:
-            today = str(date.today())
+            today = self._current_stats_date()
             # Get current stats
             cursor = await db.execute("SELECT today_date FROM token_stats WHERE token_id = ?", (token_id,))
             row = await cursor.fetchone()
 
-            # If date changed, reset today's count
+            # If date changed, reset all daily counters before recording today's video usage.
             if row and row[0] != today:
                 await db.execute("""
                     UPDATE token_stats
                     SET video_count = video_count + 1,
+                        today_image_count = 0,
                         today_video_count = 1,
+                        today_error_count = 0,
                         today_date = ?
                     WHERE token_id = ?
                 """, (today, token_id))
@@ -1180,19 +1190,20 @@ class Database:
         - consecutive_error_count: Consecutive errors (reset on success/enable)
         - today_error_count: Today's errors (reset on date change)
         """
-        from datetime import date
         async with self._connect(write=True) as db:
-            today = str(date.today())
+            today = self._current_stats_date()
             # Get current stats
             cursor = await db.execute("SELECT today_date FROM token_stats WHERE token_id = ?", (token_id,))
             row = await cursor.fetchone()
 
-            # If date changed, reset today's error count
+            # If date changed, reset all daily counters before recording today's error.
             if row and row[0] != today:
                 await db.execute("""
                     UPDATE token_stats
                     SET error_count = error_count + 1,
                         consecutive_error_count = consecutive_error_count + 1,
+                        today_image_count = 0,
+                        today_video_count = 0,
                         today_error_count = 1,
                         today_date = ?,
                         last_error_at = CURRENT_TIMESTAMP
