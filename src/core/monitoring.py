@@ -10,14 +10,45 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    CollectorRegistry,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
+try:
+    from prometheus_client import (
+        CONTENT_TYPE_LATEST,
+        CollectorRegistry,
+        Counter,
+        Gauge,
+        Histogram,
+        generate_latest,
+    )
+except ModuleNotFoundError:
+    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
+
+    class _NoopMetric:
+        def __init__(self, *args: Any, **kwargs: Any):
+            pass
+
+        def labels(self, **kwargs: Any) -> "_NoopMetric":
+            return self
+
+        def inc(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def set(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def observe(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def clear(self) -> None:
+            return None
+
+    class CollectorRegistry:
+        def __init__(self, *args: Any, **kwargs: Any):
+            pass
+
+    Counter = Gauge = Histogram = _NoopMetric
+
+    def generate_latest(registry: Any = None) -> bytes:
+        return b"# prometheus_client is not installed; metrics are disabled\n"
 
 from .config import config
 

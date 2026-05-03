@@ -732,6 +732,9 @@ def _apply_veo_3_1_model_updates():
     landscape = "VIDEO_ASPECT_RATIO_LANDSCAPE"
     portrait = "VIDEO_ASPECT_RATIO_PORTRAIT"
 
+    def add_alias(alias: str, target: str):
+        MODEL_CONFIG[alias] = dict(MODEL_CONFIG[target])
+
     # Non-fast/non-lite Veo 3.1 aliases must call Quality upstream keys.
     MODEL_CONFIG["veo_3_1_t2v_landscape"].update({"model_key": "veo_3_1_t2v"})
     MODEL_CONFIG["veo_3_1_t2v_portrait"].update({"model_key": "veo_3_1_t2v_portrait"})
@@ -850,6 +853,48 @@ def _apply_veo_3_1_model_updates():
         MODEL_CONFIG[f"veo_3_1_i2v_s_portrait_{resolution_name}"] = _make_i2v_config(
             "veo_3_1_i2v_s_portrait_fl", portrait, upsample=upsample
         )
+
+    for seconds in (4, 6):
+        suffix = f"{seconds}s"
+
+        # Explicit landscape names for /v1/models; short landscape names remain compatible.
+        add_alias(f"veo_3_1_t2v_fast_landscape_{suffix}", f"veo_3_1_t2v_fast_{suffix}")
+        add_alias(f"veo_3_1_t2v_landscape_{suffix}", f"veo_3_1_t2v_{suffix}")
+        add_alias(f"veo_3_1_i2v_s_fast_landscape_{suffix}_fl", f"veo_3_1_i2v_s_fast_{suffix}_fl")
+        add_alias(f"veo_3_1_i2v_s_landscape_{suffix}", f"veo_3_1_i2v_s_{suffix}")
+
+        add_alias(f"veo_3_1_t2v_lite_landscape_{suffix}", f"veo_3_1_t2v_lite_{suffix}_landscape")
+        add_alias(f"veo_3_1_t2v_lite_portrait_{suffix}", f"veo_3_1_t2v_lite_{suffix}_portrait")
+        add_alias(f"veo_3_1_i2v_lite_landscape_{suffix}", f"veo_3_1_i2v_lite_{suffix}_landscape")
+        add_alias(f"veo_3_1_i2v_lite_portrait_{suffix}", f"veo_3_1_i2v_lite_{suffix}_portrait")
+        add_alias(
+            f"veo_3_1_interpolation_lite_landscape_{suffix}",
+            f"veo_3_1_interpolation_lite_{suffix}_landscape",
+        )
+        add_alias(
+            f"veo_3_1_interpolation_lite_portrait_{suffix}",
+            f"veo_3_1_interpolation_lite_{suffix}_portrait",
+        )
+
+        for resolution_name in ("4k", "1080p"):
+            add_alias(
+                f"veo_3_1_t2v_landscape_{suffix}_{resolution_name}",
+                f"veo_3_1_t2v_{suffix}_{resolution_name}",
+            )
+            add_alias(
+                f"veo_3_1_i2v_s_landscape_{suffix}_{resolution_name}",
+                f"veo_3_1_i2v_s_{suffix}_{resolution_name}",
+            )
+
+    for resolution_name in ("4k", "1080p"):
+        add_alias(f"veo_3_1_t2v_landscape_{resolution_name}", f"veo_3_1_t2v_{resolution_name}")
+        add_alias(f"veo_3_1_i2v_s_landscape_{resolution_name}", f"veo_3_1_i2v_s_{resolution_name}")
+
+    add_alias("veo_3_1_r2v_fast_landscape", "veo_3_1_r2v_fast")
+    add_alias("veo_3_1_r2v_fast_landscape_ultra", "veo_3_1_r2v_fast_ultra")
+    add_alias("veo_3_1_r2v_fast_landscape_ultra_relaxed", "veo_3_1_r2v_fast_ultra_relaxed")
+    add_alias("veo_3_1_r2v_fast_landscape_ultra_4k", "veo_3_1_r2v_fast_ultra_4k")
+    add_alias("veo_3_1_r2v_fast_landscape_ultra_1080p", "veo_3_1_r2v_fast_ultra_1080p")
 
 
 _apply_veo_3_1_model_updates()

@@ -105,6 +105,33 @@ class VeoLiteGenerationHandlerTests(unittest.TestCase):
         self.assertEqual(cfg["upsample"]["model_key"], "veo_3_1_upsampler_1080p")
         self.assertEqual(cfg["upsample"]["resolution"], "VIDEO_RESOLUTION_1080P")
 
+    def test_short_duration_models_include_explicit_landscape_aliases(self):
+        expected_aliases = {
+            "veo_3_1_t2v_landscape_4s": "veo_3_1_t2v_4s",
+            "veo_3_1_t2v_landscape_6s": "veo_3_1_t2v_6s",
+            "veo_3_1_i2v_s_landscape_4s": "veo_3_1_i2v_s_4s",
+            "veo_3_1_i2v_s_landscape_6s": "veo_3_1_i2v_s_6s",
+            "veo_3_1_t2v_landscape_4s_4k": "veo_3_1_t2v_4s_4k",
+            "veo_3_1_i2v_s_landscape_6s_1080p": "veo_3_1_i2v_s_6s_1080p",
+        }
+
+        for alias, target in expected_aliases.items():
+            self.assertIn(alias, MODEL_CONFIG)
+            self.assertEqual(MODEL_CONFIG[alias], MODEL_CONFIG[target])
+
+    def test_r2v_models_include_explicit_landscape_aliases(self):
+        expected_aliases = {
+            "veo_3_1_r2v_fast_landscape": "veo_3_1_r2v_fast",
+            "veo_3_1_r2v_fast_landscape_ultra": "veo_3_1_r2v_fast_ultra",
+            "veo_3_1_r2v_fast_landscape_ultra_relaxed": "veo_3_1_r2v_fast_ultra_relaxed",
+            "veo_3_1_r2v_fast_landscape_ultra_4k": "veo_3_1_r2v_fast_ultra_4k",
+            "veo_3_1_r2v_fast_landscape_ultra_1080p": "veo_3_1_r2v_fast_ultra_1080p",
+        }
+
+        for alias, target in expected_aliases.items():
+            self.assertIn(alias, MODEL_CONFIG)
+            self.assertEqual(MODEL_CONFIG[alias], MODEL_CONFIG[target])
+
     def test_direct_upsampler_keys_are_not_public_models(self):
         self.assertNotIn("veo_3_1_upsampler_4k", MODEL_CONFIG)
         self.assertNotIn("veo_3_1_upsampler_1080p", MODEL_CONFIG)
