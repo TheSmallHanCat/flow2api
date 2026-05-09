@@ -197,7 +197,7 @@ class CaptchaConfig(BaseModel):
     browser_proxy_url: Optional[str] = None  # 浏览器打码代理URL
     browser_count: int = 1  # 浏览器打码实例数量
     personal_project_pool_size: int = 4  # 单个 Token 默认维护的项目池数量（仅影响项目轮换）
-    personal_max_resident_tabs: int = 5  # 内置浏览器共享打码标签页数量上限
+    personal_max_resident_tabs: int = 5  # 内置浏览器单实例共享打码标签页数量上限
     browser_personal_fresh_restart_every_n_solves: int = 10  # 成功打码多少次后清理并重启浏览器，0表示禁用
     personal_idle_tab_ttl_seconds: int = 600  # 内置浏览器标签页空闲超时(秒)
     created_at: Optional[datetime] = None

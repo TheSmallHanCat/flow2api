@@ -39,6 +39,7 @@ from .browser_cookie_utils import (
 
 # flow2api 缺少的配置常量和函数，内联定义
 TOKEN_POOL_SIZE_MAX = 500
+PERSONAL_POOL_MAX_TOTAL_RESIDENT_TABS = 50
 
 def resolve_effective_browser_count(value) -> int:
     try:
@@ -3124,6 +3125,32 @@ class BrowserCaptchaService:
             {"width": 1920, "height": 1080, "hardwareConcurrency": 12, "deviceMemory": 8},
         )
         base_profile = dict(desktop_profiles[digest[0] % len(desktop_profiles)])
+        gpu_profiles = (
+            {
+                "vendor": "Google Inc. (Intel)",
+                "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+                "unmaskedVendor": "Intel Inc.",
+                "unmaskedRenderer": "Intel(R) UHD Graphics 620",
+            },
+            {
+                "vendor": "Google Inc. (NVIDIA)",
+                "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+                "unmaskedVendor": "NVIDIA Corporation",
+                "unmaskedRenderer": "NVIDIA GeForce GTX 1650",
+            },
+            {
+                "vendor": "Google Inc. (AMD)",
+                "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)",
+                "unmaskedVendor": "ATI Technologies Inc.",
+                "unmaskedRenderer": "AMD Radeon(TM) Graphics",
+            },
+        )
+        gpu_profile = dict(gpu_profiles[digest[11] % len(gpu_profiles)])
+        gpu_arch = "turing"
+        if "Intel" in str(gpu_profile.get("unmaskedVendor") or gpu_profile.get("vendor") or ""):
+            gpu_arch = "gen-9"
+        elif "ATI" in str(gpu_profile.get("unmaskedVendor") or "") or "AMD" in str(gpu_profile.get("vendor") or ""):
+            gpu_arch = "rdna"
         width = int(base_profile["width"])
         height = int(base_profile["height"])
         taskbar_height = 40 + int(digest[1] % 32)
@@ -3169,6 +3196,10 @@ class BrowserCaptchaService:
                 "hardwareConcurrency": int(base_profile["hardwareConcurrency"]),
                 "deviceMemory": int(base_profile["deviceMemory"]),
                 "maxTouchPoints": 0,
+                "cookieEnabled": True,
+                "onLine": True,
+                "pdfViewerEnabled": True,
+                "doNotTrack": "1",
                 "webdriver": False,
             },
             "screen": {
@@ -3185,6 +3216,124 @@ class BrowserCaptchaService:
                 "outerWidth": outer_width,
                 "outerHeight": outer_height,
                 "devicePixelRatio": device_scale_factor,
+                "visualViewport": {
+                    "width": viewport_width,
+                    "height": viewport_height,
+                    "scale": device_scale_factor,
+                    "offsetLeft": 0,
+                    "offsetTop": 0,
+                    "pageLeft": 0,
+                    "pageTop": 0,
+                },
+            },
+            "network": {
+                "type": "wifi",
+                "effectiveType": "4g",
+                "rtt": 45 + int(digest[12] % 75),
+                "downlink": round(6.0 + (int(digest[13] % 95) / 10.0), 1),
+                "saveData": False,
+            },
+            "performance": {
+                "navigationType": "navigate",
+                "redirectCount": 0,
+                "paintStart": 90 + int(digest[14] % 70),
+                "paintEnd": 150 + int(digest[15] % 95),
+            },
+            "graphics": {
+                **gpu_profile,
+                "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+                "shadingLanguageVersion": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+                "maxTextureSize": 16384,
+                "maxRenderbufferSize": 16384,
+                "maxCombinedTextureImageUnits": 32,
+                "maxCubeMapTextureSize": 16384,
+                "maxTextureImageUnits": 16,
+                "maxVertexTextureImageUnits": 16,
+                "maxVertexAttribs": 16,
+                "maxVertexUniformVectors": 4096,
+                "maxFragmentUniformVectors": 1024,
+                "aliasedLineWidthRange": [1, 1],
+                "aliasedPointSizeRange": [1, 1024],
+                "supportedExtensions": [
+                    "ANGLE_instanced_arrays",
+                    "EXT_blend_minmax",
+                    "EXT_color_buffer_half_float",
+                    "EXT_float_blend",
+                    "EXT_frag_depth",
+                    "EXT_shader_texture_lod",
+                    "EXT_sRGB",
+                    "OES_element_index_uint",
+                    "OES_fbo_render_mipmap",
+                    "OES_standard_derivatives",
+                    "OES_texture_float",
+                    "OES_texture_float_linear",
+                    "OES_texture_half_float",
+                    "OES_texture_half_float_linear",
+                    "OES_vertex_array_object",
+                    "WEBGL_color_buffer_float",
+                    "WEBGL_compressed_texture_s3tc",
+                    "WEBGL_debug_renderer_info",
+                    "WEBGL_debug_shaders",
+                    "WEBGL_depth_texture",
+                    "WEBGL_draw_buffers",
+                    "WEBGL_lose_context",
+                ],
+                "shaderPrecision": {
+                    "highFloat": {"rangeMin": 127, "rangeMax": 127, "precision": 23},
+                    "mediumFloat": {"rangeMin": 127, "rangeMax": 127, "precision": 23},
+                    "lowFloat": {"rangeMin": 127, "rangeMax": 127, "precision": 23},
+                    "highInt": {"rangeMin": 31, "rangeMax": 30, "precision": 0},
+                    "mediumInt": {"rangeMin": 31, "rangeMax": 30, "precision": 0},
+                    "lowInt": {"rangeMin": 31, "rangeMax": 30, "precision": 0},
+                },
+            },
+            "webgpu": {
+                "vendor": str(gpu_profile.get("unmaskedVendor") or gpu_profile.get("vendor") or ""),
+                "architecture": gpu_arch,
+                "device": str(gpu_profile.get("unmaskedRenderer") or gpu_profile.get("renderer") or ""),
+                "description": str(gpu_profile.get("renderer") or ""),
+                "isFallbackAdapter": False,
+                "preferredCanvasFormat": "bgra8unorm",
+                "features": [
+                    "depth-clip-control",
+                    "texture-compression-bc",
+                    "timestamp-query",
+                ],
+                "limits": {
+                    "maxTextureDimension1D": 8192,
+                    "maxTextureDimension2D": 8192,
+                    "maxTextureDimension3D": 2048,
+                    "maxTextureArrayLayers": 256,
+                    "maxBindGroups": 4,
+                    "maxBindingsPerBindGroup": 1000,
+                    "maxBufferSize": 268435456,
+                    "maxStorageBufferBindingSize": 134217728,
+                    "maxUniformBufferBindingSize": 65536,
+                    "maxVertexBuffers": 8,
+                    "maxVertexAttributes": 16,
+                    "maxVertexBufferArrayStride": 2048,
+                    "maxInterStageShaderComponents": 60,
+                    "maxComputeWorkgroupStorageSize": 16384,
+                    "maxComputeInvocationsPerWorkgroup": 256,
+                    "maxComputeWorkgroupSizeX": 256,
+                    "maxComputeWorkgroupSizeY": 256,
+                    "maxComputeWorkgroupSizeZ": 64,
+                    "maxComputeWorkgroupsPerDimension": 65535,
+                },
+            },
+            "font": {
+                "families": [
+                    "Arial",
+                    "Calibri",
+                    "Cambria",
+                    "Consolas",
+                    "Courier New",
+                    "Georgia",
+                    "Microsoft YaHei",
+                    "Segoe UI",
+                    "Times New Roman",
+                    "Verdana",
+                ],
             },
             "userAgentMetadata": {
                 "platform": str(os_profile["ua_ch_platform"]),
@@ -3210,6 +3359,36 @@ class BrowserCaptchaService:
                 "Accept-Language": str(locale_profile["acceptLanguage"]),
                 "DNT": "1",
             },
+            "mediaQueries": {
+                "prefersColorScheme": "light",
+                "prefersReducedMotion": "no-preference",
+                "prefersContrast": "no-preference",
+                "forcedColors": "none",
+                "hover": "hover",
+                "anyHover": "hover",
+                "pointer": "fine",
+                "anyPointer": "fine",
+                "orientation": "landscape" if viewport_width >= viewport_height else "portrait",
+            },
+            "storage": {
+                "quota": 120000000000 + int(digest[16] % 20) * 1000000000,
+                "usage": 8000000 + int(digest[17] % 20) * 250000,
+                "usageDetails": {
+                    "indexedDB": 1000000 + int(digest[18] % 8) * 100000,
+                    "caches": 1000000 + int(digest[19] % 8) * 100000,
+                    "serviceWorkerRegistrations": 0,
+                },
+                "persisted": False,
+            },
+            "behavior": {
+                "documentHidden": False,
+                "visibilityState": "visible",
+                "hasFocus": True,
+                "userActivation": {
+                    "hasBeenActive": True,
+                    "isActive": False,
+                },
+            },
             "mediaDevices": {
                 "devices": [
                     {
@@ -3232,6 +3411,40 @@ class BrowserCaptchaService:
                     },
                 ],
             },
+            "mimeTypes": [
+                {
+                    "type": "application/pdf",
+                    "suffixes": "pdf",
+                    "description": "Portable Document Format",
+                    "pluginName": "PDF Viewer",
+                },
+                {
+                    "type": "text/pdf",
+                    "suffixes": "pdf",
+                    "description": "Portable Document Format",
+                    "pluginName": "PDF Viewer",
+                },
+            ],
+            "plugins": [
+                {
+                    "name": "PDF Viewer",
+                    "filename": "internal-pdf-viewer",
+                    "description": "Portable Document Format",
+                    "mimeTypes": ["application/pdf", "text/pdf"],
+                },
+                {
+                    "name": "Chrome PDF Viewer",
+                    "filename": "internal-pdf-viewer",
+                    "description": "Portable Document Format",
+                    "mimeTypes": ["application/pdf", "text/pdf"],
+                },
+                {
+                    "name": "Chromium PDF Viewer",
+                    "filename": "internal-pdf-viewer",
+                    "description": "Portable Document Format",
+                    "mimeTypes": ["application/pdf", "text/pdf"],
+                },
+            ],
             "webrtc": {
                 "candidateMaskIp": "0.0.0.0",
             },
@@ -3351,6 +3564,76 @@ class BrowserCaptchaService:
         }
     };
 
+    const stableNow = () => {
+        try {
+            return Math.max(0, Number(performance && performance.now && performance.now()) || 0);
+        } catch (e) {
+            return Date.now() % 100000;
+        }
+    };
+
+    const makeEventTargetLike = (target) => {
+        const listeners = {};
+        defineMethod(target, "addEventListener", (type, listener) => {
+            if (typeof listener !== "function") {
+                return;
+            }
+            const name = String(type || "");
+            listeners[name] = listeners[name] || [];
+            if (!listeners[name].includes(listener)) {
+                listeners[name].push(listener);
+            }
+        });
+        defineMethod(target, "removeEventListener", (type, listener) => {
+            const name = String(type || "");
+            listeners[name] = (listeners[name] || []).filter((item) => item !== listener);
+        });
+        defineMethod(target, "dispatchEvent", (event) => {
+            const name = String(event && event.type || "");
+            for (const listener of listeners[name] || []) {
+                try {
+                    listener.call(target, event);
+                } catch (e) {}
+            }
+            return true;
+        });
+        return target;
+    };
+
+    const makeArrayLike = (items, namedKey, proto) => {
+        const sourceItems = Array.isArray(items) ? items : [];
+        const target = {};
+        try {
+            if (proto) {
+                Object.setPrototypeOf(target, proto);
+            }
+        } catch (e) {}
+        defineGetter(target, "length", () => sourceItems.length);
+        sourceItems.forEach((item, index) => {
+            defineGetter(target, String(index), () => item);
+            const namedValue = item && item[namedKey];
+            if (namedValue) {
+                defineGetter(target, String(namedValue), () => item);
+            }
+        });
+        defineMethod(target, "item", (index) => {
+            const normalizedIndex = Number(index);
+            return Number.isFinite(normalizedIndex) ? (sourceItems[normalizedIndex] || null) : null;
+        });
+        defineMethod(target, "namedItem", (name) => {
+            const normalizedName = String(name || "");
+            return sourceItems.find((item) => String(item && item[namedKey] || "") === normalizedName) || null;
+        });
+        if (typeof Symbol !== "undefined" && Symbol.iterator) {
+            defineMethod(target, Symbol.iterator, function* () {
+                for (const item of sourceItems) {
+                    yield item;
+                }
+            });
+        }
+        return target;
+    };
+
     const navigatorProfile = runtimeProfile.navigator || {};
     const localeProfile = runtimeProfile.locale || {};
     const permissionsProfile = runtimeProfile.permissions || {};
@@ -3359,6 +3642,16 @@ class BrowserCaptchaService:
     const windowProfile = runtimeProfile.window || {};
     const mediaDevicesProfile = runtimeProfile.mediaDevices || {};
     const webRtcProfile = runtimeProfile.webrtc || {};
+    const networkProfile = runtimeProfile.network || {};
+    const performanceProfile = runtimeProfile.performance || {};
+    const graphicsProfile = runtimeProfile.graphics || {};
+    const webgpuProfile = runtimeProfile.webgpu || {};
+    const fontProfile = runtimeProfile.font || {};
+    const storageProfile = runtimeProfile.storage || {};
+    const mediaQueryProfile = runtimeProfile.mediaQueries || {};
+    const behaviorProfile = runtimeProfile.behavior || {};
+    const mimeTypesProfile = Array.isArray(runtimeProfile.mimeTypes) ? runtimeProfile.mimeTypes : [];
+    const pluginsProfile = Array.isArray(runtimeProfile.plugins) ? runtimeProfile.plugins : [];
     const maskedIp = String(webRtcProfile.candidateMaskIp || "0.0.0.0");
     const sanitizeIpText = (input) => String(input || "").replace(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g, maskedIp);
 
@@ -3379,6 +3672,10 @@ class BrowserCaptchaService:
     patchNavigatorMetric("hardwareConcurrency");
     patchNavigatorMetric("deviceMemory");
     patchNavigatorMetric("maxTouchPoints");
+    patchNavigatorMetric("cookieEnabled");
+    patchNavigatorMetric("onLine");
+    patchNavigatorMetric("pdfViewerEnabled");
+    patchNavigatorMetric("doNotTrack");
     if (navigatorProfile.webdriver !== undefined) {
         defineGetter(Navigator.prototype, "webdriver", () => false);
         defineGetter(navigator, "webdriver", () => false);
@@ -3422,6 +3719,67 @@ class BrowserCaptchaService:
         defineGetter(navigator, "userAgentData", () => userAgentData);
     }
 
+    if (pluginsProfile.length || mimeTypesProfile.length) {
+        const pluginObjects = [];
+        const mimeObjects = [];
+        const pluginByName = {};
+        for (const pluginProfile of pluginsProfile) {
+            const pluginObject = {
+                name: String(pluginProfile.name || ""),
+                filename: String(pluginProfile.filename || ""),
+                description: String(pluginProfile.description || ""),
+            };
+            try {
+                if (window.Plugin && window.Plugin.prototype) {
+                    Object.setPrototypeOf(pluginObject, window.Plugin.prototype);
+                }
+            } catch (e) {}
+            pluginObjects.push(pluginObject);
+            if (pluginObject.name) {
+                pluginByName[pluginObject.name] = pluginObject;
+            }
+        }
+        for (const mimeProfile of mimeTypesProfile) {
+            const enabledPlugin = pluginByName[String(mimeProfile.pluginName || "")] || pluginObjects[0] || null;
+            const mimeObject = {
+                type: String(mimeProfile.type || ""),
+                suffixes: String(mimeProfile.suffixes || ""),
+                description: String(mimeProfile.description || ""),
+                enabledPlugin,
+            };
+            try {
+                if (window.MimeType && window.MimeType.prototype) {
+                    Object.setPrototypeOf(mimeObject, window.MimeType.prototype);
+                }
+            } catch (e) {}
+            mimeObjects.push(mimeObject);
+        }
+        for (const pluginObject of pluginObjects) {
+            const pluginProfile = pluginsProfile.find((item) => String(item.name || "") === pluginObject.name) || {};
+            const pluginMimeTypes = (Array.isArray(pluginProfile.mimeTypes) ? pluginProfile.mimeTypes : [])
+                .map((type) => mimeObjects.find((item) => item.type === String(type || "")))
+                .filter(Boolean);
+            defineGetter(pluginObject, "length", () => pluginMimeTypes.length);
+            pluginMimeTypes.forEach((mimeObject, index) => {
+                defineGetter(pluginObject, String(index), () => mimeObject);
+                if (mimeObject.type) {
+                    defineGetter(pluginObject, mimeObject.type, () => mimeObject);
+                }
+            });
+            defineMethod(pluginObject, "item", (index) => pluginMimeTypes[Number(index)] || null);
+            defineMethod(pluginObject, "namedItem", (name) => {
+                const normalizedName = String(name || "");
+                return pluginMimeTypes.find((item) => item.type === normalizedName) || null;
+            });
+        }
+        const pluginArray = makeArrayLike(pluginObjects, "name", window.PluginArray && window.PluginArray.prototype);
+        const mimeTypeArray = makeArrayLike(mimeObjects, "type", window.MimeTypeArray && window.MimeTypeArray.prototype);
+        defineGetter(Navigator.prototype, "plugins", () => pluginArray);
+        defineGetter(navigator, "plugins", () => pluginArray);
+        defineGetter(Navigator.prototype, "mimeTypes", () => mimeTypeArray);
+        defineGetter(navigator, "mimeTypes", () => mimeTypeArray);
+    }
+
     const screenProfile = runtimeProfile.screen || {};
     const patchScreenMetric = (key) => {
         if (typeof screenProfile[key] !== "number") {
@@ -3454,6 +3812,120 @@ class BrowserCaptchaService:
     patchWindowMetric("outerHeight");
     patchWindowMetric("devicePixelRatio");
 
+    const ensureVisualViewportEnvironment = () => {
+        const viewportProfile = windowProfile.visualViewport || {};
+        const visualViewport = makeEventTargetLike(window.visualViewport || {});
+        const patchViewportMetric = (key, fallbackValue) => {
+            const value = viewportProfile[key] !== undefined ? viewportProfile[key] : fallbackValue;
+            defineGetter(visualViewport, key, () => Number(value || 0));
+        };
+        patchViewportMetric("width", windowProfile.innerWidth || 1280);
+        patchViewportMetric("height", windowProfile.innerHeight || 720);
+        patchViewportMetric("scale", windowProfile.devicePixelRatio || 1);
+        patchViewportMetric("offsetLeft", 0);
+        patchViewportMetric("offsetTop", 0);
+        patchViewportMetric("pageLeft", 0);
+        patchViewportMetric("pageTop", 0);
+        defineGetter(visualViewport, "onresize", () => null);
+        defineGetter(visualViewport, "onscroll", () => null);
+        defineGetter(window, "visualViewport", () => visualViewport);
+    };
+    ensureVisualViewportEnvironment();
+
+    const ensureMatchMediaEnvironment = () => {
+        const originalMatchMedia = typeof window.matchMedia === "function"
+            ? window.matchMedia.bind(window)
+            : null;
+        const normalizeQuery = (query) => String(query || "").replace(/\\s+/g, " ").trim().toLowerCase();
+        const parsePx = (text) => {
+            const match = String(text || "").match(/(-?\\d+(?:\\.\\d+)?)px/);
+            return match ? Number(match[1]) : null;
+        };
+        const resolveMediaMatch = (query) => {
+            const normalized = normalizeQuery(query);
+            const width = Number(windowProfile.innerWidth || 1280);
+            const height = Number(windowProfile.innerHeight || 720);
+            const dpr = Number(windowProfile.devicePixelRatio || 1);
+            if (!normalized) {
+                return false;
+            }
+            if (normalized.includes("prefers-color-scheme")) {
+                const expected = String(mediaQueryProfile.prefersColorScheme || "light").toLowerCase();
+                return normalized.includes(expected);
+            }
+            if (normalized.includes("prefers-reduced-motion")) {
+                const expected = String(mediaQueryProfile.prefersReducedMotion || "no-preference").toLowerCase();
+                return normalized.includes(expected);
+            }
+            if (normalized.includes("prefers-contrast")) {
+                const expected = String(mediaQueryProfile.prefersContrast || "no-preference").toLowerCase();
+                return normalized.includes(expected);
+            }
+            if (normalized.includes("forced-colors")) {
+                const expected = String(mediaQueryProfile.forcedColors || "none").toLowerCase();
+                return normalized.includes(expected);
+            }
+            if (normalized.includes("(hover:")) {
+                return normalized.includes(String(mediaQueryProfile.hover || "hover").toLowerCase());
+            }
+            if (normalized.includes("(any-hover:")) {
+                return normalized.includes(String(mediaQueryProfile.anyHover || "hover").toLowerCase());
+            }
+            if (normalized.includes("(pointer:")) {
+                return normalized.includes(String(mediaQueryProfile.pointer || "fine").toLowerCase());
+            }
+            if (normalized.includes("(any-pointer:")) {
+                return normalized.includes(String(mediaQueryProfile.anyPointer || "fine").toLowerCase());
+            }
+            if (normalized.includes("orientation")) {
+                return normalized.includes(String(mediaQueryProfile.orientation || (width >= height ? "landscape" : "portrait")).toLowerCase());
+            }
+            if (normalized.includes("min-width")) {
+                const value = parsePx(normalized);
+                return value === null ? false : width >= value;
+            }
+            if (normalized.includes("max-width")) {
+                const value = parsePx(normalized);
+                return value === null ? false : width <= value;
+            }
+            if (normalized.includes("min-height")) {
+                const value = parsePx(normalized);
+                return value === null ? false : height >= value;
+            }
+            if (normalized.includes("max-height")) {
+                const value = parsePx(normalized);
+                return value === null ? false : height <= value;
+            }
+            if (normalized.includes("resolution") || normalized.includes("device-pixel-ratio")) {
+                const match = normalized.match(/(-?\\d+(?:\\.\\d+)?)(?:dppx|x)/);
+                return match ? dpr >= Number(match[1]) : dpr >= 1;
+            }
+            if (originalMatchMedia) {
+                try {
+                    return Boolean(originalMatchMedia(query).matches);
+                } catch (e) {}
+            }
+            return false;
+        };
+        defineMethod(window, "matchMedia", (query) => {
+            const media = String(query || "");
+            const target = makeEventTargetLike({
+                media,
+                matches: resolveMediaMatch(media),
+                onchange: null,
+            });
+            if (window.MediaQueryList && window.MediaQueryList.prototype) {
+                try {
+                    Object.setPrototypeOf(target, window.MediaQueryList.prototype);
+                } catch (e) {}
+            }
+            defineMethod(target, "addListener", (listener) => target.addEventListener("change", listener));
+            defineMethod(target, "removeListener", (listener) => target.removeEventListener("change", listener));
+            return target;
+        });
+    };
+    ensureMatchMediaEnvironment();
+
     const localeCode = String(localeProfile.code || navigatorProfile.language || "");
     const timezoneId = String(timezoneProfile.id || "");
     const patchIntlResolvedOptions = (ctor) => {
@@ -3476,16 +3948,23 @@ class BrowserCaptchaService:
     patchIntlResolvedOptions(window.Intl && window.Intl.NumberFormat);
     patchIntlResolvedOptions(window.Intl && window.Intl.Collator);
     patchIntlResolvedOptions(window.Intl && window.Intl.PluralRules);
+    patchIntlResolvedOptions(window.Intl && window.Intl.RelativeTimeFormat);
+    patchIntlResolvedOptions(window.Intl && window.Intl.ListFormat);
+    patchIntlResolvedOptions(window.Intl && window.Intl.DisplayNames);
+    patchIntlResolvedOptions(window.Intl && window.Intl.Segmenter);
 
-    const buildPermissionStatus = (state) => ({
-        state,
-        onchange: null,
-        addEventListener() {},
-        removeEventListener() {},
-        dispatchEvent() {
-            return true;
-        },
-    });
+    const buildPermissionStatus = (state) => {
+        const status = makeEventTargetLike({
+            state,
+            onchange: null,
+        });
+        try {
+            if (window.PermissionStatus && window.PermissionStatus.prototype) {
+                Object.setPrototypeOf(status, window.PermissionStatus.prototype);
+            }
+        } catch (e) {}
+        return status;
+    };
     if (navigator.permissions) {
         const permissionsTarget = navigator.permissions;
         const permissionsProto = Object.getPrototypeOf(permissionsTarget);
@@ -3506,20 +3985,139 @@ class BrowserCaptchaService:
         defineMethod(permissionsTarget, "query", patchedQuery);
     }
 
+    if (networkProfile && Object.keys(networkProfile).length > 0) {
+        const networkInfo = makeEventTargetLike(navigator.connection || {});
+        const patchNetworkMetric = (key, fallbackValue) => {
+            const value = networkProfile[key] !== undefined ? networkProfile[key] : fallbackValue;
+            defineGetter(networkInfo, key, () => cloneValue(value));
+        };
+        patchNetworkMetric("type", "wifi");
+        patchNetworkMetric("effectiveType", "4g");
+        patchNetworkMetric("rtt", 75);
+        patchNetworkMetric("downlink", 10);
+        patchNetworkMetric("saveData", false);
+        defineGetter(networkInfo, "onchange", () => null);
+        defineGetter(Navigator.prototype, "connection", () => networkInfo);
+        defineGetter(navigator, "connection", () => networkInfo);
+        defineGetter(Navigator.prototype, "mozConnection", () => networkInfo);
+        defineGetter(navigator, "mozConnection", () => networkInfo);
+        defineGetter(Navigator.prototype, "webkitConnection", () => networkInfo);
+        defineGetter(navigator, "webkitConnection", () => networkInfo);
+    }
+
     const ensureMediaDevices = () => {
         let target = navigator.mediaDevices || null;
         if (!target) {
             target = {};
         }
-        const devices = Array.isArray(mediaDevicesProfile.devices) ? mediaDevicesProfile.devices : [];
+        const devices = (Array.isArray(mediaDevicesProfile.devices) ? mediaDevicesProfile.devices : []).map((device) => {
+            const mediaDevice = {
+                deviceId: String(device.deviceId || ""),
+                groupId: String(device.groupId || ""),
+                kind: String(device.kind || ""),
+                label: String(device.label || ""),
+                toJSON() {
+                    return {
+                        deviceId: this.deviceId,
+                        groupId: this.groupId,
+                        kind: this.kind,
+                        label: this.label,
+                    };
+                },
+            };
+            try {
+                if (window.MediaDeviceInfo && window.MediaDeviceInfo.prototype) {
+                    Object.setPrototypeOf(mediaDevice, window.MediaDeviceInfo.prototype);
+                }
+            } catch (e) {}
+            return mediaDevice;
+        });
         const deniedMedia = () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
-        defineMethod(target, "enumerateDevices", async () => cloneValue(devices));
+        defineGetter(target, "ondevicechange", () => null);
+        defineMethod(target, "enumerateDevices", async () => devices.slice());
         defineMethod(target, "getUserMedia", deniedMedia);
         defineMethod(target, "getDisplayMedia", deniedMedia);
+        defineMethod(target, "getSupportedConstraints", () => ({
+            aspectRatio: true,
+            autoGainControl: true,
+            channelCount: true,
+            deviceId: true,
+            echoCancellation: true,
+            facingMode: true,
+            frameRate: true,
+            groupId: true,
+            height: true,
+            latency: true,
+            noiseSuppression: true,
+            sampleRate: true,
+            sampleSize: true,
+            width: true,
+        }));
         defineGetter(Navigator.prototype, "mediaDevices", () => target);
         defineGetter(navigator, "mediaDevices", () => target);
     };
     ensureMediaDevices();
+
+    const ensureFontFaceEnvironment = () => {
+        const knownFonts = Array.isArray(fontProfile.families) ? fontProfile.families : [];
+        if (!window.FontFace) {
+            class PersonalFontFace {
+                constructor(family, source, descriptors) {
+                    this.family = String(family || "");
+                    this.source = source;
+                    this.descriptors = descriptors || {};
+                    this.status = "unloaded";
+                    this.loaded = Promise.resolve(this);
+                }
+                load() {
+                    this.status = "loaded";
+                    this.loaded = Promise.resolve(this);
+                    return this.loaded;
+                }
+            }
+            setValue(window, "FontFace", PersonalFontFace);
+        }
+        const existingFontSet = document.fonts || null;
+        const fontSet = existingFontSet || makeEventTargetLike({
+                status: "loaded",
+                ready: Promise.resolve(),
+                size: knownFonts.length,
+            });
+        const originalFontCheck = typeof fontSet.check === "function" ? fontSet.check.bind(fontSet) : null;
+        const originalFontLoad = typeof fontSet.load === "function" ? fontSet.load.bind(fontSet) : null;
+        defineMethod(fontSet, "check", (font, text) => {
+            const normalizedFont = String(font || "").toLowerCase();
+            if (knownFonts.some((family) => normalizedFont.includes(String(family).toLowerCase()))) {
+                return true;
+            }
+            return originalFontCheck ? Boolean(originalFontCheck(font, text)) : false;
+        });
+        defineMethod(fontSet, "load", async (font, text) => {
+            const normalizedFont = String(font || "").toLowerCase();
+            if (knownFonts.some((family) => normalizedFont.includes(String(family).toLowerCase()))) {
+                return [];
+            }
+            return originalFontLoad ? originalFontLoad(font, text) : [];
+        });
+        if (typeof fontSet.add !== "function") {
+            defineMethod(fontSet, "add", () => fontSet);
+        }
+        if (typeof fontSet.delete !== "function") {
+            defineMethod(fontSet, "delete", () => false);
+        }
+        if (typeof fontSet.clear !== "function") {
+            defineMethod(fontSet, "clear", () => undefined);
+        }
+        if (typeof fontSet.forEach !== "function") {
+            defineMethod(fontSet, "forEach", () => undefined);
+        }
+        if (typeof Symbol !== "undefined" && Symbol.iterator && typeof fontSet[Symbol.iterator] !== "function") {
+            defineMethod(fontSet, Symbol.iterator, function* () {});
+        }
+        defineGetter(Document.prototype, "fonts", () => fontSet);
+        defineGetter(document, "fonts", () => fontSet);
+    };
+    ensureFontFaceEnvironment();
 
     const patchRtcSessionDescription = (ctor) => {
         if (!ctor || !ctor.prototype) {
@@ -3676,32 +4274,661 @@ class BrowserCaptchaService:
                 return result;
             };
         }
+        const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
+        if (typeof originalMeasureText === "function") {
+            CanvasRenderingContext2D.prototype.measureText = function(text) {
+                const result = originalMeasureText.apply(this, arguments);
+                try {
+                    const knownFonts = Array.isArray(fontProfile.families) ? fontProfile.families : [];
+                    const fontText = String(this.font || "").toLowerCase();
+                    const hasKnownFont = knownFonts.some((family) => fontText.includes(String(family).toLowerCase()));
+                    if (hasKnownFont && result && typeof result.width === "number") {
+                        const delta = (String(text || "").length % 7) * 0.003;
+                        Object.defineProperty(result, "width", {
+                            configurable: true,
+                            enumerable: true,
+                            value: result.width + delta,
+                        });
+                    }
+                } catch (e) {}
+                return result;
+            };
+        }
     }
 
     const patchWebGL = (proto) => {
-        if (!proto || typeof proto.readPixels !== "function") {
+        if (!proto) {
             return;
         }
-        const originalReadPixels = proto.readPixels;
-        proto.readPixels = function(...args) {
-            const output = args.find((item) => item && typeof item.length === "number" && typeof item.BYTES_PER_ELEMENT === "number");
-            const result = originalReadPixels.apply(this, args);
-            try {
-                if (output && output.length) {
-                    const stride = Math.max(1, Number(config.webgl.stride || 23));
-                    const delta = Number(config.webgl.delta || 1);
-                    for (let i = 0; i < output.length; i += stride) {
-                        const nextValue = Number(output[i] || 0) + delta;
-                        output[i] = Math.max(0, Math.min(255, nextValue));
+        if (typeof proto.getParameter === "function") {
+            const originalGetParameter = proto.getParameter;
+            proto.getParameter = function(parameter) {
+                try {
+                    const normalizedParameter = Number(parameter);
+                    if (normalizedParameter === 37445) {
+                        return String(graphicsProfile.unmaskedVendor || graphicsProfile.vendor || "Google Inc.");
+                    }
+                    if (normalizedParameter === 37446) {
+                        return String(graphicsProfile.unmaskedRenderer || graphicsProfile.renderer || "ANGLE");
+                    }
+                    if (normalizedParameter === 7936 && graphicsProfile.vendor) {
+                        return String(graphicsProfile.vendor);
+                    }
+                    if (normalizedParameter === 7937 && graphicsProfile.renderer) {
+                        return String(graphicsProfile.renderer);
+                    }
+                    if (normalizedParameter === 7938 && graphicsProfile.version) {
+                        return String(graphicsProfile.version);
+                    }
+                    if (normalizedParameter === 35724 && graphicsProfile.shadingLanguageVersion) {
+                        return String(graphicsProfile.shadingLanguageVersion);
+                    }
+                    if (normalizedParameter === 3379 && graphicsProfile.maxTextureSize) {
+                        return Number(graphicsProfile.maxTextureSize);
+                    }
+                    if (normalizedParameter === 34024 && graphicsProfile.maxRenderbufferSize) {
+                        return Number(graphicsProfile.maxRenderbufferSize);
+                    }
+                    if (normalizedParameter === 35661 && graphicsProfile.maxCombinedTextureImageUnits) {
+                        return Number(graphicsProfile.maxCombinedTextureImageUnits);
+                    }
+                    if (normalizedParameter === 34076 && graphicsProfile.maxCubeMapTextureSize) {
+                        return Number(graphicsProfile.maxCubeMapTextureSize);
+                    }
+                    if (normalizedParameter === 34930 && graphicsProfile.maxTextureImageUnits) {
+                        return Number(graphicsProfile.maxTextureImageUnits);
+                    }
+                    if (normalizedParameter === 35660 && graphicsProfile.maxVertexTextureImageUnits) {
+                        return Number(graphicsProfile.maxVertexTextureImageUnits);
+                    }
+                    if (normalizedParameter === 34921 && graphicsProfile.maxVertexAttribs) {
+                        return Number(graphicsProfile.maxVertexAttribs);
+                    }
+                    if (normalizedParameter === 36347 && graphicsProfile.maxVertexUniformVectors) {
+                        return Number(graphicsProfile.maxVertexUniformVectors);
+                    }
+                    if (normalizedParameter === 36349 && graphicsProfile.maxFragmentUniformVectors) {
+                        return Number(graphicsProfile.maxFragmentUniformVectors);
+                    }
+                    if (normalizedParameter === 33902 && Array.isArray(graphicsProfile.aliasedPointSizeRange)) {
+                        return new Float32Array(graphicsProfile.aliasedPointSizeRange.map(Number));
+                    }
+                    if (normalizedParameter === 33901 && Array.isArray(graphicsProfile.aliasedLineWidthRange)) {
+                        return new Float32Array(graphicsProfile.aliasedLineWidthRange.map(Number));
+                    }
+                } catch (e) {}
+                return originalGetParameter.apply(this, arguments);
+            };
+        }
+        if (typeof proto.getShaderPrecisionFormat === "function") {
+            const originalGetShaderPrecisionFormat = proto.getShaderPrecisionFormat;
+            proto.getShaderPrecisionFormat = function(shaderType, precisionType) {
+                try {
+                    const precisionProfile = graphicsProfile.shaderPrecision || {};
+                    const normalizedPrecision = Number(precisionType);
+                    let selected = null;
+                    if (normalizedPrecision === 36338) {
+                        selected = precisionProfile.highFloat;
+                    } else if (normalizedPrecision === 36337) {
+                        selected = precisionProfile.mediumFloat;
+                    } else if (normalizedPrecision === 36336) {
+                        selected = precisionProfile.lowFloat;
+                    } else if (normalizedPrecision === 36341) {
+                        selected = precisionProfile.highInt;
+                    } else if (normalizedPrecision === 36340) {
+                        selected = precisionProfile.mediumInt;
+                    } else if (normalizedPrecision === 36339) {
+                        selected = precisionProfile.lowInt;
+                    }
+                    if (selected) {
+                        return {
+                            rangeMin: Number(selected.rangeMin || 0),
+                            rangeMax: Number(selected.rangeMax || 0),
+                            precision: Number(selected.precision || 0),
+                        };
+                    }
+                } catch (e) {}
+                return originalGetShaderPrecisionFormat.apply(this, arguments);
+            };
+        }
+        if (typeof proto.readPixels === "function") {
+            const originalReadPixels = proto.readPixels;
+            proto.readPixels = function(...args) {
+                const output = args.find((item) => item && typeof item.length === "number" && typeof item.BYTES_PER_ELEMENT === "number");
+                const result = originalReadPixels.apply(this, args);
+                try {
+                    if (output && output.length) {
+                        const stride = Math.max(1, Number(config.webgl.stride || 23));
+                        const delta = Number(config.webgl.delta || 1);
+                        for (let i = 0; i < output.length; i += stride) {
+                            const nextValue = Number(output[i] || 0) + delta;
+                            output[i] = Math.max(0, Math.min(255, nextValue));
+                        }
+                    }
+                } catch (e) {}
+                return result;
+            };
+        }
+        if (typeof proto.getSupportedExtensions === "function") {
+            const originalGetSupportedExtensions = proto.getSupportedExtensions;
+            proto.getSupportedExtensions = function(...args) {
+                const result = originalGetSupportedExtensions.apply(this, args);
+                const next = Array.isArray(result) ? result.slice() : [];
+                for (const extensionName of (Array.isArray(graphicsProfile.supportedExtensions) ? graphicsProfile.supportedExtensions : [])) {
+                    if (extensionName && !next.includes(extensionName)) {
+                        next.push(extensionName);
                     }
                 }
-            } catch (e) {}
-            return result;
-        };
+                return next;
+            };
+        }
+        if (typeof proto.getExtension === "function") {
+            const originalGetExtension = proto.getExtension;
+            proto.getExtension = function(name) {
+                const extensionName = String(name || "");
+                if (extensionName === "WEBGL_debug_renderer_info") {
+                    return {
+                        UNMASKED_VENDOR_WEBGL: 37445,
+                        UNMASKED_RENDERER_WEBGL: 37446,
+                    };
+                }
+                const result = originalGetExtension.apply(this, arguments);
+                if (result) {
+                    return result;
+                }
+                const supported = Array.isArray(graphicsProfile.supportedExtensions)
+                    ? graphicsProfile.supportedExtensions
+                    : [];
+                if (supported.includes(extensionName)) {
+                    return {};
+                }
+                return result;
+            };
+        }
     };
 
     patchWebGL(window.WebGLRenderingContext && window.WebGLRenderingContext.prototype);
     patchWebGL(window.WebGL2RenderingContext && window.WebGL2RenderingContext.prototype);
+
+    const ensureGeometryEnvironment = () => {
+        const patchRectCtor = (ctor) => {
+            if (!ctor || !ctor.prototype) {
+                return;
+            }
+            if (typeof ctor.fromRect !== "function") {
+                defineMethod(ctor, "fromRect", (rect) => {
+                    const source = rect || {};
+                    return new ctor(
+                        Number(source.x || source.left || 0),
+                        Number(source.y || source.top || 0),
+                        Number(source.width || 0),
+                        Number(source.height || 0)
+                    );
+                });
+            }
+            if (typeof ctor.prototype.toJSON !== "function") {
+                defineMethod(ctor.prototype, "toJSON", function() {
+                    return {
+                        x: Number(this.x || 0),
+                        y: Number(this.y || 0),
+                        width: Number(this.width || 0),
+                        height: Number(this.height || 0),
+                        top: Number(this.top || this.y || 0),
+                        right: Number(this.right || ((this.x || 0) + (this.width || 0))),
+                        bottom: Number(this.bottom || ((this.y || 0) + (this.height || 0))),
+                        left: Number(this.left || this.x || 0),
+                    };
+                });
+            }
+        };
+        patchRectCtor(window.DOMRect);
+        patchRectCtor(window.DOMRectReadOnly);
+        if (window.DOMPoint && window.DOMPoint.prototype && typeof window.DOMPoint.prototype.toJSON !== "function") {
+            defineMethod(window.DOMPoint.prototype, "toJSON", function() {
+                return { x: Number(this.x || 0), y: Number(this.y || 0), z: Number(this.z || 0), w: Number(this.w || 1) };
+            });
+        }
+    };
+    ensureGeometryEnvironment();
+
+    const ensureCssEnvironment = () => {
+        if (!window.CSS) {
+            setValue(window, "CSS", {});
+        }
+        if (window.CSS) {
+            if (typeof window.CSS.supports !== "function") {
+                defineMethod(window.CSS, "supports", (...args) => {
+                    const property = args[0];
+                    const value = args[1];
+                    if (args.length === 1) {
+                        return typeof property === "string" && property.length > 0;
+                    }
+                    return typeof property === "string" && typeof value === "string";
+                });
+            }
+            if (typeof window.CSS.escape !== "function") {
+                defineMethod(window.CSS, "escape", (value) => String(value || "").replace(/[^a-zA-Z0-9_-]/g, "\\\\$&"));
+            }
+            if (!window.CSS.highlights) {
+                setValue(window.CSS, "highlights", new Map());
+            }
+        }
+    };
+    ensureCssEnvironment();
+
+    const ensurePerformanceEnvironment = () => {
+        if (!window.performance) {
+            return;
+        }
+        const makeEntry = (entry) => ({
+            ...entry,
+            toJSON() {
+                return { ...entry };
+            },
+        });
+        const paintStart = Number(performanceProfile.paintStart || 110);
+        const paintEnd = Number(performanceProfile.paintEnd || 180);
+        const fallbackPaintEntries = [
+            makeEntry({ name: "first-paint", entryType: "paint", startTime: paintStart, duration: 0 }),
+            makeEntry({ name: "first-contentful-paint", entryType: "paint", startTime: paintEnd, duration: 0 }),
+        ];
+        const fallbackNavigationEntry = makeEntry({
+            name: location.href,
+            entryType: "navigation",
+            startTime: 0,
+            duration: Math.max(paintEnd + 80, stableNow()),
+            initiatorType: "navigation",
+            type: String(performanceProfile.navigationType || "navigate"),
+            redirectCount: Number(performanceProfile.redirectCount || 0),
+        });
+        if (typeof performance.getEntriesByType === "function") {
+            const originalGetEntriesByType = performance.getEntriesByType.bind(performance);
+            defineMethod(performance, "getEntriesByType", (type) => {
+                const normalizedType = String(type || "");
+                const entries = originalGetEntriesByType(normalizedType) || [];
+                if (entries.length > 0) {
+                    return entries;
+                }
+                if (normalizedType === "paint") {
+                    return fallbackPaintEntries.slice();
+                }
+                if (normalizedType === "navigation") {
+                    return [fallbackNavigationEntry];
+                }
+                return entries;
+            });
+        }
+        if (typeof performance.getEntriesByName === "function") {
+            const originalGetEntriesByName = performance.getEntriesByName.bind(performance);
+            defineMethod(performance, "getEntriesByName", (name, type) => {
+                const entries = originalGetEntriesByName(name, type) || [];
+                if (entries.length > 0) {
+                    return entries;
+                }
+                const normalizedName = String(name || "");
+                const normalizedType = String(type || "");
+                if ((!normalizedType || normalizedType === "paint") && normalizedName === "first-contentful-paint") {
+                    return [fallbackPaintEntries[1]];
+                }
+                if ((!normalizedType || normalizedType === "paint") && normalizedName === "first-paint") {
+                    return [fallbackPaintEntries[0]];
+                }
+                return entries;
+            });
+        }
+    };
+    ensurePerformanceEnvironment();
+
+    const ensureNavigationEnvironment = () => {
+        if (window.navigation) {
+            return;
+        }
+        const currentEntry = makeEventTargetLike({
+            id: "current",
+            key: "current",
+            index: 0,
+            sameDocument: true,
+            url: location.href,
+            getState: () => null,
+        });
+        const navigation = makeEventTargetLike({
+            currentEntry,
+            transition: null,
+            activation: { from: null, entry: currentEntry, navigationType: "push", activationStart: 0 },
+            canGoBack: history.length > 1,
+            canGoForward: false,
+            onnavigate: null,
+            onnavigatesuccess: null,
+            onnavigateerror: null,
+            entries: () => [currentEntry],
+        });
+        const navigationResult = () => ({
+            committed: Promise.resolve(currentEntry),
+            finished: Promise.resolve(currentEntry),
+        });
+        defineMethod(navigation, "navigate", navigationResult);
+        defineMethod(navigation, "reload", navigationResult);
+        defineMethod(navigation, "back", navigationResult);
+        defineMethod(navigation, "forward", navigationResult);
+        defineMethod(navigation, "traverseTo", navigationResult);
+        defineMethod(navigation, "updateCurrentEntry", () => undefined);
+        setValue(window, "navigation", navigation);
+    };
+    ensureNavigationEnvironment();
+
+    const ensureCapabilityEnvironment = () => {
+        const chromeObject = window.chrome || {};
+        if (!chromeObject.app) {
+            chromeObject.app = {
+                isInstalled: false,
+                InstallState: { DISABLED: "disabled", INSTALLED: "installed", NOT_INSTALLED: "not_installed" },
+                RunningState: { CANNOT_RUN: "cannot_run", READY_TO_RUN: "ready_to_run", RUNNING: "running" },
+                getDetails: () => null,
+                getIsInstalled: () => false,
+                runningState: () => "cannot_run",
+            };
+        }
+        if (typeof chromeObject.csi !== "function") {
+            chromeObject.csi = () => ({
+                startE: Date.now() - Math.floor(stableNow()),
+                onloadT: Date.now(),
+                pageT: Math.floor(stableNow()),
+                tran: 15,
+            });
+        }
+        if (typeof chromeObject.loadTimes !== "function") {
+            chromeObject.loadTimes = () => {
+                const nowSeconds = Date.now() / 1000;
+                return {
+                    requestTime: nowSeconds - 1.2,
+                    startLoadTime: nowSeconds - 1.1,
+                    commitLoadTime: nowSeconds - 0.8,
+                    finishDocumentLoadTime: nowSeconds - 0.2,
+                    finishLoadTime: nowSeconds - 0.1,
+                    firstPaintTime: nowSeconds - 0.6,
+                    firstPaintAfterLoadTime: 0,
+                    navigationType: String(performanceProfile.navigationType || "Other"),
+                    wasFetchedViaSpdy: true,
+                    wasNpnNegotiated: true,
+                    npnNegotiatedProtocol: "h2",
+                    wasAlternateProtocolAvailable: false,
+                    connectionInfo: "h2",
+                };
+            };
+        }
+        if (!chromeObject.runtime) {
+            chromeObject.runtime = {
+                PlatformOs: { MAC: "mac", WIN: "win", ANDROID: "android", CROS: "cros", LINUX: "linux", OPENBSD: "openbsd" },
+                PlatformArch: { ARM: "arm", ARM64: "arm64", X86_32: "x86-32", X86_64: "x86-64" },
+                PlatformNaclArch: { ARM: "arm", X86_32: "x86-32", X86_64: "x86-64" },
+                RequestUpdateCheckStatus: { THROTTLED: "throttled", NO_UPDATE: "no_update", UPDATE_AVAILABLE: "update_available" },
+            };
+        }
+        if (!window.chrome) {
+            setValue(window, "chrome", chromeObject);
+        }
+
+        const storage = navigator.storage || {};
+        defineMethod(storage, "estimate", async () => ({
+            quota: Number(storageProfile.quota || 120000000000),
+            usage: Number(storageProfile.usage || 0),
+            usageDetails: cloneValue(storageProfile.usageDetails || {}),
+        }));
+        defineMethod(storage, "persist", async () => Boolean(storageProfile.persisted));
+        defineMethod(storage, "persisted", async () => Boolean(storageProfile.persisted));
+        defineGetter(Navigator.prototype, "storage", () => storage);
+        defineGetter(navigator, "storage", () => storage);
+
+        if (!window.caches) {
+            const cacheStore = new Map();
+            const cacheStorage = {
+                async keys() {
+                    return Array.from(cacheStore.keys());
+                },
+                async has(name) {
+                    return cacheStore.has(String(name || ""));
+                },
+                async delete(name) {
+                    return cacheStore.delete(String(name || ""));
+                },
+                async match() {
+                    return undefined;
+                },
+                async open(name) {
+                    const key = String(name || "");
+                    if (!cacheStore.has(key)) {
+                        cacheStore.set(key, {
+                            async match() { return undefined; },
+                            async matchAll() { return []; },
+                            async add() { return undefined; },
+                            async addAll() { return undefined; },
+                            async put() { return undefined; },
+                            async delete() { return false; },
+                            async keys() { return []; },
+                        });
+                    }
+                    return cacheStore.get(key);
+                },
+            };
+            setValue(window, "caches", cacheStorage);
+        }
+
+        if (!window.indexedDB) {
+            const makeRequest = () => {
+                const request = makeEventTargetLike({
+                    result: undefined,
+                    error: null,
+                    source: null,
+                    transaction: null,
+                    readyState: "done",
+                    onsuccess: null,
+                    onerror: null,
+                    onblocked: null,
+                    onupgradeneeded: null,
+                });
+                setTimeout(() => {
+                    try {
+                        if (typeof request.onsuccess === "function") {
+                            request.onsuccess.call(request, { type: "success", target: request });
+                        }
+                        request.dispatchEvent({ type: "success", target: request });
+                    } catch (e) {}
+                }, 0);
+                return request;
+            };
+            setValue(window, "indexedDB", {
+                open: () => makeRequest(),
+                deleteDatabase: () => makeRequest(),
+                databases: async () => [],
+                cmp: (first, second) => (first === second ? 0 : (first > second ? 1 : -1)),
+            });
+        }
+        if (!navigator.credentials) {
+            const credentials = {
+                create: async () => null,
+                get: async () => null,
+                store: async (credential) => credential || null,
+                preventSilentAccess: async () => undefined,
+            };
+            defineGetter(Navigator.prototype, "credentials", () => credentials);
+            defineGetter(navigator, "credentials", () => credentials);
+        }
+        if (!navigator.locks) {
+            const locks = {
+                query: async () => ({ held: [], pending: [] }),
+                request: async (name, options, callback) => {
+                    const cb = typeof options === "function" ? options : callback;
+                    return typeof cb === "function" ? cb({ name: String(name || ""), mode: "exclusive" }) : undefined;
+                },
+            };
+            defineGetter(Navigator.prototype, "locks", () => locks);
+            defineGetter(navigator, "locks", () => locks);
+        }
+        if (!navigator.keyboard) {
+            const keyboard = {
+                getLayoutMap: async () => new Map([
+                    ["KeyA", "a"],
+                    ["KeyS", "s"],
+                    ["KeyD", "d"],
+                    ["KeyF", "f"],
+                    ["Digit1", "1"],
+                    ["Digit2", "2"],
+                ]),
+                lock: async () => undefined,
+                unlock: () => undefined,
+            };
+            defineGetter(Navigator.prototype, "keyboard", () => keyboard);
+            defineGetter(navigator, "keyboard", () => keyboard);
+        }
+        if (!navigator.scheduling) {
+            const scheduling = { isInputPending: () => false };
+            defineGetter(Navigator.prototype, "scheduling", () => scheduling);
+            defineGetter(navigator, "scheduling", () => scheduling);
+        }
+        if (!window.scheduler) {
+            setValue(window, "scheduler", {
+                postTask: (callback) => Promise.resolve().then(() => (typeof callback === "function" ? callback() : undefined)),
+                yield: () => Promise.resolve(),
+            });
+        }
+        if (!window.trustedTypes) {
+            const trustedTypes = {
+                emptyHTML: "",
+                emptyScript: "",
+                createPolicy: (name, rules) => ({ name: String(name || ""), ...Object(rules || {}) }),
+                getAttributeType: () => null,
+                getPropertyType: () => null,
+                isHTML: () => false,
+                isScript: () => false,
+                isScriptURL: () => false,
+            };
+            setValue(window, "trustedTypes", trustedTypes);
+        }
+    };
+    ensureCapabilityEnvironment();
+
+    const ensureWebGpuEnvironment = () => {
+        if (!webgpuProfile || Object.keys(webgpuProfile).length <= 0) {
+            return;
+        }
+        const adapterInfo = {
+            vendor: String(webgpuProfile.vendor || graphicsProfile.unmaskedVendor || ""),
+            architecture: String(webgpuProfile.architecture || ""),
+            device: String(webgpuProfile.device || graphicsProfile.unmaskedRenderer || ""),
+            description: String(webgpuProfile.description || graphicsProfile.renderer || ""),
+            subgroupMinSize: 4,
+            subgroupMaxSize: 128,
+        };
+        const features = new Set(Array.isArray(webgpuProfile.features) ? webgpuProfile.features : []);
+        const limits = cloneValue(webgpuProfile.limits || {});
+        const device = makeEventTargetLike({
+            features,
+            limits,
+            lost: new Promise(() => {}),
+            label: "",
+            onuncapturederror: null,
+            pushErrorScope: () => undefined,
+            popErrorScope: async () => null,
+            createBuffer: () => ({}),
+            createTexture: () => ({}),
+            createSampler: () => ({}),
+            createBindGroupLayout: () => ({}),
+            createPipelineLayout: () => ({}),
+            createBindGroup: () => ({}),
+            createShaderModule: () => ({}),
+            createComputePipeline: () => ({}),
+            createRenderPipeline: () => ({}),
+            createCommandEncoder: () => ({}),
+            createQuerySet: () => ({}),
+            destroy: () => undefined,
+        });
+        const adapter = {
+            features,
+            limits,
+            isFallbackAdapter: Boolean(webgpuProfile.isFallbackAdapter),
+            info: adapterInfo,
+            requestAdapterInfo: async () => cloneValue(adapterInfo),
+            requestDevice: async () => device,
+        };
+        const gpu = navigator.gpu || {};
+        defineGetter(gpu, "wgslLanguageFeatures", () => new Set(["readonly_and_readwrite_storage_textures", "packed_4x8_integer_dot_product"]));
+        defineMethod(gpu, "getPreferredCanvasFormat", () => String(webgpuProfile.preferredCanvasFormat || "bgra8unorm"));
+        defineMethod(gpu, "requestAdapter", async () => adapter);
+        defineGetter(Navigator.prototype, "gpu", () => gpu);
+        defineGetter(navigator, "gpu", () => gpu);
+    };
+    ensureWebGpuEnvironment();
+
+    const ensureBehaviorEnvironment = () => {
+        const visibilityState = String(behaviorProfile.visibilityState || "visible");
+        const documentHidden = Boolean(behaviorProfile.documentHidden);
+        defineGetter(Document.prototype, "visibilityState", () => visibilityState);
+        defineGetter(document, "visibilityState", () => visibilityState);
+        defineGetter(Document.prototype, "hidden", () => documentHidden);
+        defineGetter(document, "hidden", () => documentHidden);
+        if (typeof document.hasFocus === "function") {
+            defineMethod(document, "hasFocus", () => Boolean(behaviorProfile.hasFocus !== false));
+        }
+        const activationProfile = behaviorProfile.userActivation || {};
+        const userActivation = {
+            hasBeenActive: activationProfile.hasBeenActive !== false,
+            isActive: Boolean(activationProfile.isActive),
+        };
+        defineGetter(Navigator.prototype, "userActivation", () => userActivation);
+        defineGetter(navigator, "userActivation", () => userActivation);
+        if (!window.IdleDetector) {
+            class PersonalIdleDetector extends EventTarget {
+                constructor() {
+                    super();
+                    this.userState = "active";
+                    this.screenState = "unlocked";
+                    this.onchange = null;
+                }
+                static requestPermission() {
+                    return Promise.resolve("denied");
+                }
+                start() {
+                    return Promise.resolve();
+                }
+            }
+            setValue(window, "IdleDetector", PersonalIdleDetector);
+        }
+    };
+    ensureBehaviorEnvironment();
+
+    const ensureXrEnvironment = () => {
+        if (navigator.xr) {
+            return;
+        }
+        const xrSystem = makeEventTargetLike({
+            ondevicechange: null,
+        });
+        defineMethod(xrSystem, "isSessionSupported", async () => false);
+        defineMethod(xrSystem, "supportsSession", async () => false);
+        defineMethod(xrSystem, "requestSession", async () => {
+            throw new DOMException("The specified session configuration is not supported.", "NotSupportedError");
+        });
+        defineGetter(Navigator.prototype, "xr", () => xrSystem);
+        defineGetter(navigator, "xr", () => xrSystem);
+    };
+    ensureXrEnvironment();
+
+    const sanitizeStackText = (value) => String(value || "")
+        .split("\\n")
+        .filter((line) => !/personalFingerprint|HeadlessVisible|evaluate_on_new_document|nodriver|cdp|__puppeteer|debugger eval/i.test(line))
+        .join("\\n");
+    if (window.Error && typeof Error.captureStackTrace === "function") {
+        const originalCaptureStackTrace = Error.captureStackTrace;
+        defineMethod(Error, "captureStackTrace", function(targetObject, constructorOpt) {
+            const result = originalCaptureStackTrace.call(this, targetObject, constructorOpt);
+            try {
+                if (targetObject && typeof targetObject.stack === "string") {
+                    setValue(targetObject, "stack", sanitizeStackText(targetObject.stack));
+                }
+            } catch (e) {}
+            return result;
+        });
+    }
 
     if (window.AudioBuffer && AudioBuffer.prototype && typeof AudioBuffer.prototype.getChannelData === "function") {
         const originalGetChannelData = AudioBuffer.prototype.getChannelData;
@@ -3775,7 +5002,7 @@ class BrowserCaptchaService:
                 label=f"page.add_script_to_evaluate_on_new_document:fingerprint:{label}",
             )
             debug_logger.log_info(
-                f"[BrowserCaptcha] 已注入 Canvas/WebGL/Audio 指纹轻扰动脚本 "
+                f"[BrowserCaptcha] 已注入 Canvas/WebGL/Audio 与浏览器环境补齐脚本 "
                 f"(label={label}, target={getattr(tab, 'target_id', None) or '<none>'})"
             )
             try:
@@ -3785,7 +5012,7 @@ class BrowserCaptchaService:
             return True
         except Exception as e:
             debug_logger.log_warning(
-                f"[BrowserCaptcha] 注入指纹轻扰动脚本失败 ({label}): {e}"
+                f"[BrowserCaptcha] 注入浏览器环境补齐脚本失败 ({label}): {e}"
             )
             return False
 
@@ -10443,14 +11670,14 @@ class _PersonalBrowserPoolService:
         except Exception:
             configured_browser_count = 1
 
-        total_tabs = self._resolve_total_resident_tabs()
+        per_worker_tabs = self._resolve_worker_resident_tabs()
         worker_limits = self._worker_tab_limits or self._build_worker_tab_limits(
-            total_tabs,
-            min(configured_browser_count, total_tabs),
+            per_worker_tabs,
+            configured_browser_count,
         )
         refill_capacity = max(
             1,
-            sum(1 for limit in worker_limits if int(limit or 0) > 0),
+            sum(max(0, int(limit or 0)) for limit in worker_limits),
         )
         if target_size is None:
             return refill_capacity
@@ -10621,15 +11848,57 @@ class _PersonalBrowserPoolService:
         return BrowserCaptchaService._normalize_token_key(token_id)
 
     @staticmethod
-    def _resolve_total_resident_tabs(limit: Optional[int] = None) -> int:
+    def _resolve_worker_resident_tabs(limit: Optional[int] = None) -> int:
         raw_value = config.personal_max_resident_tabs if limit is None else limit
         return resolve_effective_personal_max_resident_tabs(raw_value)
 
     @staticmethod
-    def _build_worker_tab_limits(total_tabs: int, worker_count: int) -> list[int]:
-        normalized_worker_count = max(1, min(max(1, total_tabs), int(worker_count or 1)))
-        base, remainder = divmod(max(1, int(total_tabs or 1)), normalized_worker_count)
-        return [base + (1 if index < remainder else 0) for index in range(normalized_worker_count)]
+    def _build_worker_tab_limits(
+        per_worker_tabs: int,
+        worker_count: int,
+        *,
+        total_limit: Optional[int] = None,
+        allow_zero: bool = False,
+    ) -> list[int]:
+        normalized_worker_count = resolve_effective_browser_count(worker_count)
+        normalized_per_worker_tabs = resolve_effective_personal_max_resident_tabs(per_worker_tabs)
+        desired_total = normalized_worker_count * normalized_per_worker_tabs
+        effective_total = min(PERSONAL_POOL_MAX_TOTAL_RESIDENT_TABS, desired_total)
+        if total_limit is not None:
+            try:
+                effective_total = min(effective_total, max(1, int(total_limit or 1)))
+            except Exception:
+                pass
+        effective_total = max(1, effective_total)
+
+        active_worker_count = min(normalized_worker_count, effective_total)
+        base, remainder = divmod(effective_total, active_worker_count)
+        limits = [
+            base + (1 if index < remainder else 0)
+            for index in range(active_worker_count)
+        ]
+        if allow_zero and len(limits) < normalized_worker_count:
+            limits.extend([0] * (normalized_worker_count - len(limits)))
+        return limits
+
+    @staticmethod
+    def _resolve_effective_pool_tab_capacity(
+        *,
+        browser_count: Optional[int] = None,
+        per_worker_tabs: Optional[int] = None,
+    ) -> int:
+        resolved_browser_count = resolve_effective_browser_count(
+            BrowserCaptchaService._resolve_configured_browser_count()
+            if browser_count is None
+            else browser_count
+        )
+        resolved_per_worker_tabs = resolve_effective_personal_max_resident_tabs(
+            config.personal_max_resident_tabs if per_worker_tabs is None else per_worker_tabs
+        )
+        return min(
+            PERSONAL_POOL_MAX_TOTAL_RESIDENT_TABS,
+            resolved_browser_count * resolved_per_worker_tabs,
+        )
 
     @staticmethod
     def _parse_worker_index_from_slot_id(slot_id: Optional[str]) -> Optional[int]:
@@ -10753,6 +12022,23 @@ class _PersonalBrowserPoolService:
         )
 
     @staticmethod
+    def _worker_has_pending_fresh_restart(worker: BrowserCaptchaService) -> bool:
+        restart_task = getattr(worker, "_fresh_profile_restart_task", None)
+        return bool(
+            getattr(worker, "_fresh_profile_restart_pending", False)
+            or (restart_task is not None and not restart_task.done())
+        )
+
+    def _worker_runtime_unavailable_score(self, worker: BrowserCaptchaService) -> int:
+        if self._worker_has_live_runtime(worker):
+            return 0
+        if self._worker_launch_cooldown_remaining_seconds(worker) > 0.0:
+            return 3
+        if getattr(worker, "_initialized", False):
+            return 2
+        return 1
+
+    @staticmethod
     def _worker_launch_cooldown_remaining_seconds(worker: BrowserCaptchaService) -> float:
         try:
             return max(0.0, float(worker._get_browser_launch_cooldown_remaining_seconds() or 0.0))
@@ -10765,16 +12051,19 @@ class _PersonalBrowserPoolService:
         worker: BrowserCaptchaService,
         *,
         affinity_preferred: bool = False,
-    ) -> tuple[int, int, int, int, int, int]:
+    ) -> tuple[int, int, int, int, int, int, int]:
         reservations = int(self._worker_dispatch_reservations.get(worker_index, 0) or 0)
-        runtime_cold = 0 if self._worker_has_live_runtime(worker) else 1
+        fresh_restart_penalty = 1 if self._worker_has_pending_fresh_restart(worker) else 0
+        runtime_unavailable = self._worker_runtime_unavailable_score(worker)
         launch_cooldown_penalty = 1 if self._worker_launch_cooldown_remaining_seconds(worker) > 0.0 else 0
+        busy_score = reservations + self._worker_busy_score(worker)
         resident_cold = 0 if worker.get_resident_count() > 0 else 1
         round_robin_offset = (worker_index - self._round_robin_index) % max(len(self._workers), 1)
         affinity_penalty = 0 if affinity_preferred else 1
         return (
-            reservations + self._worker_busy_score(worker),
-            runtime_cold,
+            fresh_restart_penalty,
+            busy_score,
+            runtime_unavailable,
             launch_cooldown_penalty,
             resident_cold,
             affinity_penalty,
@@ -11261,6 +12550,23 @@ class _PersonalBrowserPoolService:
                 for worker_index in candidate_indexes
                 if int(getattr(self._workers[worker_index], "_max_resident_tabs", 0) or 0) > 0
             ] or candidate_indexes
+            non_restarting_indexes = [
+                worker_index
+                for worker_index in selectable_indexes
+                if not self._worker_has_pending_fresh_restart(self._workers[worker_index])
+            ]
+            if non_restarting_indexes:
+                selectable_indexes = non_restarting_indexes
+            live_or_unstarted_indexes = [
+                worker_index
+                for worker_index in selectable_indexes
+                if (
+                    self._worker_has_live_runtime(self._workers[worker_index])
+                    or not getattr(self._workers[worker_index], "_initialized", False)
+                )
+            ]
+            if live_or_unstarted_indexes:
+                selectable_indexes = live_or_unstarted_indexes
             selected_worker_index = min(
                 selectable_indexes,
                 key=lambda worker_index: self._worker_dispatch_score(
@@ -11284,6 +12590,8 @@ class _PersonalBrowserPoolService:
                 f"selectable={[index + 1 for index in selectable_indexes]}, "
                 f"affinity={(preferred_affinity_worker_index + 1) if preferred_affinity_worker_index is not None else None}, "
                 f"reservations={self._worker_dispatch_reservations.get(selected_worker_index, 0)}, "
+                f"live={self._worker_has_live_runtime(self._workers[selected_worker_index])}, "
+                f"fresh_restart={self._worker_has_pending_fresh_restart(self._workers[selected_worker_index])}, "
                 f"elapsed={time.monotonic() - acquire_started_at:.3f}s)"
             )
             return selected_worker_index, self._workers[selected_worker_index]
@@ -11349,11 +12657,12 @@ class _PersonalBrowserPoolService:
             async with self._worker_dispatch_lock:
                 self.headless = bool(getattr(config, "personal_headless", False))
                 configured_browser_count = BrowserCaptchaService._resolve_configured_browser_count()
-                total_tabs = self._resolve_total_resident_tabs()
+                per_worker_tabs = self._resolve_worker_resident_tabs()
                 worker_limits = self._build_worker_tab_limits(
-                    total_tabs,
-                    min(configured_browser_count, total_tabs),
+                    per_worker_tabs,
+                    configured_browser_count,
                 )
+                effective_total_tabs = sum(max(0, int(limit or 0)) for limit in worker_limits)
 
                 current_worker_count = len(self._workers)
                 if current_worker_count > len(worker_limits):
@@ -11388,6 +12697,15 @@ class _PersonalBrowserPoolService:
                     if 0 <= worker_index < len(self._workers) and count > 0
                 }
                 self._round_robin_index %= max(len(self._workers), 1)
+                debug_logger.log_info(
+                    "[BrowserCaptchaPool] Personal 池配置已生效 "
+                    f"(browser_count={configured_browser_count}, "
+                    f"per_worker_tabs={per_worker_tabs}, "
+                    f"effective_workers={len(worker_limits)}, "
+                    f"effective_total_tabs={effective_total_tabs}, "
+                    f"worker_limits={worker_limits}, "
+                    f"fresh_restart_every={getattr(config, 'browser_personal_fresh_restart_every_n_solves', 10)})"
+                )
 
         for worker in extra_workers:
             try:
@@ -11674,6 +12992,53 @@ class _PersonalBrowserPoolService:
         if not self._workers:
             raise RuntimeError("没有可用的浏览器实例")
         await self._workers[0].open_login_window()
+
+    async def warmup_resident_tabs(
+        self,
+        project_ids: Optional[list[str]] = None,
+        limit: int = 1,
+    ) -> list[Optional[str]]:
+        await self._ensure_workers()
+        if not project_ids or not self._workers:
+            return []
+
+        total_limit = max(1, min(
+            int(limit or 1),
+            self._resolve_effective_pool_tab_capacity(browser_count=len(self._workers)),
+        ))
+        worker_limits = self._build_worker_tab_limits(
+            self._resolve_worker_resident_tabs(),
+            len(self._workers),
+            total_limit=total_limit,
+            allow_zero=True,
+        )
+        project_buckets = self._build_project_buckets_for_workers(
+            [str(project_id).strip() for project_id in project_ids if str(project_id or "").strip()],
+            worker_limits=worker_limits,
+        )
+
+        warmup_tasks = [
+            worker.warmup_resident_tabs(project_buckets[index], limit=worker_limits[index])
+            for index, worker in enumerate(self._workers)
+            if index < len(project_buckets) and project_buckets[index] and worker_limits[index] > 0
+        ]
+        if not warmup_tasks:
+            return []
+
+        warmed_slots: list[Optional[str]] = []
+        results = await asyncio.gather(*warmup_tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                debug_logger.log_warning(
+                    f"[BrowserCaptchaPool] resident tabs 预热 worker 失败: {result}"
+                )
+                continue
+            for slot_id in result or []:
+                if slot_id:
+                    warmed_slots.append(slot_id)
+                    if len(warmed_slots) >= total_limit:
+                        return warmed_slots
+        return warmed_slots
 
     async def refresh_session_token(self, project_id: str, token_id: Optional[int] = None) -> Optional[str]:
         await self._ensure_workers()

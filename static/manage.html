@@ -480,8 +480,8 @@
                                     <label class="text-sm font-medium mb-2 block">浏览器实例数量</label>
                                     <input id="cfgPersonalBrowserCount" type="number" min="1" max="20" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="1" value="1">
                                     <p class="text-xs text-muted-foreground mt-1">
-                                        personal 模式真实并行浏览器数。<br>
-                                        多实例会增加端口和内存占用，建议按机器资源逐步调大。
+                                        personal 模式真实浏览器实例数。<br>
+                                        有效槽位约等于 实例数 × 单实例标签页，上限 50。
                                     </p>
                                 </div>
 
@@ -495,11 +495,11 @@
                                 </div>
 
                                 <div>
-                                    <label class="text-sm font-medium mb-2 block">最大标签页数量</label>
+                                    <label class="text-sm font-medium mb-2 block">单实例最大标签页</label>
                                     <input id="cfgPersonalMaxTabs" type="number" min="1" max="50" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="5" value="5">
                                     <p class="text-xs text-muted-foreground mt-1">
-                                        决定 personal 模式最多保留多少个共享打码标签页。<br>
-                                        并发打码能力主要看这里，不够就优先调大这个值。
+                                        每个浏览器最多保留多少个共享打码标签页。<br>
+                                        总并发槽位约为 浏览器实例数 × 这里，上限 50。
                                     </p>
                                 </div>
 
@@ -508,7 +508,7 @@
                                     <input id="cfgPersonalFreshRestartEveryNSolves" type="number" min="0" max="999" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="10" value="10">
                                     <p class="text-xs text-muted-foreground mt-1">
                                         成功获取多少个码后清理并重启浏览器。<br>
-                                        0 表示禁用，默认 10。
+                                        高并发建议 0 或 >=50，5/10 会频繁重启导致排队。
                                     </p>
                                 </div>
                             </div>

@@ -2,7 +2,11 @@ import types
 import unittest
 from unittest.mock import AsyncMock
 
-from src.services.browser_captcha_personal import BrowserCaptchaService, ResidentTabInfo
+from src.services.browser_captcha_personal import (
+    BrowserCaptchaService,
+    ResidentTabInfo,
+    _PersonalBrowserPoolService,
+)
 
 
 class _FakeTab:
@@ -241,6 +245,62 @@ class BrowserCaptchaPersonalTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertEqual(events, ["restart_start", "restart_done"])
         self.assertTrue(task.done())
+
+    async def test_runtime_surface_profile_contains_extended_browser_environment(self):
+        profile = self.service._get_runtime_surface_profile()
+
+        self.assertIn("webgpu", profile)
+        self.assertIn("mediaQueries", profile)
+        self.assertIn("storage", profile)
+        self.assertIn("behavior", profile)
+        self.assertIn("visualViewport", profile["window"])
+        self.assertIn("supportedExtensions", profile["graphics"])
+        self.assertIn("WEBGL_debug_renderer_info", profile["graphics"]["supportedExtensions"])
+
+        source = self.service._build_tab_fingerprint_spoof_source(types.SimpleNamespace(target_id="unit-tab"))
+        for marker in (
+            "ensureWebGpuEnvironment",
+            "ensureMatchMediaEnvironment",
+            "ensureVisualViewportEnvironment",
+            "navigator.storage",
+            "getSupportedConstraints",
+            "userActivation",
+        ):
+            self.assertIn(marker, source)
+
+    async def test_pool_tab_limits_use_browser_count_times_per_worker_tabs(self):
+        pool = _PersonalBrowserPoolService()
+
+        self.assertEqual(pool._build_worker_tab_limits(5, 10), [5] * 10)
+
+        capped_limits = pool._build_worker_tab_limits(5, 20)
+        self.assertEqual(len(capped_limits), 20)
+        self.assertEqual(sum(capped_limits), 50)
+        self.assertLessEqual(max(capped_limits), 5)
+
+        warmup_limits = pool._build_worker_tab_limits(
+            5,
+            10,
+            total_limit=5,
+            allow_zero=True,
+        )
+        self.assertEqual(len(warmup_limits), 10)
+        self.assertEqual(sum(warmup_limits), 5)
+        self.assertEqual(sum(1 for item in warmup_limits if item > 0), 5)
+
+    async def test_pool_dispatch_prefers_cold_idle_worker_over_busy_live_worker(self):
+        pool = _PersonalBrowserPoolService()
+        live_worker = BrowserCaptchaService(browser_instance_id=1, max_resident_tabs_override=5)
+        cold_worker = BrowserCaptchaService(browser_instance_id=2, max_resident_tabs_override=5)
+        live_worker._initialized = True
+        live_worker.browser = types.SimpleNamespace(stopped=False)
+        pool._workers = [live_worker, cold_worker]
+        pool._worker_dispatch_reservations = {0: 1}
+
+        self.assertLess(
+            pool._worker_dispatch_score(1, cold_worker),
+            pool._worker_dispatch_score(0, live_worker),
+        )
 
 
 if __name__ == "__main__":
