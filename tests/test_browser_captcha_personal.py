@@ -1,3 +1,5 @@
+import itertools
+import json
 import types
 import unittest
 from unittest.mock import AsyncMock
@@ -6,6 +8,7 @@ from src.services.browser_captcha_personal import (
     BrowserCaptchaService,
     ResidentTabInfo,
     _PersonalBrowserPoolService,
+    _patch_nodriver_connection_instance,
 )
 
 
@@ -26,6 +29,44 @@ class _ClosableFakeTab:
 
     async def sleep(self, _seconds):
         return None
+
+
+class _FakeWebSocket:
+    def __init__(self, owner):
+        self.owner = owner
+        self.close_code = None
+        self.messages = []
+
+    async def send(self, message):
+        self.messages.append(message)
+        payload = json.loads(message)
+        transaction = self.owner.mapper[payload["id"]]
+        transaction(result={"ok": True})
+
+
+class _ConnectionWithoutClosed:
+    def __init__(self):
+        self.mapper = {}
+        self.handlers = {}
+        self.websocket = None
+        self.connect_count = 0
+        self.register_count = 0
+        self.__count__ = itertools.count(0)
+
+    async def send(self, _cdp_obj, _is_update=False):
+        raise AssertionError("original send should be patched")
+
+    async def connect(self):
+        self.connect_count += 1
+        self.websocket = _FakeWebSocket(self)
+
+    async def _register_handlers(self):
+        self.register_count += 1
+
+
+def _fake_cdp_command():
+    result = yield {"method": "Runtime.evaluate", "params": {}}
+    return result
 
 
 class BrowserCaptchaPersonalTests(unittest.IsolatedAsyncioTestCase):
@@ -301,6 +342,17 @@ class BrowserCaptchaPersonalTests(unittest.IsolatedAsyncioTestCase):
             pool._worker_dispatch_score(1, cold_worker),
             pool._worker_dispatch_score(0, live_worker),
         )
+
+    async def test_nodriver_send_patch_handles_connection_without_closed_attr(self):
+        connection = _ConnectionWithoutClosed()
+
+        _patch_nodriver_connection_instance(connection)
+        result = await connection.send(_fake_cdp_command())
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(connection.connect_count, 1)
+        self.assertEqual(connection.register_count, 1)
+        self.assertTrue(getattr(connection, "_flow2api_send_patched", False))
 
 
 if __name__ == "__main__":

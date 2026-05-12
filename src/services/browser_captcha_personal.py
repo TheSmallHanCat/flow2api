@@ -691,6 +691,8 @@ _RUNTIME_ERROR_KEYWORDS = (
     "has been closed",
     "browser has been closed",
     "target closed",
+    "has no attribute \"closed\"",
+    "has no attribute 'closed'",
     "connection closed",
     "connection lost",
     "connection refused",
@@ -701,6 +703,9 @@ _RUNTIME_ERROR_KEYWORDS = (
     "no session with given id",
     "cannot find context with specified id",
     "websocket is not open",
+    "websocket unavailable",
+    "'nonetype' object has no attribute 'send'",
+    '"nonetype" object has no attribute "send"',
     "no close frame received or sent",
     "cannot call write to closing transport",
     "cannot write to closing transport",
@@ -804,9 +809,36 @@ def _finalize_nodriver_send_task(connection, transaction, tx_id: int, task: asyn
             )
 
 
+def _is_nodriver_connection_closed(connection_instance) -> bool:
+    """兼容不同 nodriver 版本的连接状态判断。"""
+    try:
+        return bool(getattr(connection_instance, "closed"))
+    except AttributeError:
+        pass
+    except Exception:
+        return True
+
+    websocket = getattr(connection_instance, "websocket", None)
+    if websocket is None:
+        return True
+
+    try:
+        return bool(getattr(websocket, "close_code", None))
+    except Exception:
+        return True
+
+
 def _patch_nodriver_connection_instance(connection_instance):
     """在连接实例级别收口 websocket.send 的后台异常。"""
     if not connection_instance or getattr(connection_instance, "_flow2api_send_patched", False):
+        return
+    if (
+        not callable(getattr(connection_instance, "send", None))
+        or not callable(getattr(connection_instance, "connect", None))
+        or not callable(getattr(connection_instance, "_register_handlers", None))
+        or not hasattr(connection_instance, "mapper")
+        or not hasattr(connection_instance, "__count__")
+    ):
         return
 
     try:
@@ -816,7 +848,7 @@ def _patch_nodriver_connection_instance(connection_instance):
         return
 
     async def patched_send(self, cdp_obj, _is_update=False):
-        if self.closed:
+        if _is_nodriver_connection_closed(self):
             await self.connect()
         if not _is_update:
             await self._register_handlers()
@@ -826,7 +858,14 @@ def _patch_nodriver_connection_instance(connection_instance):
         transaction.id = tx_id
         self.mapper[tx_id] = transaction
 
-        send_task = asyncio.create_task(self.websocket.send(transaction.message))
+        websocket = getattr(self, "websocket", None)
+        if websocket is None:
+            self.mapper.pop(tx_id, None)
+            if not transaction.done():
+                transaction.cancel()
+            raise ConnectionError("nodriver websocket unavailable after connect")
+
+        send_task = asyncio.create_task(websocket.send(transaction.message))
         send_task.add_done_callback(
             lambda task, connection=self, tx=transaction, current_tx_id=tx_id:
             _finalize_nodriver_send_task(connection, tx, current_tx_id, task)
