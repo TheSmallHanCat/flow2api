@@ -309,7 +309,7 @@ async def _resolve_score_test_verify_proxy(
     返回: (proxies, used, source, proxy_url)
     """
     # 浏览器打码模式优先使用 browser_proxy，确保与取 token 出口一致
-    if captcha_method in {"browser", "personal"} and browser_proxy_enabled and browser_proxy_url:
+    if captcha_method in {"browser", "inject", "personal"} and browser_proxy_enabled and browser_proxy_url:
         proxy_map = _build_proxy_map(browser_proxy_url)
         if proxy_map:
             return proxy_map, True, "captcha_browser_proxy", browser_proxy_url
@@ -1576,7 +1576,10 @@ async def update_captcha_config(
     token: str = Depends(verify_admin_token)
 ):
     """Update captcha configuration"""
-    from ..services.browser_captcha import validate_browser_proxy_url
+    try:
+        from ..services.browser_captcha import validate_browser_proxy_url
+    except Exception as e:
+        return {"success": False, "message": f"浏览器打码模块加载失败: {e}"}
 
     captcha_method = request.get("captcha_method")
     yescaptcha_api_key = request.get("yescaptcha_api_key")
@@ -1663,7 +1666,7 @@ async def update_captcha_config(
     await db.reload_config_to_memory()
 
     # 如果使用 browser 打码，热重载浏览器数量配置
-    if captcha_method == "browser":
+    if captcha_method in {"browser", "inject"}:
         try:
             from ..services.browser_captcha import BrowserCaptchaService
             service = await BrowserCaptchaService.get_instance(db)

@@ -430,6 +430,15 @@ class Config:
             return 3.0
 
     @property
+    def browser_inject_warmup_seconds(self) -> float:
+        """脚本注入打码：打开 Flow 项目页后的预热等待秒数。"""
+        value = self._config.get("captcha", {}).get("browser_inject_warmup_seconds", 5.0)
+        try:
+            return max(0.0, min(30.0, float(value)))
+        except Exception:
+            return 5.0
+
+    @property
     def browser_idle_ttl_seconds(self) -> int:
         value = self._config.get("captcha", {}).get("browser_idle_ttl_seconds", 600)
         try:

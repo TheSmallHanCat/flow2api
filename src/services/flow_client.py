@@ -2333,7 +2333,7 @@ class FlowClient:
             error_reason: 已归类的错误原因
             error_message: 原始错误文本
         """
-        if config.captcha_method == "browser":
+        if config.captcha_method in {"browser", "inject"}:
             try:
                 from .browser_captcha import BrowserCaptchaService
                 service = await BrowserCaptchaService.get_instance(self.db)
@@ -2379,7 +2379,7 @@ class FlowClient:
 
     async def _notify_browser_captcha_request_finished(self, browser_id: Optional[Union[int, str]] = None):
         """通知有头浏览器：上游图片/视频请求已结束，可关闭对应打码浏览器。"""
-        if config.captcha_method == "browser":
+        if config.captcha_method in {"browser", "inject"}:
             try:
                 from .browser_captcha import BrowserCaptchaService
                 service = await BrowserCaptchaService.get_instance(self.db)
@@ -2736,6 +2736,30 @@ class FlowClient:
                 return None, None
             except Exception as e:
                 debug_logger.log_error(f"[reCAPTCHA Browser] 错误: {str(e)}")
+                self._set_request_fingerprint(None)
+                return None, None
+        # Flow 项目页脚本注入打码：打开 labs.google Flow 页并执行 grecaptcha.enterprise.execute
+        elif captcha_method == "inject":
+            try:
+                from .browser_captcha import BrowserCaptchaService
+                service = await BrowserCaptchaService.get_instance(self.db)
+                token, browser_id = await service.get_inject_token(project_id, action, token_id=token_id)
+                fingerprint = await service.get_fingerprint(browser_id) if token else None
+                self._set_request_fingerprint(fingerprint if token else None)
+                return token, browser_id
+            except RuntimeError as e:
+                error_msg = str(e)
+                debug_logger.log_error(f"[reCAPTCHA Inject] {error_msg}")
+                print(f"[reCAPTCHA] ❌ Flow 注入打码失败: {error_msg}")
+                self._set_request_fingerprint(None)
+                return None, None
+            except ImportError as e:
+                debug_logger.log_error(f"[reCAPTCHA Inject] 导入失败: {str(e)}")
+                print(f"[reCAPTCHA] ❌ playwright 未安装，请运行: pip install playwright && python -m playwright install chromium")
+                self._set_request_fingerprint(None)
+                return None, None
+            except Exception as e:
+                debug_logger.log_error(f"[reCAPTCHA Inject] 错误: {str(e)}")
                 self._set_request_fingerprint(None)
                 return None, None
         elif captcha_method == "remote_browser":

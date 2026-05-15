@@ -20,6 +20,15 @@ from urllib.parse import urlparse, unquote, parse_qs
 
 from ..core.logger import debug_logger
 from ..core.config import config
+from .recaptcha_script import (
+    FLOW_RECAPTCHA_WEBSITE_KEY,
+    build_enterprise_bootstrap_html,
+    build_enterprise_execute_evaluator,
+    build_enterprise_wait_expression,
+    build_inject_script_loader_evaluator,
+    enterprise_script_urls,
+    flow_project_page_url,
+)
 
 
 # ==================== Docker 环境检测 ====================
@@ -1126,23 +1135,10 @@ class TokenBrowser:
             
             async def handle_route(route):
                 if route.request.url.rstrip('/') == page_url.rstrip('/'):
-                    html = f"""<html><head><script>
-                    (() => {{
-                        const urls = [
-                            '{primary_host}/recaptcha/enterprise.js?render={website_key}',
-                            '{secondary_host}/recaptcha/enterprise.js?render={website_key}'
-                        ];
-                        const loadScript = (index) => {{
-                            if (index >= urls.length) return;
-                            const script = document.createElement('script');
-                            script.src = urls[index];
-                            script.async = true;
-                            script.onerror = () => loadScript(index + 1);
-                            document.head.appendChild(script);
-                        }};
-                        loadScript(0);
-                    }})();
-                    </script></head><body></body></html>"""
+                    html = build_enterprise_bootstrap_html(
+                        website_key,
+                        use_recaptcha_net=self._browser_proxy_active,
+                    )
                     await route.fulfill(status=200, content_type="text/html", body=html)
                 elif any(d in route.request.url for d in ["google.com", "gstatic.com", "recaptcha.net"]):
                     await route.continue_()
@@ -1170,7 +1166,7 @@ class TokenBrowser:
                 return None
 
             try:
-                await page.wait_for_function("typeof grecaptcha !== 'undefined'", timeout=10000)  # 减少到10秒
+                await page.wait_for_function(build_enterprise_wait_expression(), timeout=10000)
             except Exception as e:
                 debug_logger.log_warning(f"[BrowserCaptcha] Token-{self.token_id} grecaptcha 未就绪: {type(e).__name__}: {str(e)[:200]}")
                 return None
@@ -1179,17 +1175,8 @@ class TokenBrowser:
             await self._capture_page_fingerprint(page)
 
             token = await asyncio.wait_for(
-                page.evaluate(f"""
-                    (actionName) => {{
-                        return new Promise((resolve, reject) => {{
-                            const timeout = setTimeout(() => reject(new Error('timeout')), 25000);
-                            grecaptcha.enterprise.execute('{website_key}', {{action: actionName}})
-                                .then(t => {{ clearTimeout(timeout); resolve(t); }})
-                                .catch(e => {{ clearTimeout(timeout); reject(e); }});
-                        }});
-                    }}
-                """, action),
-                timeout=30
+                page.evaluate(build_enterprise_execute_evaluator(website_key), action),
+                timeout=30,
             )
 
             # 额外等待几秒，确保 enterprise 请求链路完全稳定
@@ -1210,6 +1197,104 @@ class TokenBrowser:
                 try:
                     await page.close()
                 except:
+                    pass
+
+    async def _execute_flow_inject_captcha(
+        self,
+        context,
+        project_id: str,
+        website_key: str,
+        action: str,
+    ) -> Optional[str]:
+        """在 Flow 项目页注入 enterprise.js 并执行 grecaptcha.enterprise.execute。"""
+        page = None
+        website_url = flow_project_page_url(project_id)
+        try:
+            page = await context.new_page()
+            await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+
+            primary_url, secondary_url = enterprise_script_urls(
+                website_key,
+                use_recaptcha_net=self._browser_proxy_active,
+            )
+            wait_expression = build_enterprise_wait_expression()
+
+            debug_logger.log_info(
+                f"[BrowserCaptcha] Token-{self.token_id} 脚本注入打码: url={website_url}, action={action}"
+            )
+
+            def handle_request_failed(request):
+                try:
+                    failed_url = request.url or ""
+                    if not any(d in failed_url for d in ["google.com", "gstatic.com", "recaptcha.net", "labs.google"]):
+                        return
+                    failure = request.failure or ""
+                    debug_logger.log_warning(
+                        f"[BrowserCaptcha] Token-{self.token_id} 注入资源加载失败: url={failed_url[:200]}, error={failure}"
+                    )
+                except Exception:
+                    pass
+
+            page.on("requestfailed", handle_request_failed)
+
+            try:
+                await page.goto(website_url, wait_until="domcontentloaded", timeout=30000)
+            except Exception as e:
+                debug_logger.log_warning(
+                    f"[BrowserCaptcha] Token-{self.token_id} Flow 项目页加载失败: {type(e).__name__}: {str(e)[:200]}"
+                )
+                return None
+
+            warmup_seconds = float(getattr(config, "browser_inject_warmup_seconds", 5) or 5)
+            if warmup_seconds > 0:
+                debug_logger.log_info(
+                    f"[BrowserCaptcha] Token-{self.token_id} Flow 项目页预热 {warmup_seconds:.1f}s"
+                )
+                await asyncio.sleep(warmup_seconds)
+
+            try:
+                await page.wait_for_function(wait_expression, timeout=15000)
+            except Exception as e:
+                debug_logger.log_warning(
+                    f"[BrowserCaptcha] Token-{self.token_id} 注入 grecaptcha 未就绪，补加载脚本: {type(e).__name__}: {str(e)[:200]}"
+                )
+                try:
+                    await page.evaluate(
+                        build_inject_script_loader_evaluator(primary_url, secondary_url),
+                        primary_url,
+                        secondary_url,
+                    )
+                    await page.wait_for_function(wait_expression, timeout=15000)
+                except Exception as inject_error:
+                    debug_logger.log_warning(
+                        f"[BrowserCaptcha] Token-{self.token_id} 注入 grecaptcha 最终未就绪: {type(inject_error).__name__}: {str(inject_error)[:200]}"
+                    )
+                    return None
+
+            await self._capture_page_fingerprint(page)
+
+            token = await asyncio.wait_for(
+                page.evaluate(build_enterprise_execute_evaluator(website_key), action),
+                timeout=30,
+            )
+
+            post_wait_seconds = float(getattr(config, "browser_recaptcha_settle_seconds", 3) or 3)
+            if post_wait_seconds > 0:
+                debug_logger.log_info(
+                    f"[BrowserCaptcha] Token-{self.token_id} 注入打码完成，额外等待 {post_wait_seconds:.1f}s"
+                )
+                await asyncio.sleep(post_wait_seconds)
+
+            return token
+        except Exception as e:
+            msg = f"{type(e).__name__}: {str(e)}"
+            debug_logger.log_warning(f"[BrowserCaptcha] Token-{self.token_id} 注入打码失败: {msg[:200]}")
+            return None
+        finally:
+            if page:
+                try:
+                    await page.close()
+                except Exception:
                     pass
 
     async def _execute_custom_captcha(
@@ -1472,6 +1557,72 @@ class TokenBrowser:
                             "closed",
                         ]):
                             await self.recycle_browser(reason="browser_runtime_error", rotate_profile=False)
+
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+
+                return None, None
+            finally:
+                self._solve_inflight = max(0, self._solve_inflight - 1)
+                self.note_idle()
+
+    async def get_inject_token(
+        self,
+        project_id: str,
+        website_key: str,
+        action: str = "IMAGE_GENERATION",
+        token_proxy_url: Optional[str] = None,
+    ) -> tuple[Optional[str], Optional[str]]:
+        """在 Flow 项目页注入脚本获取 reCAPTCHA token。"""
+        async with self._semaphore:
+            self._solve_inflight += 1
+            max_retries = 3
+
+            try:
+                for attempt in range(max_retries):
+                    try:
+                        start_ts = time.time()
+                        _, _, context = await self._get_or_create_shared_browser(token_proxy_url=token_proxy_url)
+
+                        token = await self._execute_flow_inject_captcha(
+                            context,
+                            project_id,
+                            website_key,
+                            action,
+                        )
+                        if token:
+                            self._solve_count += 1
+                            self._consecutive_browser_failures = 0
+                            debug_logger.log_info(
+                                f"[BrowserCaptcha] Token-{self.token_id} inject token acquired "
+                                f"({(time.time()-start_ts)*1000:.0f}ms)"
+                            )
+                            return token, None
+
+                        self._error_count += 1
+                        self._consecutive_browser_failures += 1
+                        debug_logger.log_warning(
+                            f"[BrowserCaptcha] Token-{self.token_id} inject attempt {attempt + 1}/{max_retries} failed"
+                        )
+                        if self._consecutive_browser_failures >= 2:
+                            await self.recycle_browser(reason=f"inject_failed_{attempt + 1}", rotate_profile=False)
+                    except Exception as e:
+                        self._error_count += 1
+                        self._consecutive_browser_failures += 1
+                        error_message = f"{type(e).__name__}: {str(e)}"
+                        debug_logger.log_error(
+                            f"[BrowserCaptcha] Token-{self.token_id} inject browser error: {error_message[:200]}"
+                        )
+                        error_lower = error_message.lower()
+                        if any(keyword in error_lower for keyword in [
+                            "context or browser has been closed",
+                            "target closed",
+                            "browser has been closed",
+                            "connection closed",
+                            "crash",
+                            "closed",
+                        ]):
+                            await self.recycle_browser(reason="inject_browser_runtime_error", rotate_profile=False)
 
                     if attempt < max_retries - 1:
                         await asyncio.sleep(1)
@@ -1944,6 +2095,59 @@ class BrowserCaptchaService:
         else:
             self._stats["gen_fail"] += 1
             
+        self._log_stats()
+        return token, self._compose_browser_ref(browser_id, request_ref)
+
+    async def get_inject_token(
+        self,
+        project_id: str,
+        action: str = "IMAGE_GENERATION",
+        token_id: int = None,
+    ) -> tuple[Optional[str], Union[int, str]]:
+        """在 Flow 项目页注入脚本获取 reCAPTCHA token。"""
+        self._check_available()
+
+        self._stats["req_total"] += 1
+        token_proxy_url = await self._resolve_token_proxy_url(token_id)
+        website_key = FLOW_RECAPTCHA_WEBSITE_KEY
+
+        if self._token_semaphore:
+            async with self._token_semaphore:
+                browser_id = await self._select_browser_id(project_id)
+                try:
+                    browser = await self._get_or_create_browser(browser_id)
+                    token, request_ref = await browser.get_inject_token(
+                        project_id,
+                        website_key,
+                        action,
+                        token_proxy_url=token_proxy_url,
+                    )
+                finally:
+                    await self._release_slot_reservation(browser_id)
+
+            if token:
+                self._stats["gen_ok"] += 1
+            else:
+                self._stats["gen_fail"] += 1
+            self._log_stats()
+            return token, self._compose_browser_ref(browser_id, request_ref)
+
+        browser_id = await self._select_browser_id(project_id)
+        try:
+            browser = await self._get_or_create_browser(browser_id)
+            token, request_ref = await browser.get_inject_token(
+                project_id,
+                website_key,
+                action,
+                token_proxy_url=token_proxy_url,
+            )
+        finally:
+            await self._release_slot_reservation(browser_id)
+
+        if token:
+            self._stats["gen_ok"] += 1
+        else:
+            self._stats["gen_fail"] += 1
         self._log_stats()
         return token, self._compose_browser_ref(browser_id, request_ref)
 
