@@ -37,6 +37,36 @@ class FlowClientUploadImageTests(unittest.IsolatedAsyncioTestCase):
             request_calls[0]["json_data"]["clientContext"]["projectId"],
             "project-123",
         )
+        self.assertIn("sessionId", request_calls[0]["json_data"]["clientContext"])
+
+    async def test_project_scoped_upload_accepts_media_list_response(self):
+        client = FlowClient(proxy_manager=None)
+
+        request_calls = []
+
+        async def fake_make_request(**kwargs):
+            request_calls.append(kwargs)
+            return {
+                "media": [
+                    {
+                        "name": "new-media-id",
+                        "projectId": "project-123",
+                    }
+                ]
+            }
+
+        client._make_request = AsyncMock(side_effect=fake_make_request)
+
+        media_id = await client.upload_image(
+            at="test-at",
+            image_bytes=JPEG_BYTES,
+            aspect_ratio="IMAGE_ASPECT_RATIO_LANDSCAPE",
+            project_id="project-123",
+        )
+
+        self.assertEqual(media_id, "new-media-id")
+        self.assertEqual(len(request_calls), 1)
+        self.assertTrue(request_calls[0]["url"].endswith("/flow/uploadImage"))
 
     async def test_project_scoped_upload_does_not_fallback_to_legacy_endpoint(self):
         client = FlowClient(proxy_manager=None)
