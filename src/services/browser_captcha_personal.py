@@ -9287,7 +9287,8 @@ class BrowserCaptchaService:
                             )
                         else:
                             proxy_server_arg = f"--proxy-server={protocol}://{host}:{port}"
-                        self._proxy_url = f"{protocol}://{host}:{port}"
+                        # Flow API 请求(curl_cffi)复用此值，必须带 user:pass，否则认证代理会 407
+                        self._proxy_url = _compose_proxy_url(protocol, host, port, username, password)
                         debug_logger.log_info(f"[BrowserCaptcha] Personal 浏览器代理: {self._proxy_url}")
 
                     browser_args = _build_personal_browser_args(
