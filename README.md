@@ -93,10 +93,10 @@ docker-compose logs -f
 
 ```bash
 # 使用 WARP 代理启动
-docker-compose -f docker-compose.warp.yml up -d
+docker-compose -f docker-compose.proxy.yml up -d
 
 # 查看日志
-docker-compose -f docker-compose.warp.yml logs -f
+docker-compose -f docker-compose.proxy.yml logs -f
 ```
 
 #### Docker 有头打码模式（browser / personal）
