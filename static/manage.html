@@ -1296,7 +1296,7 @@
             const detailContent=$('logDetailContent');detailContent.dataset.logId=String(log.id??'');detailContent.innerHTML=detailHtml;syncLogDetailViewState();
         }
 
-        window.addEventListener('DOMContentLoaded',()=>{checkAuth();refreshTokens();loadATAutoRefreshConfig()});
+        window.addEventListener('DOMContentLoaded',()=>{refreshTokens();loadATAutoRefreshConfig()});
     </script>
 </body>
 </html>
