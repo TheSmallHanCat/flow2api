@@ -29,6 +29,7 @@ from ..core.monitoring import build_public_health_snapshot
 from ..services.token_manager import TokenManager
 from ..services.proxy_manager import ProxyManager
 from ..services.concurrency_manager import ConcurrencyManager
+from ..services.protocol_login import protocol_loginer
 
 try:
     import httpx
@@ -2342,15 +2343,38 @@ async def update_plugin_config(
 
 @router.post("/api/plugin/update-token")
 async def plugin_update_token(request: dict, authorization: Optional[str] = Header(None)):
-    """Receive token update from Chrome extension (no admin auth required, uses connection_token)"""
+    """Receive modern Google Flow cookies from the Chrome extension."""
     await _verify_plugin_connection_token(authorization)
     plugin_config = await db.get_plugin_config()
 
-    # Extract session token from request
-    session_token = request.get("session_token")
+    google_cookies_raw = request.get("google_cookies")
+    if google_cookies_raw is not None and not isinstance(google_cookies_raw, str):
+        raise HTTPException(status_code=400, detail="google_cookies must be a string")
 
-    if not session_token:
-        raise HTTPException(status_code=400, detail="Missing session_token")
+    google_cookies = (google_cookies_raw or "").strip()
+    if len(google_cookies) > 524288:
+        raise HTTPException(status_code=413, detail="google_cookies is too large")
+    if not google_cookies:
+        raise HTTPException(status_code=400, detail="Missing google_cookies")
+
+    proxy_url = str(request.get("proxy_url") or "").strip() or None
+    login_account_hint = str(request.get("login_account") or "").strip() or None
+    try:
+        protocol_result = await protocol_loginer.login(
+            google_cookies,
+            proxy=proxy_url,
+            email=login_account_hint,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to derive session token from Google cookies: {str(exc)}",
+        ) from exc
+
+    session_token = str(protocol_result.get("session_token") or "").strip()
+    if not protocol_result.get("success") or not session_token:
+        error = str(protocol_result.get("error") or "Google session is invalid or expired")
+        raise HTTPException(status_code=400, detail=f"Invalid Google cookies: {error}")
 
     # Step 1: Convert ST to AT to get user info (including email)
     try:
@@ -2369,11 +2393,16 @@ async def plugin_update_token(request: dict, authorization: Optional[str] = Head
         if expires:
             try:
                 at_expires = datetime.fromisoformat(expires.replace('Z', '+00:00'))
-            except:
+            except (TypeError, ValueError):
                 pass
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid session token: {str(e)}")
+
+    protocol_mode = "protocol"
+    login_account = login_account_hint or email
 
     # Step 2: Check if token with this email exists
     existing_token = await db.get_token_by_email(email)
@@ -2387,9 +2416,9 @@ async def plugin_update_token(request: dict, authorization: Optional[str] = Head
                 st=session_token,
                 at=at,
                 at_expires=at_expires,
-                protocol_mode=request.get("protocol_mode"),
-                google_cookies=request.get("google_cookies"),
-                login_account=request.get("login_account"),
+                protocol_mode=protocol_mode,
+                google_cookies=google_cookies or None,
+                login_account=login_account,
                 login_password=request.get("login_password"),
                 proxy_url=request.get("proxy_url"),
                 auto_refresh_enabled=request.get("auto_refresh_enabled"),
@@ -2419,9 +2448,9 @@ async def plugin_update_token(request: dict, authorization: Optional[str] = Head
             new_token = await token_manager.add_token(
                 st=session_token,
                 remark="Added by Chrome Extension",
-                protocol_mode=request.get("protocol_mode", "session"),
-                google_cookies=request.get("google_cookies"),
-                login_account=request.get("login_account"),
+                protocol_mode=protocol_mode,
+                google_cookies=google_cookies or None,
+                login_account=login_account,
                 login_password=request.get("login_password"),
                 proxy_url=request.get("proxy_url"),
                 auto_refresh_enabled=request.get("auto_refresh_enabled", True),
