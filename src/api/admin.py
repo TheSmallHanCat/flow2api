@@ -2343,9 +2343,16 @@ async def update_plugin_config(
 
 @router.post("/api/plugin/update-token")
 async def plugin_update_token(request: dict, authorization: Optional[str] = Header(None)):
-    """Receive modern Google Flow cookies from the Chrome extension."""
+    """Receive a legacy session token and/or modern Google Flow cookies."""
     await _verify_plugin_connection_token(authorization)
     plugin_config = await db.get_plugin_config()
+
+    session_token_raw = request.get("session_token")
+    if session_token_raw is not None and not isinstance(session_token_raw, str):
+        raise HTTPException(status_code=400, detail="session_token must be a string")
+    session_token = (session_token_raw or "").strip()
+    if len(session_token) > 262144:
+        raise HTTPException(status_code=413, detail="session_token is too large")
 
     google_cookies_raw = request.get("google_cookies")
     if google_cookies_raw is not None and not isinstance(google_cookies_raw, str):
@@ -2354,38 +2361,45 @@ async def plugin_update_token(request: dict, authorization: Optional[str] = Head
     google_cookies = (google_cookies_raw or "").strip()
     if len(google_cookies) > 524288:
         raise HTTPException(status_code=413, detail="google_cookies is too large")
-    if not google_cookies:
-        raise HTTPException(status_code=400, detail="Missing google_cookies")
+    if not session_token and not google_cookies:
+        raise HTTPException(status_code=400, detail="Missing session_token or google_cookies")
 
     proxy_url = str(request.get("proxy_url") or "").strip() or None
     login_account_hint = str(request.get("login_account") or "").strip() or None
-    try:
-        protocol_result = await protocol_loginer.login(
-            google_cookies,
-            proxy=proxy_url,
-            email=login_account_hint,
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to derive session token from Google cookies: {str(exc)}",
-        ) from exc
 
-    session_token = str(protocol_result.get("session_token") or "").strip()
-    if not protocol_result.get("success") or not session_token:
-        error = str(protocol_result.get("error") or "Google session is invalid or expired")
-        raise HTTPException(status_code=400, detail=f"Invalid Google cookies: {error}")
+    async def derive_session_token_from_cookies() -> str:
+        try:
+            protocol_result = await protocol_loginer.login(
+                google_cookies,
+                proxy=proxy_url,
+                email=login_account_hint,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to derive session token from Google cookies: {str(exc)}",
+            ) from exc
+
+        derived_token = str(protocol_result.get("session_token") or "").strip()
+        if not protocol_result.get("success") or not derived_token:
+            error = str(protocol_result.get("error") or "Google session is invalid or expired")
+            raise HTTPException(status_code=400, detail=f"Invalid Google cookies: {error}")
+        return derived_token
+
+    supplied_session_token = bool(session_token)
+    if not session_token:
+        session_token = await derive_session_token_from_cookies()
 
     # Step 1: Convert ST to AT to get user info (including email)
-    try:
-        result = await token_manager.flow_client.st_to_at(session_token)
+    async def validate_session_token(value: str):
+        result = await token_manager.flow_client.st_to_at(value)
         at = result["access_token"]
         expires = result.get("expires")
         user_info = result.get("user", {})
         email = user_info.get("email", "")
 
         if not email:
-            raise HTTPException(status_code=400, detail="Failed to get email from session token")
+            raise ValueError("Failed to get email from session token")
 
         # Parse expiration time
         from datetime import datetime
@@ -2395,14 +2409,30 @@ async def plugin_update_token(request: dict, authorization: Optional[str] = Head
                 at_expires = datetime.fromisoformat(expires.replace('Z', '+00:00'))
             except (TypeError, ValueError):
                 pass
+        return at, at_expires, email
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid session token: {str(e)}")
+    try:
+        at, at_expires, email = await validate_session_token(session_token)
+    except Exception as direct_error:
+        if not supplied_session_token or not google_cookies:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid session token: {str(direct_error)}",
+            ) from direct_error
 
-    protocol_mode = "protocol"
-    login_account = login_account_hint or email
+        # Browser profiles can retain an expired legacy ST while their Google
+        # cookies are still valid. Fall back to protocol login before failing.
+        session_token = await derive_session_token_from_cookies()
+        try:
+            at, at_expires, email = await validate_session_token(session_token)
+        except Exception as fallback_error:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid session token: {str(fallback_error)}",
+            ) from fallback_error
+
+    protocol_mode = "protocol" if google_cookies else "session"
+    login_account = email
 
     # Step 2: Check if token with this email exists
     existing_token = await db.get_token_by_email(email)
