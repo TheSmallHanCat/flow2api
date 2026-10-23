@@ -37,6 +37,21 @@ except ImportError:
     httpx = None
 
 
+def _safe_updated_flow_cookies(owner, original) -> str:
+    """读取 Cookie 最新快照，缺失实现时安全降级。
+
+    历史报错：'FlowClient' object has no attribute 'get_updated_flow_cookies'
+    成因是自定义 flow_frontend 覆盖了上游新增的 Cookie 作用域方法。
+    """
+    getter = getattr(owner, "get_updated_flow_cookies", None)
+    if getter is None:
+        return str(original or "").strip()
+    try:
+        return getter(original)
+    except Exception:
+        return str(original or "").strip()
+
+
 class _FlowClientBase(FlowFrontendMixin):
     """VideoFX API客户端"""
 
@@ -872,7 +887,10 @@ class _FlowClientBase(FlowFrontendMixin):
                     response = await session.post(url, **request_kwargs)
 
                 if cookie_jar is not None:
-                    self._update_flow_cookie_jar(cookie_jar, response)
+                    # 兼容自定义/旧版 flow_frontend：缺少该方法时跳过快照回写
+                    updater = getattr(self, "_update_flow_cookie_jar", None)
+                    if updater is not None:
+                        updater(cookie_jar, response)
 
                 duration_ms = (time.time() - start_time) * 1000
                 response_text = response.text
@@ -4625,7 +4643,7 @@ class _FlowClientBase(FlowFrontendMixin):
             cookie_storage = await self._resolve_flow_frontend_cookie_storage(
                 token_id=token_id
             )
-            cookie_storage = self.get_updated_flow_cookies(cookie_storage)
+            cookie_storage = _safe_updated_flow_cookies(self, cookie_storage)
         except Exception as e:
             debug_logger.log_warning(
                 f"[reCAPTCHA {FLOW2API_TEAM_CAPTCHA_METHOD}] 读取账号 Cookie 失败: {e}"

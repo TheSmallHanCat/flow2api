@@ -716,7 +716,8 @@ class AddTokenRequest(BaseModel):
     video_concurrency: int = -1
     protocol_mode: Literal["protocol"] = "protocol"
     google_cookies: str = Field(min_length=1, max_length=524288)
-    login_account: str = Field(min_length=3, max_length=254)
+    # 可选：留空时由 Cookie/会话自动识别，识别失败则使用占位邮箱
+    login_account: Optional[str] = Field(default=None, max_length=254)
     login_password: Optional[str] = None
     proxy_url: Optional[str] = None
     auto_refresh_enabled: bool = True
@@ -724,8 +725,12 @@ class AddTokenRequest(BaseModel):
 
     @field_validator("login_account")
     @classmethod
-    def validate_login_account(cls, value: str) -> str:
+    def validate_login_account(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
         normalized = value.strip().lower()
+        if not normalized:
+            return None
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
             raise ValueError("login_account must be a valid email address")
         return normalized
@@ -880,13 +885,18 @@ class PluginTokenUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     google_cookies: str = Field(min_length=1, max_length=524288)
-    login_account: str = Field(min_length=3, max_length=254)
+    # 可选：留空时按 Cookie 会话定位账号，定位不到则使用占位邮箱
+    login_account: Optional[str] = Field(default=None, max_length=254)
     protocol_mode: Literal["protocol"] = "protocol"
 
     @field_validator("login_account")
     @classmethod
-    def validate_login_account(cls, value: str) -> str:
+    def validate_login_account(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
         normalized = value.strip().lower()
+        if not normalized:
+            return None
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
             raise ValueError("login_account must be a valid email address")
         return normalized
@@ -2724,7 +2734,7 @@ async def plugin_update_token(
     plugin_config = await db.get_plugin_config()
 
     google_cookies = request.google_cookies
-    email = request.login_account
+    email = (request.login_account or "").strip().lower()
 
     try:
         result = await token_manager.flow_client.st_to_at(
@@ -2749,8 +2759,15 @@ async def plugin_update_token(
     cookie_hash = hashlib.sha256(google_cookies.encode("utf-8")).hexdigest()[:32]
     session_token = f"frontend-{cookie_hash}"
 
-    # Step 2: Check if token with this email exists
-    existing_token = await db.get_token_by_email(email)
+    # Step 2: 定位已有账号。邮箱可选：先用邮箱，未提供则按 Cookie 会话(st)反查，
+    # 都没有则生成与 add_token 一致的占位邮箱，避免“必须填 Google 账号”的硬性要求。
+    existing_token = await db.get_token_by_email(email) if email else None
+    if existing_token is None:
+        existing_token = await db.get_token_by_st(session_token)
+    if existing_token is not None and not email:
+        email = str(existing_token.email or existing_token.login_account or "")
+    if not email:
+        email = f"account-{cookie_hash[:16]}@flow.local"
 
     if existing_token:
         # Update existing token
