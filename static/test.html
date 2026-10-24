@@ -359,7 +359,7 @@ function renderSidebar() {
 
       const type = getModelType(modelId);
       const shortName = modelId.replace("gemini-3.1-flash-image-", "").replace("gemini-3.1-flash-lite-image-", "").replace("gemini-3.0-pro-image-", "");
-      item.innerHTML = `<span>${shortName}</span><span class="model-tag ${type === 'image' ? 'tag-image' : 'tag-video'}">${type === 'image' ? '图片' : '视频'}</span>`;
+      item.innerHTML = `<span>${shortName}</span><span class="model-tag ${type === 'image' ? 'tag-image' : 'tag-video'}">${type === 'image' ? 'Images' : 'Videos'}</span>`;
       item.onclick = () => selectModel(modelId);
       list.appendChild(item);
     });
@@ -483,7 +483,7 @@ async function generate() {
 
   const dot = document.getElementById("statusDot");
   dot.className = "status-dot status-running";
-  document.getElementById("statusText").textContent = "生成中...";
+  document.getElementById("statusText").textContent = "Generating...";
   document.getElementById("outputLog").textContent = "";
   document.getElementById("outputResult").innerHTML = "";
 
@@ -563,12 +563,12 @@ async function generate() {
     // Render result
     renderResult(fullContent);
     dot.className = "status-dot status-done";
-    document.getElementById("statusText").textContent = `完成 (${elapsed}s)`;
+    document.getElementById("statusText").textContent = `Completed (${elapsed}s)`;
 
   } catch (e) {
     appendLog(`\n❌ Request failed:  ${e.message}\n`);
     dot.className = "status-dot status-error";
-    document.getElementById("statusText").textContent = "失败";
+    document.getElementById("statusText").textContent = "Failed";
   } finally {
     STATE.generating = false;
     btn.disabled = false;
