@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Flow2API 模型测试</title>
+<title>Flow2API Model Tester</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e1e6; min-height: 100vh; }
@@ -123,44 +123,44 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #7c8aff; }
 </head>
 <body>
 <div class="container">
-  <h1>🧪 Flow2API 模型测试</h1>
-  <p class="subtitle">选择模型，输入提示词，测试生成效果</p>
+  <h1>🧪 Flow2API Model Tester</h1>
+  <p class="subtitle">Choose a model, enter a prompt, and test generation</p>
 
   <div class="config-bar">
     <label>API Key:</label>
-    <input type="password" id="apiKey" placeholder="输入 API Key">
-    <label>地址:</label>
+    <input type="password" id="apiKey" placeholder="Enter API key">
+    <label>Server URL:</label>
     <input type="text" id="baseUrl" placeholder="http://localhost:8000" />
   </div>
-  <p class="config-note">未填写 API Key 或模型列表加载失败时，会回退到内置候选模型；实际生成前仍需填写有效 API Key。</p>
+  <p class="config-note">If no API key is entered or the model list fails to load, built-in model suggestions are used. A valid API key is still required to generate content.</p>
 
   <div class="main-layout">
     <div class="sidebar" id="modelSidebar"></div>
     <div class="content">
       <div class="gen-panel">
-        <h3 id="selectedModelName">请选择模型</h3>
-        <div class="model-info" id="selectedModelInfo">从左侧列表选择一个模型开始测试</div>
+        <h3 id="selectedModelName">Select a model</h3>
+        <div class="model-info" id="selectedModelInfo">Choose a model from the list on the left to begin testing</div>
 
         <div class="form-group">
-          <label>提示词 (Prompt)</label>
-          <textarea id="promptInput" placeholder="描述你想生成的内容...">一只可爱的橘猫趴在窗台上晒太阳，窗外是樱花盛开的春天</textarea>
+          <label>Prompt</label>
+          <textarea id="promptInput" placeholder="Describe what you want to generate...">A cute orange cat lounging in the sun on a windowsill, with cherry blossoms blooming outside</textarea>
         </div>
 
         <div class="form-group" id="imageUploadGroup" style="display:none;">
-          <label>上传图片 <span id="imageLimit" style="color:#666;font-size:12px;"></span></label>
+          <label>Upload images <span id="imageLimit" style="color:#666;font-size:12px;"></span></label>
           <div class="image-upload-area" id="imageUploadArea">
-            <div class="image-upload-hint" id="imageHint">点击或拖拽上传图片</div>
+            <div class="image-upload-hint" id="imageHint">Click or drag images here to upload</div>
             <div class="image-preview-list" id="imagePreviewList"></div>
           </div>
           <input type="file" id="imageFileInput" accept="image/*" multiple style="display:none;">
         </div>
 
-        <button class="btn-generate" id="btnGenerate" disabled>选择模型后开始生成</button>
+        <button class="btn-generate" id="btnGenerate" disabled>Select a model to start generating</button>
       </div>
 
       <div class="output-panel">
-        <h3><span class="status-dot status-idle" id="statusDot"></span> <span id="statusText">等待中</span></h3>
-        <div class="output-log" id="outputLog">准备就绪，选择模型并点击生成按钮开始...</div>
+        <h3><span class="status-dot status-idle" id="statusDot"></span> <span id="statusText">Waiting</span></h3>
+        <div class="output-log" id="outputLog">Ready. Select a model and click Generate to begin...</div>
         <div class="output-result" id="outputResult"></div>
       </div>
     </div>
@@ -173,13 +173,13 @@ const STATE = { selectedModel: null, modelConfig: null, images: [], generating: 
 <script>
 // Model categories for sidebar
 const MODEL_CATEGORIES = {
-  "Gemini 3.1 Flash 图片": { filter: m => m.startsWith("gemini-3.1-flash-image") },
-  "Nano Banana 2 Lite 图片": { filter: m => m.startsWith("gemini-3.1-flash-lite-image") },
-  "Gemini 3.0 Pro 图片": { filter: m => m.startsWith("gemini-3.0-pro-image") },
-  "Veo 3.1 文生视频 (T2V)": { filter: m => m.startsWith("veo_3_1_t2v") && !m.includes("4k") && !m.includes("1080p") },
-  "Veo 3.1 图生视频 (I2V)": { filter: m => m.startsWith("veo_3_1_i2v") && !m.includes("4k") && !m.includes("1080p") },
-  "Veo 3.1 多图视频 (R2V)": { filter: m => m.startsWith("veo_3_1_r2v") && !m.includes("4k") && !m.includes("1080p") },
-  "视频放大 (Upsample)": { filter: m => !m.includes("image") && (m.includes("4k") || m.includes("1080p")) },
+  "Gemini 3.1 Flash Images": { filter: m => m.startsWith("gemini-3.1-flash-image") },
+  "Nano Banana 2 Lite Images": { filter: m => m.startsWith("gemini-3.1-flash-lite-image") },
+  "Gemini 3.0 Pro Images": { filter: m => m.startsWith("gemini-3.0-pro-image") },
+  "Veo 3.1 Text-to-Video (T2V)": { filter: m => m.startsWith("veo_3_1_t2v") && !m.includes("4k") && !m.includes("1080p") },
+  "Veo 3.1 Image-to-Video (I2V)": { filter: m => m.startsWith("veo_3_1_i2v") && !m.includes("4k") && !m.includes("1080p") },
+  "Veo 3.1 Multi-reference video (R2V)": { filter: m => m.startsWith("veo_3_1_r2v") && !m.includes("4k") && !m.includes("1080p") },
+  "Video upscaling (Upsample)": { filter: m => !m.includes("image") && (m.includes("4k") || m.includes("1080p")) },
 };
 
 const FALLBACK_MODELS = {
@@ -272,7 +272,7 @@ const FALLBACK_MODELS = {
 let ALL_MODELS = {};
 
 function applyFallbackModels(reason) {
-  console.warn("使用内置候选模型列表:", reason);
+  console.warn("Using built-in model suggestions:", reason);
   ALL_MODELS = { ...FALLBACK_MODELS };
   renderSidebar();
 }
@@ -301,7 +301,7 @@ async function loadModels() {
     items.forEach(m => { ALL_MODELS[m.id] = m.description; });
     renderSidebar();
   } catch (e) {
-    console.error("加载模型失败:", e);
+    console.error("Failed to load models:", e);
     applyFallbackModels(e.message || "load_failed");
   }
 }
@@ -334,7 +334,7 @@ function renderSidebar() {
 
   const modelIds = Object.keys(ALL_MODELS).sort();
   if (modelIds.length === 0) {
-    sidebar.innerHTML = '<div class="model-section"><div class="model-list" style="border-radius:8px;"><div class="model-item" style="cursor:default;color:#888;">未获取到可用模型，请检查 API Key 或稍后重试</div></div></div>';
+    sidebar.innerHTML = '<div class="model-section"><div class="model-list" style="border-radius:8px;"><div class="model-item" style="cursor:default;color:#888;">No available models were returned. Check the API key or try again later.</div></div></div>';
     return;
   }
 
@@ -359,7 +359,7 @@ function renderSidebar() {
 
       const type = getModelType(modelId);
       const shortName = modelId.replace("gemini-3.1-flash-image-", "").replace("gemini-3.1-flash-lite-image-", "").replace("gemini-3.0-pro-image-", "");
-      item.innerHTML = `<span>${shortName}</span><span class="model-tag ${type === 'image' ? 'tag-image' : 'tag-video'}">${type === 'image' ? '图片' : '视频'}</span>`;
+      item.innerHTML = `<span>${shortName}</span><span class="model-tag ${type === 'image' ? 'tag-image' : 'tag-video'}">${type === 'image' ? 'Images' : 'Videos'}</span>`;
       item.onclick = () => selectModel(modelId);
       list.appendChild(item);
     });
@@ -394,7 +394,7 @@ function selectModel(modelId) {
   const meta = STATE.modelConfig;
   if (meta.supportsImages) {
     uploadGroup.style.display = "block";
-    const limitText = meta.type === "image" ? "可选，用于图生图" : `${meta.minImages}-${meta.maxImages}张`;
+    const limitText = meta.type === "image" ? "Optional, for image-to-image" : `${meta.minImages}-${meta.maxImages} images`;
     document.getElementById("imageLimit").textContent = `(${limitText})`;
   } else {
     uploadGroup.style.display = "none";
@@ -407,7 +407,7 @@ function selectModel(modelId) {
   // Enable button
   const btn = document.getElementById("btnGenerate");
   btn.disabled = false;
-  btn.textContent = meta.type === "image" ? "🎨 生成图片" : "🎬 生成视频";
+  btn.textContent = meta.type === "image" ? "🎨 Generate image" : "🎬 Generate video";
 }
 
 // Image upload handling
@@ -472,18 +472,18 @@ async function generate() {
   const baseUrl = (document.getElementById("baseUrl").value || "").trim();
   const apiKey = (document.getElementById("apiKey").value || "").trim();
   const prompt = document.getElementById("promptInput").value.trim();
-  if (!prompt) { alert("请输入提示词"); return; }
-  if (!apiKey) { alert("请输入 API Key"); return; }
-  if (!baseUrl) { alert("请输入服务地址"); return; }
+  if (!prompt) { alert("Please enter a prompt"); return; }
+  if (!apiKey) { alert("Please enter an API key"); return; }
+  if (!baseUrl) { alert("Please enter the server URL"); return; }
 
   STATE.generating = true;
   const btn = document.getElementById("btnGenerate");
   btn.disabled = true;
-  btn.textContent = "⏳ 生成中...";
+  btn.textContent = "⏳ Generating...";
 
   const dot = document.getElementById("statusDot");
   dot.className = "status-dot status-running";
-  document.getElementById("statusText").textContent = "生成中...";
+  document.getElementById("statusText").textContent = "Generating...";
   document.getElementById("outputLog").textContent = "";
   document.getElementById("outputResult").innerHTML = "";
 
@@ -502,9 +502,9 @@ async function generate() {
   const body = { model: STATE.selectedModel, messages, stream: true };
 
   const startTime = Date.now();
-  appendLog(`[${new Date().toLocaleTimeString()}] 模型: ${STATE.selectedModel}\n`);
-  appendLog(`[${new Date().toLocaleTimeString()}] 提示词: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}\n`);
-  appendLog(`[${new Date().toLocaleTimeString()}] 开始请求...\n`);
+  appendLog(`[${new Date().toLocaleTimeString()}] Model:  ${STATE.selectedModel}\n`);
+  appendLog(`[${new Date().toLocaleTimeString()}] Prompt:  ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}\n`);
+  appendLog(`[${new Date().toLocaleTimeString()}] Sending request...\n`);
 
   try {
     const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
@@ -539,7 +539,7 @@ async function generate() {
         try {
           const parsed = JSON.parse(data);
           if (parsed.error) {
-            appendLog(`\n❌ 错误: ${JSON.stringify(parsed.error)}\n`);
+            appendLog(`\n❌ Error:  ${JSON.stringify(parsed.error)}\n`);
             continue;
           }
           const choices = parsed.choices || [];
@@ -558,22 +558,22 @@ async function generate() {
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    appendLog(`\n\n[${new Date().toLocaleTimeString()}] 完成，耗时 ${elapsed}s\n`);
+    appendLog(`\n\n[${new Date().toLocaleTimeString()}] Completed in ${elapsed}s\n`);
 
     // Render result
     renderResult(fullContent);
     dot.className = "status-dot status-done";
-    document.getElementById("statusText").textContent = `完成 (${elapsed}s)`;
+    document.getElementById("statusText").textContent = `Completed (${elapsed}s)`;
 
   } catch (e) {
-    appendLog(`\n❌ 请求失败: ${e.message}\n`);
+    appendLog(`\n❌ Request failed:  ${e.message}\n`);
     dot.className = "status-dot status-error";
-    document.getElementById("statusText").textContent = "失败";
+    document.getElementById("statusText").textContent = "Failed";
   } finally {
     STATE.generating = false;
     btn.disabled = false;
     const meta = STATE.modelConfig;
-    btn.textContent = meta && meta.type === "image" ? "🎨 生成图片" : "🎬 生成视频";
+    btn.textContent = meta && meta.type === "image" ? "🎨 Generate image" : "🎬 Generate video";
   }
 }
 
@@ -587,7 +587,7 @@ function renderResult(content) {
   while ((match = imgRegex.exec(content)) !== null) {
     const img = document.createElement("img");
     img.src = match[1];
-    img.alt = "生成结果";
+    img.alt = "Generated result";
     img.loading = "lazy";
     resultDiv.appendChild(img);
   }

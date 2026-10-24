@@ -42,34 +42,34 @@ image_timeout = 300
 video_timeout = 1500
 
 [call_logic]
-call_mode = "default"  # default=随机轮询策略, polling=顺序轮询策略
+call_mode = "default"  # default=randomized round-robin; polling=sequential round-robin
 
 [admin]
 error_ban_threshold = 3
 
 [cache]
 enabled = false
-timeout = 7200  # 缓存超时时间(秒), 默认2小时; 设置为0表示不自动删除缓存
-base_url = ""   # 缓存文件访问的基础URL, 留空则使用服务器地址
+timeout = 7200  # Cache timeout in seconds; defaults to 2 hours. Set to 0 to disable automatic cache deletion
+base_url = ""   # Base URL for accessing cached files; leave empty to use the server address
 
 [captcha]
-captcha_method = "yescaptcha"  # 打码方式: yescaptcha/flow2api_team(内置团队打码，地址与密钥固定)/captcharun/twocaptcha/capsolver/ezcaptcha/browser/personal/remote_browser
-browser_recaptcha_settle_seconds = 3.0  # 自定义站点分数测试在 reload/clr 就绪后的额外稳态等待
-browser_flow_page_warmup_seconds = 6.0  # browser harvest 打开 Flow 页面后的稳定等待
-browser_count = 1  # browser 模式的有头浏览器实例数量
-browser_captcha_max_retries = 5  # browser 模式单次获取验证码的最大重试次数
-browser_captcha_generation_retries = 6  # 生成接口遇到 reCAPTCHA evaluation failed 时的总重试次数
-personal_solve_strategy = "auto"  # auto=优先 trusted JS、失败切原生 harvest；direct/harvest 可强制指定
-personal_project_pool_size = 4  # personal 模式下单个 Token 默认维护的项目池数量（仅影响项目轮换，不决定打码标签页数量）
-personal_max_resident_tabs = 5  # personal 模式共享打码标签页上限，所有 Token/project 共用这组 tab
-browser_personal_fresh_restart_every_n_solves = 10  # personal 模式成功获取多少个码后清理并重启浏览器，0 表示禁用
-personal_idle_tab_ttl_seconds = 600  # personal 模式标签页空闲回收时间(秒)
-yescaptcha_api_key = ""  # YesCaptcha API密钥
+captcha_method = "yescaptcha"  # Captcha provider: yescaptcha/flow2api_team (built-in team solver with fixed URL and key)/captcharun/twocaptcha/capsolver/ezcaptcha/browser/personal/remote_browser
+browser_recaptcha_settle_seconds = 3.0  # Additional stabilization delay after reload/clr is ready during custom site-score testing
+browser_flow_page_warmup_seconds = 6.0  # Stabilization delay after browser harvest opens the Flow page
+browser_count = 1  # Number of headed browser instances in browser mode
+browser_captcha_max_retries = 5  # Maximum retries for a single captcha retrieval in browser mode
+browser_captcha_generation_retries = 6  # Total retries when the generation endpoint encounters reCAPTCHA evaluation failed
+personal_solve_strategy = "auto"  # auto=prefer trusted JS, falling back to native harvesting on failure; direct/harvest can be selected explicitly
+personal_project_pool_size = 4  # Default project-pool size maintained per token in personal mode (affects project rotation only, not the number of captcha tabs)
+personal_max_resident_tabs = 5  # Maximum number of shared captcha tabs in personal mode; all tokens/projects share this set of tabs
+browser_personal_fresh_restart_every_n_solves = 10  # In personal mode, clean up and restart the browser after this many successful captcha solves; 0 disables this behavior
+personal_idle_tab_ttl_seconds = 600  # Idle tab cleanup timeout in seconds for personal mode
+yescaptcha_api_key = ""  # YesCaptcha API key
 yescaptcha_base_url = "https://api.yescaptcha.com"
-yescaptcha_task_type = "RecaptchaV3TaskProxylessM1S9"  # 可选: RecaptchaV3TaskProxyless/RecaptchaV3TaskProxylessM1/RecaptchaV3TaskProxylessM1S7/RecaptchaV3TaskProxylessM1S9
-remote_browser_base_url = ""  # 远程有头打码服务地址
-remote_browser_api_key = ""   # 远程有头打码服务 API Key
-remote_browser_timeout = 60   # 远程有头打码请求超时(秒)
+yescaptcha_task_type = "RecaptchaV3TaskProxylessM1S9"  # Options: RecaptchaV3TaskProxyless/RecaptchaV3TaskProxylessM1/RecaptchaV3TaskProxylessM1S7/RecaptchaV3TaskProxylessM1S9
+remote_browser_base_url = ""  # Remote headed captcha service URL
+remote_browser_api_key = ""   # Remote headed captcha service API key
+remote_browser_timeout = 60   # Remote headed captcha request timeout in seconds
 capsolver_api_key = ""
 capsolver_base_url = "https://api.capsolver.com"
 captcharun_api_key = ""
