@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Flow2API 模型测试</title>
+<title>Flow2API Model Tester</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e1e6; min-height: 100vh; }
@@ -123,44 +123,44 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #7c8aff; }
 </head>
 <body>
 <div class="container">
-  <h1>🧪 Flow2API 模型测试</h1>
-  <p class="subtitle">选择模型，输入提示词，测试生成效果</p>
+  <h1>🧪 Flow2API Model Tester</h1>
+  <p class="subtitle">Choose a model, enter a prompt, and test generation</p>
 
   <div class="config-bar">
     <label>API Key:</label>
-    <input type="password" id="apiKey" placeholder="输入 API Key">
-    <label>地址:</label>
+    <input type="password" id="apiKey" placeholder="Enter API key">
+    <label>Server URL:</label>
     <input type="text" id="baseUrl" placeholder="http://localhost:8000" />
   </div>
-  <p class="config-note">未填写 API Key 或模型列表加载失败时，会回退到内置候选模型；实际生成前仍需填写有效 API Key。</p>
+  <p class="config-note">If no API key is entered or the model list fails to load, built-in model suggestions are used. A valid API key is still required to generate content.</p>
 
   <div class="main-layout">
     <div class="sidebar" id="modelSidebar"></div>
     <div class="content">
       <div class="gen-panel">
-        <h3 id="selectedModelName">请选择模型</h3>
-        <div class="model-info" id="selectedModelInfo">从左侧列表选择一个模型开始测试</div>
+        <h3 id="selectedModelName">Select a model</h3>
+        <div class="model-info" id="selectedModelInfo">Choose a model from the list on the left to begin testing</div>
 
         <div class="form-group">
-          <label>提示词 (Prompt)</label>
-          <textarea id="promptInput" placeholder="描述你想生成的内容...">一只可爱的橘猫趴在窗台上晒太阳，窗外是樱花盛开的春天</textarea>
+          <label>Prompt</label>
+          <textarea id="promptInput" placeholder="Describe what you want to generate...">A cute orange cat lounging in the sun on a windowsill, with cherry blossoms blooming outside</textarea>
         </div>
 
         <div class="form-group" id="imageUploadGroup" style="display:none;">
-          <label>上传图片 <span id="imageLimit" style="color:#666;font-size:12px;"></span></label>
+          <label>Upload images <span id="imageLimit" style="color:#666;font-size:12px;"></span></label>
           <div class="image-upload-area" id="imageUploadArea">
-            <div class="image-upload-hint" id="imageHint">点击或拖拽上传图片</div>
+            <div class="image-upload-hint" id="imageHint">点击或拖拽Upload images</div>
             <div class="image-preview-list" id="imagePreviewList"></div>
           </div>
           <input type="file" id="imageFileInput" accept="image/*" multiple style="display:none;">
         </div>
 
-        <button class="btn-generate" id="btnGenerate" disabled>选择模型后开始生成</button>
+        <button class="btn-generate" id="btnGenerate" disabled>Select a model to start generating</button>
       </div>
 
       <div class="output-panel">
-        <h3><span class="status-dot status-idle" id="statusDot"></span> <span id="statusText">等待中</span></h3>
-        <div class="output-log" id="outputLog">准备就绪，选择模型并点击生成按钮开始...</div>
+        <h3><span class="status-dot status-idle" id="statusDot"></span> <span id="statusText">Waiting</span></h3>
+        <div class="output-log" id="outputLog">Ready. Select a model and click Generate to begin...</div>
         <div class="output-result" id="outputResult"></div>
       </div>
     </div>
@@ -178,8 +178,8 @@ const MODEL_CATEGORIES = {
   "Gemini 3.0 Pro 图片": { filter: m => m.startsWith("gemini-3.0-pro-image") },
   "Veo 3.1 文生视频 (T2V)": { filter: m => m.startsWith("veo_3_1_t2v") && !m.includes("4k") && !m.includes("1080p") },
   "Veo 3.1 图生视频 (I2V)": { filter: m => m.startsWith("veo_3_1_i2v") && !m.includes("4k") && !m.includes("1080p") },
-  "Veo 3.1 多图视频 (R2V)": { filter: m => m.startsWith("veo_3_1_r2v") && !m.includes("4k") && !m.includes("1080p") },
-  "视频放大 (Upsample)": { filter: m => !m.includes("image") && (m.includes("4k") || m.includes("1080p")) },
+  "Veo 3.1 Multi-reference video (R2V)": { filter: m => m.startsWith("veo_3_1_r2v") && !m.includes("4k") && !m.includes("1080p") },
+  "Video upscaling (Upsample)": { filter: m => !m.includes("image") && (m.includes("4k") || m.includes("1080p")) },
 };
 
 const FALLBACK_MODELS = {
@@ -473,7 +473,7 @@ async function generate() {
   const apiKey = (document.getElementById("apiKey").value || "").trim();
   const prompt = document.getElementById("promptInput").value.trim();
   if (!prompt) { alert("请输入提示词"); return; }
-  if (!apiKey) { alert("请输入 API Key"); return; }
+  if (!apiKey) { alert("请Enter API key"); return; }
   if (!baseUrl) { alert("请输入服务地址"); return; }
 
   STATE.generating = true;
