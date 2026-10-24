@@ -406,8 +406,8 @@ async def _sync_json_http_request(
         )
 
     try:
-        # remote_browser 控制面是服务间 JSON API，使用 httpx 避免 curl_cffi 在当前
-        # Windows + impersonate 场景下 POST body 丢失导致 FastAPI 直接判定 body 缺失。
+        # The remote_browser control plane is a service-to-service JSON API. Use httpx to avoid curl_cffi in the current
+        # Windows + impersonate scenario, where POST bodies can be lost and FastAPI may report a missing request body.
         async with httpx.AsyncClient(
             follow_redirects=False, trust_env=False
         ) as session:
@@ -673,7 +673,7 @@ async def _score_test_with_remote_browser_service(
         if not detail:
             detail = (response_text or "").strip()
         raise RuntimeError(
-            f"Remote captcha service request failed (HTTP {status_code}): {detail or '未知错误'}"
+            f"Remote captcha service request failed (HTTP {status_code}): {detail or 'Unknown error'}"
         )
 
     if not isinstance(response_payload, dict):
@@ -716,7 +716,7 @@ class AddTokenRequest(BaseModel):
     video_concurrency: int = -1
     protocol_mode: Literal["protocol"] = "protocol"
     google_cookies: str = Field(min_length=1, max_length=524288)
-    # 可选：If blank, identify the account from cookies/session; use a placeholder email if identification fails.
+    # Optional: if blank, identify the account from cookies/session; use a placeholder email if identification fails.
     login_account: Optional[str] = Field(default=None, max_length=254)
     login_password: Optional[str] = None
     proxy_url: Optional[str] = None
@@ -885,7 +885,7 @@ class PluginTokenUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     google_cookies: str = Field(min_length=1, max_length=524288)
-    # 可选：If blank, identify the account from the cookie session; use a placeholder email if no account is found.
+    # Optional: if blank, identify the account from the cookie session; use a placeholder email if no account is found.
     login_account: Optional[str] = Field(default=None, max_length=254)
     protocol_mode: Literal["protocol"] = "protocol"
 
@@ -1042,7 +1042,7 @@ async def get_tokens(token: str = Depends(verify_admin_token)):
             and normalize_dt(row.get("at_expires")) > now
             and (normalize_dt(row.get("at_expires")) - now).total_seconds() < 3600
         ),
-        "token": row.get("at"),  # 兼容前端 token.token 的访问方式
+        "token": row.get("at"),  # Keep compatibility with frontend access through token.token
         "email": row.get("email"),
         "name": row.get("name"),
         "remark": row.get("remark"),
@@ -1056,7 +1056,7 @@ async def get_tokens(token: str = Depends(verify_admin_token)):
         "use_count": row.get("use_count"),
         "credits": row.get("credits"),  # 🆕 Credits
         "user_paygate_tier": row.get("user_paygate_tier"),
-        "current_project_id": row.get("current_project_id"),  # 🆕 项目ID
+        "current_project_id": row.get("current_project_id"),  # 🆕 Project ID
         "current_project_name": row.get("current_project_name"),  # 🆕 Project name
         "captcha_proxy_url": row.get("captcha_proxy_url") or "",
         "extension_route_key": row.get("extension_route_key") or "",
@@ -1089,7 +1089,7 @@ async def get_tokens(token: str = Depends(verify_admin_token)):
         "banned_at": to_iso(row.get("banned_at")) if row.get("banned_at") else None,
         }
         for row in token_rows
-    ]  # 直接返回数组,兼容前端
+    ]  # Return an array directly for frontend compatibility
 
 
 @router.post("/api/tokens")
@@ -1164,7 +1164,7 @@ async def update_token(
         at = result["access_token"]
         expires = result.get("expires")
 
-        # 解析过期时间
+        # Parse the expiration time
         from datetime import datetime
 
         at_expires = None
@@ -1174,12 +1174,12 @@ async def update_token(
             except:
                 pass
 
-        # 更新token (包含AT、ST、AT expiration time、project_id和project_name)
+        # Update the token (including AT, ST, AT expiration time, project_id, and project_name)
         await token_manager.update_token(
             token_id=token_id,
             st=session_value,
             at=at,
-            at_expires=at_expires,  # 🆕 更新AT expiration time
+            at_expires=at_expires,  # 🆕 Update AT expiration time
             email=request.login_account,
             project_id=request.project_id,
             project_name=request.project_name,
@@ -1252,12 +1252,12 @@ async def disable_token(token_id: int, token: str = Depends(verify_admin_token))
 
 @router.post("/api/tokens/{token_id}/refresh-credits")
 async def refresh_credits(token_id: int, token: str = Depends(verify_admin_token)):
-    """刷新TokenCredits 🆕"""
+    """Refresh token credits 🆕"""
     try:
         credits = await token_manager.refresh_credits(token_id)
-        return {"success": True, "message": "Credits刷新成功", "credits": credits}
+        return {"success": True, "message": "Credits refreshed successfully", "credits": credits}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"刷新Credits失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to refresh credits:  {str(e)}")
 
 
 @router.post("/api/tokens/{token_id}/refresh-at")
@@ -2016,7 +2016,7 @@ async def update_cache_config_full(
     await db.reload_config_to_memory()
     await _sync_runtime_cache_config()
 
-    return {"success": True, "message": "缓存Settings updated successfully"}
+    return {"success": True, "message": "Cache settings updated successfully"}
 
 
 @router.post("/api/cache/base-url")
@@ -2170,7 +2170,7 @@ async def update_captcha_config(
 
     return {
         "success": True,
-        "message": "验证码Settings updated successfully",
+        "message": "Captcha settings updated successfully",
         "runtime_prepare_started": runtime_prepare_started,
         "runtime_prepare_message": runtime_prepare_message,
         "runtime_status_method": runtime_status_method,
@@ -2718,7 +2718,7 @@ async def update_plugin_config(request: dict, token: str = Depends(verify_admin_
 
     return {
         "success": True,
-        "message": "插件Settings updated successfully",
+        "message": "Extension settings updated successfully",
         "connection_token": connection_token,
         "auto_enable_on_update": auto_enable_on_update,
     }
