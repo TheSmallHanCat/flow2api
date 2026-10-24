@@ -240,7 +240,7 @@ class Config:
 
     @property
     def flow_video_launch_wait_timeout(self) -> float:
-        """视频前置发车软并发等待超时(秒)。"""
+        """Timeout in seconds while waiting for the soft video-generation concurrency limit."""
         timeout = self._config.get("flow", {}).get("video_launch_wait_timeout", 180)
         try:
             return max(1.0, min(600.0, float(timeout)))
@@ -249,7 +249,7 @@ class Config:
 
     @property
     def flow_video_launch_stagger_ms(self) -> int:
-        """视频请求前置发车间隔(毫秒)，用于平滑同批突发。"""
+        """Delay in milliseconds between video request launches to smooth bursts in the same batch."""
         value = self._config.get("flow", {}).get("video_launch_stagger_ms", 0)
         try:
             return max(0, min(5000, int(value)))
@@ -424,18 +424,18 @@ class Config:
 
     @property
     def browser_launch_background(self) -> bool:
-        """有头浏览器打码是否默认后台启动，避免抢占前台窗口。"""
+        """Whether headed-browser captcha solving should start in the background by default to avoid taking over the foreground window."""
         return self._config.get("captcha", {}).get("browser_launch_background", True)
 
     def set_browser_launch_background(self, enabled: bool):
-        """设置有头浏览器打码是否后台启动。"""
+        """Set whether headed-browser captcha solving starts in the background."""
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["browser_launch_background"] = bool(enabled)
 
     @property
     def browser_count(self) -> int:
-        """浏览器打码实例数量，browser/personal 模式共用。"""
+        """Number of browser instances used by both browser and personal captcha modes."""
         value = self._config.get("captcha", {}).get("browser_count", 1)
         try:
             return max(1, min(20, int(value)))
@@ -443,14 +443,14 @@ class Config:
             return 1
 
     def set_browser_count(self, value: int):
-        """设置浏览器打码实例数量。"""
+        """Set the number of browser captcha instances."""
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["browser_count"] = max(1, min(20, int(value)))
 
     @property
     def browser_recaptcha_settle_seconds(self) -> float:
-        """自定义站点分数测试在 reload/clr 就绪后的额外等待秒数。"""
+        """Additional wait in seconds after reload/clr is ready during custom site score tests."""
         value = self._config.get("captcha", {}).get(
             "browser_recaptcha_settle_seconds", 3.0
         )
@@ -461,7 +461,7 @@ class Config:
 
     @property
     def browser_flow_page_warmup_seconds(self) -> float:
-        """browser harvest 打开真实 Flow 页面后的稳定等待秒数。"""
+        """Stabilization delay in seconds after browser harvest opens the real Flow page."""
         value = self._config.get("captcha", {}).get(
             "browser_flow_page_warmup_seconds", 6.0
         )
@@ -471,7 +471,7 @@ class Config:
             return 6.0
 
     def set_browser_flow_page_warmup_seconds(self, value: float):
-        """设置 browser harvest 页面预热等待秒数。"""
+        """Set the page warm-up delay for browser harvest."""
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["browser_flow_page_warmup_seconds"] = max(
@@ -488,7 +488,7 @@ class Config:
 
     @property
     def browser_captcha_max_retries(self) -> int:
-        """browser 模式单次打码最大重试次数。"""
+        """Maximum captcha-solving retries per attempt in browser mode."""
         value = self._config.get("captcha", {}).get("browser_captcha_max_retries", 5)
         try:
             return max(1, min(20, int(value)))
@@ -497,7 +497,7 @@ class Config:
 
     @property
     def browser_captcha_generation_retries(self) -> int:
-        """生成接口因 reCAPTCHA 评估失败时允许的总重试次数。"""
+        """Total retries allowed when the generation endpoint fails reCAPTCHA evaluation."""
         value = self._config.get("captcha", {}).get(
             "browser_captcha_generation_retries", 6
         )
@@ -508,14 +508,14 @@ class Config:
 
     @property
     def personal_solve_strategy(self) -> str:
-        """personal 打码策略：direct 用 trusted JS，harvest 原生截获，auto 自动降级。"""
+        """Personal captcha strategy: direct uses trusted JS, harvest uses native interception, and auto falls back automatically."""
         value = str(
             self._config.get("captcha", {}).get("personal_solve_strategy", "auto")
         ).strip().lower()
         return value if value in {"direct", "harvest", "auto"} else "auto"
 
     def set_personal_solve_strategy(self, value: str):
-        """设置 personal 打码策略。"""
+        """Set the personal captcha-solving strategy."""
         normalized = str(value or "").strip().lower()
         if normalized not in {"direct", "harvest", "auto"}:
             normalized = "auto"
@@ -525,16 +525,16 @@ class Config:
 
     @property
     def personal_max_resident_tabs(self) -> int:
-        """内置浏览器打码单实例共享标签页上限"""
+        """Maximum number of shared captcha tabs per built-in browser instance."""
         value = self._config.get("captcha", {}).get("personal_max_resident_tabs", 5)
         try:
-            return max(1, min(50, int(value)))  # 限制在1-50之间
+            return max(1, min(50, int(value)))  # Limit to 1–50
         except Exception:
             return 5
 
     @property
     def personal_project_pool_size(self) -> int:
-        """单个 Token 默认维护的项目池数量，仅影响项目轮换。"""
+        """Default project-pool size maintained per token; affects project rotation only."""
         value = self._config.get("captcha", {}).get("personal_project_pool_size", 4)
         try:
             return max(1, min(50, int(value)))
@@ -543,7 +543,7 @@ class Config:
 
     @property
     def personal_idle_tab_ttl_seconds(self) -> int:
-        """内置浏览器打码标签页空闲超时(秒)"""
+        """Idle timeout in seconds for built-in browser captcha tabs."""
         value = self._config.get("captcha", {}).get(
             "personal_idle_tab_ttl_seconds", 600
         )
@@ -554,14 +554,14 @@ class Config:
 
     @property
     def personal_headless(self) -> bool:
-        """personal 内置浏览器是否强制无头；默认按有头模式运行。"""
+        """Whether to force the built-in personal browser into headless mode; headed mode is the default."""
         env_value = os.getenv("PERSONAL_BROWSER_HEADLESS")
         if env_value is not None:
             return str(env_value).strip().lower() in {"1", "true", "yes", "on"}
         return bool(self._config.get("captcha", {}).get("personal_headless", False))
 
     def set_personal_max_resident_tabs(self, value: int):
-        """设置内置浏览器打码单实例共享标签页上限"""
+        """设置Maximum number of shared captcha tabs per built-in browser instance."""
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["personal_max_resident_tabs"] = max(
@@ -569,7 +569,7 @@ class Config:
         )
 
     def set_personal_project_pool_size(self, value: int):
-        """设置单个 Token 默认维护的项目池数量，仅影响项目轮换"""
+        """Set the default project-pool size maintained per token; affects project rotation only."""
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["personal_project_pool_size"] = max(
@@ -577,14 +577,14 @@ class Config:
         )
 
     def set_personal_idle_tab_ttl_seconds(self, value: int):
-        """设置内置浏览器打码标签页空闲超时(秒)"""
+        """设置Idle timeout in seconds for built-in browser captcha tabs."""
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["personal_idle_tab_ttl_seconds"] = max(60, int(value))
 
     @property
     def browser_personal_fresh_restart_every_n_solves(self) -> int:
-        """内置浏览器成功打码多少次后使用全新 profile 重启，0 表示禁用。"""
+        """Restart the built-in browser with a fresh profile after this many successful captcha solves; 0 disables this behavior."""
         value = self._config.get("captcha", {}).get(
             "browser_personal_fresh_restart_every_n_solves", 10
         )
@@ -594,7 +594,7 @@ class Config:
             return 10
 
     def set_browser_personal_fresh_restart_every_n_solves(self, value: int):
-        """设置内置浏览器 fresh profile 轮换阈值。"""
+        """Set the fresh-profile rotation threshold for the built-in browser."""
         if "captcha" not in self._config:
             self._config["captcha"] = {}
         self._config["captcha"]["browser_personal_fresh_restart_every_n_solves"] = max(
