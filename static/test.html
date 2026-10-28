@@ -175,15 +175,34 @@ const STATE = { selectedModel: null, modelConfig: null, images: [], generating: 
 <script>
     I18n.ready.then(() => {
 
+// Normalize legacy underscore ids so both catalog styles classify identically.
+function normalizeModelId(modelId) {
+  return String(modelId).toLowerCase().replace(/_/g, "-");
+}
+
+// Model family classification, shared by the sidebar, the tags, and the image upload.
+function classifyModel(modelId) {
+  const norm = normalizeModelId(modelId);
+  if (norm.includes("image")) return "image";
+  if (norm.includes("4k") || norm.includes("1080p")) return "upsample";
+  if (norm.includes("i2v") || norm.includes("interpolation")) return "i2v";
+  if (norm.includes("r2v")) return "r2v";
+  if (norm.includes("omni") || norm.includes("abra")) return "omni";
+  if (norm.includes("extend")) return "extend";
+  return "t2v";
+}
+
 // Model categories for sidebar
 const MODEL_CATEGORIES = {
-  "Gemini 3.1 Flash 图片": { filter: m => m.startsWith("gemini-3.1-flash-image") },
-  "Nano Banana 2 Lite 图片": { filter: m => m.startsWith("gemini-3.1-flash-lite-image") },
-  "Gemini 3.0 Pro 图片": { filter: m => m.startsWith("gemini-3.0-pro-image") },
-  "Veo 3.1 文生视频 (T2V)": { filter: m => m.startsWith("veo_3_1_t2v") && !m.includes("4k") && !m.includes("1080p") },
-  "Veo 3.1 图生视频 (I2V)": { filter: m => m.startsWith("veo_3_1_i2v") && !m.includes("4k") && !m.includes("1080p") },
-  "Veo 3.1 多图视频 (R2V)": { filter: m => m.startsWith("veo_3_1_r2v") && !m.includes("4k") && !m.includes("1080p") },
-  "视频放大 (Upsample)": { filter: m => !m.includes("image") && (m.includes("4k") || m.includes("1080p")) },
+  "Gemini 3.1 Flash 图片": { filter: m => normalizeModelId(m).startsWith("gemini-3.1-flash-image") },
+  "Nano Banana 2 Lite 图片": { filter: m => normalizeModelId(m).startsWith("gemini-3.1-flash-lite-image") },
+  "Gemini 3.0 Pro 图片": { filter: m => normalizeModelId(m).startsWith("gemini-3.0-pro-image") },
+  "Veo 3.1 文生视频 (T2V)": { filter: m => classifyModel(m) === "t2v" },
+  "Veo 3.1 图生视频 (I2V)": { filter: m => classifyModel(m) === "i2v" },
+  "Veo 3.1 多图视频 (R2V)": { filter: m => classifyModel(m) === "r2v" },
+  "Omni 1.1 Flash 视频": { filter: m => classifyModel(m) === "omni" },
+  "视频续写 (Extend)": { filter: m => classifyModel(m) === "extend" },
+  "视频放大 (Upsample)": { filter: m => classifyModel(m) === "upsample" },
 };
 
 const FALLBACK_MODELS = {
@@ -270,7 +289,11 @@ const FALLBACK_MODELS = {
   "veo_3_1_r2v_fast_ultra_relaxed_8s": "Video generation (alias) - R2V fast ultra relaxed 8s, supports landscape/portrait via generationConfig",
   "veo_3_1_r2v_fast_landscape_ultra_relaxed_8s": "Video generation - R2V fast ultra relaxed 8s landscape",
   "veo_3_1_r2v_fast_landscape_ultra_4k": "Video upsample alias - generate R2V landscape then upscale to 4K",
-  "veo_3_1_r2v_fast_landscape_ultra_1080p": "Video upsample alias - generate R2V landscape then upscale to 1080P",
+  "omni-1.1-flash": "Video generation - Omni 1.1 Flash 8s landscape, optional reference images",
+  "omni-1.1-flash-4s-landscape": "Video generation - Omni 1.1 Flash 4s landscape",
+  "omni-1.1-flash-4s-portrait": "Video generation - Omni 1.1 Flash 4s portrait",
+  "omni-1.1-flash-8s-landscape": "Video generation - Omni 1.1 Flash 8s landscape",
+  "omni-1.1-flash-8s-portrait": "Video generation - Omni 1.1 Flash 8s portrait",
 };
 
 let ALL_MODELS = {};
@@ -315,20 +338,18 @@ function renderSidebarFallback() {
 }
 
 function getModelType(modelId) {
-  if (modelId.includes("image")) return "image";
-  return "video";
+  return classifyModel(modelId) === "image" ? "image" : "video";
 }
 
 function getModelMeta(modelId) {
-  // Determine supports_images, min/max from model name patterns
-  const isI2V = modelId.includes("i2v");
-  const isR2V = modelId.includes("r2v");
-  const isT2V = modelId.includes("t2v");
-  const isImage = getModelType(modelId) === "image";
+  // Determine supports_images, min/max from the model family
+  const family = classifyModel(modelId);
 
-  if (isImage) return { type: "image", supportsImages: true, minImages: 0, maxImages: 5 };
-  if (isI2V) return { type: "video", supportsImages: true, minImages: 1, maxImages: 2 };
-  if (isR2V) return { type: "video", supportsImages: true, minImages: 0, maxImages: 3 };
+  if (family === "image") return { type: "image", supportsImages: true, minImages: 0, maxImages: 5 };
+  if (family === "i2v") return { type: "video", supportsImages: true, minImages: 1, maxImages: 2 };
+  if (family === "r2v" || family === "omni") {
+    return { type: "video", supportsImages: true, minImages: 0, maxImages: 3 };
+  }
   return { type: "video", supportsImages: false, minImages: 0, maxImages: 0 };
 }
 
