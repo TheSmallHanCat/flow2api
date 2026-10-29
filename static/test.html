@@ -59,12 +59,13 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #7c8aff; }
 
 .form-group { margin-bottom: 14px; }
 .form-group label { display: block; font-size: 13px; color: #888; margin-bottom: 6px; }
-.form-group textarea {
+.form-group textarea, .form-group input[type="text"] {
   width: 100%; background: #0f1117; border: 1px solid #2a2b3a; color: #e1e1e6;
-  padding: 10px 12px; border-radius: 8px; font-size: 14px; resize: vertical; min-height: 80px;
+  padding: 10px 12px; border-radius: 8px; font-size: 14px;
   font-family: inherit;
 }
-.form-group textarea:focus { outline: none; border-color: #7c8aff; }
+.form-group textarea { resize: vertical; min-height: 80px; }
+.form-group textarea:focus, .form-group input[type="text"]:focus { outline: none; border-color: #7c8aff; }
 
 .image-upload-area {
   border: 2px dashed #2a2b3a; border-radius: 8px; padding: 20px; text-align: center;
@@ -148,6 +149,11 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #7c8aff; }
           <textarea id="promptInput" placeholder="描述你想生成的内容..." data-i18n-placeholder="描述你想生成的内容...">一只可爱的橘猫趴在窗台上晒太阳，窗外是樱花盛开的春天</textarea>
         </div>
 
+        <div class="form-group" id="videoSourceGroup" style="display:none;">
+          <label for="videoMediaId"><span data-i18n="源视频媒体 ID">源视频媒体 ID</span></label>
+          <input type="text" id="videoMediaId" placeholder="输入源视频的 mediaGenerationId" data-i18n-placeholder="输入源视频的 mediaGenerationId" autocomplete="off">
+        </div>
+
         <div class="form-group" id="imageUploadGroup" style="display:none;">
           <label><span data-i18n="上传图片">上传图片</span> <span id="imageLimit" style="color:#666;font-size:12px;"></span></label>
           <div class="image-upload-area" id="imageUploadArea">
@@ -180,16 +186,22 @@ function normalizeModelId(modelId) {
   return String(modelId).toLowerCase().replace(/_/g, "-");
 }
 
-// Model family classification, shared by the sidebar, the tags, and the image upload.
-function classifyModel(modelId) {
+// Model family determines reference inputs independently of output resolution.
+function getModelFamily(modelId) {
   const norm = normalizeModelId(modelId);
   if (norm.includes("image")) return "image";
-  if (norm.includes("4k") || norm.includes("1080p")) return "upsample";
   if (norm.includes("i2v") || norm.includes("interpolation")) return "i2v";
   if (norm.includes("r2v")) return "r2v";
   if (norm.includes("omni") || norm.includes("abra")) return "omni";
   if (norm.includes("extend")) return "extend";
   return "t2v";
+}
+
+function classifyModel(modelId) {
+  const family = getModelFamily(modelId);
+  const norm = normalizeModelId(modelId);
+  if (family !== "image" && (norm.includes("4k") || norm.includes("1080p"))) return "upsample";
+  return family;
 }
 
 // Model categories for sidebar
@@ -289,6 +301,7 @@ const FALLBACK_MODELS = {
   "veo_3_1_r2v_fast_ultra_relaxed_8s": "Video generation (alias) - R2V fast ultra relaxed 8s, supports landscape/portrait via generationConfig",
   "veo_3_1_r2v_fast_landscape_ultra_relaxed_8s": "Video generation - R2V fast ultra relaxed 8s landscape",
   "veo_3_1_r2v_fast_landscape_ultra_4k": "Video upsample alias - generate R2V landscape then upscale to 4K",
+  "veo_3_1_r2v_fast_landscape_ultra_1080p": "Video upsample alias - generate R2V landscape then upscale to 1080P",
   "omni-1.1-flash": "Video generation - Omni 1.1 Flash 8s landscape, optional reference images",
   "omni-1.1-flash-4s-landscape": "Video generation - Omni 1.1 Flash 4s landscape",
   "omni-1.1-flash-4s-portrait": "Video generation - Omni 1.1 Flash 4s portrait",
@@ -338,17 +351,20 @@ function renderSidebarFallback() {
 }
 
 function getModelType(modelId) {
-  return classifyModel(modelId) === "image" ? "image" : "video";
+  return getModelFamily(modelId) === "image" ? "image" : "video";
 }
 
 function getModelMeta(modelId) {
   // Determine supports_images, min/max from the model family
-  const family = classifyModel(modelId);
+  const family = getModelFamily(modelId);
 
   if (family === "image") return { type: "image", supportsImages: true, minImages: 0, maxImages: 5 };
   if (family === "i2v") return { type: "video", supportsImages: true, minImages: 1, maxImages: 2 };
   if (family === "r2v" || family === "omni") {
     return { type: "video", supportsImages: true, minImages: 0, maxImages: 3 };
+  }
+  if (family === "extend") {
+    return { type: "video", supportsImages: false, minImages: 0, maxImages: 0, requiresVideoSource: true };
   }
   return { type: "video", supportsImages: false, minImages: 0, maxImages: 0 };
 }
@@ -427,6 +443,9 @@ function selectModel(modelId) {
     uploadGroup.style.display = "none";
   }
 
+  document.getElementById("videoSourceGroup").style.display = meta.requiresVideoSource ? "block" : "none";
+  document.getElementById("videoMediaId").value = "";
+
   // Reset image previews
   document.getElementById("imagePreviewList").innerHTML = "";
   document.getElementById("imageHint").style.display = "block";
@@ -502,6 +521,12 @@ async function generate() {
   if (!prompt) { alert(I18n.t("请输入提示词")); return; }
   if (!apiKey) { alert(I18n.t("请输入 API Key")); return; }
   if (!baseUrl) { alert(I18n.t("请输入服务地址")); return; }
+  const videoMediaId = STATE.modelConfig.requiresVideoSource
+    ? document.getElementById("videoMediaId").value.trim() : "";
+  if (STATE.modelConfig.requiresVideoSource && !videoMediaId) {
+    alert(I18n.t("请输入源视频的 mediaGenerationId"));
+    return;
+  }
 
   STATE.generating = true;
   const btn = document.getElementById("btnGenerate");
@@ -523,6 +548,9 @@ async function generate() {
   STATE.images.forEach(dataUrl => {
     content.push({ type: "image_url", image_url: { url: dataUrl } });
   });
+  if (videoMediaId) {
+    content.push({ type: "image_url", image_url: { url: `extend://${videoMediaId}` } });
+  }
 
   const messages = [{ role: "user", content: content.length === 1 ? prompt : content }];
 

@@ -1,9 +1,11 @@
 """Browser checks use local pages and mocked API responses, without real accounts."""
 
+import asyncio
 import base64
 import json
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -599,3 +601,164 @@ def test_extension_language_preserves_settings_and_translates_status(browser_pag
         "Settings saved. The background connection will reconnect automatically."
     )
     assert page.locator("#routeKey").input_value() == "保存"
+
+
+def test_upscaled_video_models_keep_reference_uploads(browser_page):
+    page, base = browser_page
+    open_page(page, base + "/test")
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jNekAAAAASUVORK5CYII="
+    )
+    for model, limit in [
+        ("veo_3_1_i2v_s_4k", "(1-2 images)"),
+        ("veo_3_1_i2v_s_1080p", "(1-2 images)"),
+        ("veo_3_1_r2v_fast_landscape_ultra_4k", "(0-3 images)"),
+        ("veo_3_1_r2v_fast_landscape_ultra_1080p", "(0-3 images)"),
+    ]:
+        page.locator(f'.model-item[data-model="{model}"]').click()
+        playwright_api.expect(page.locator("#imageUploadGroup")).to_be_visible()
+        playwright_api.expect(page.locator("#imageLimit")).to_have_text(limit)
+        page.locator("#imageFileInput").set_input_files(
+            {"name": "image.png", "mimeType": "image/png", "buffer": image}
+        )
+        playwright_api.expect(page.locator(".image-preview-item")).to_have_count(1)
+
+
+def test_upsample_heading_keeps_both_translations(browser_page):
+    page, base = browser_page
+    open_page(page, base + "/test")
+    heading = page.locator('.section-title[data-category="视频放大 (Upsample)"]')
+    playwright_api.expect(heading).to_contain_text("Video upscaling (Upsample)")
+    page.locator("[data-language-select]").select_option("zh-CN")
+    playwright_api.expect(heading).to_contain_text("视频放大 (Upsample)")
+    page.locator("[data-language-select]").select_option("en")
+    playwright_api.expect(heading).to_contain_text("Video upscaling (Upsample)")
+
+
+def test_extend_requires_source_and_sends_backend_compatible_reference(browser_page):
+    from src.api.routes import _extract_prompt_and_images_from_openai_messages
+    from src.core.models import ChatMessage
+
+    page, base = browser_page
+    models = [
+        "veo-3.1-fast-extend-8s-landscape",
+        "omni-1.1-flash-4s-landscape",
+        "veo-3.1-fast-8s-landscape",
+    ]
+    page.route(
+        "**/v1/models",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"data": [{"id": model} for model in models]}),
+        ),
+    )
+    requests = []
+
+    def generate_response(route):
+        requests.append(route.request.post_data_json)
+        route.fulfill(
+            content_type="text/event-stream",
+            body='data: {"choices":[{"delta":{"content":"completed"}}]}\n\n'
+            + "data: [DONE]\n\n",
+        )
+
+    page.route("**/v1/chat/completions", generate_response)
+    open_page(page, base + "/test")
+    page.locator("#apiKey").fill("local-test-key")
+    page.locator("#apiKey").press("Tab")
+    page.locator(f'.model-item[data-model="{models[0]}"]').click()
+    source = page.locator("#videoMediaId")
+    playwright_api.expect(source).to_be_visible()
+    playwright_api.expect(page.locator("#imageUploadGroup")).to_be_hidden()
+    playwright_api.expect(page.locator('label[for="videoMediaId"]')).to_have_text(
+        "Source video media ID"
+    )
+    dialogs = []
+
+    def dismiss_dialog(dialog):
+        dialogs.append(dialog.message)
+        dialog.accept()
+
+    page.on("dialog", dismiss_dialog)
+    for language, message in [
+        ("en", "Enter the source video's mediaGenerationId"),
+        ("zh-CN", "请输入源视频的 mediaGenerationId"),
+    ]:
+        page.locator("[data-language-select]").select_option(language)
+        source.fill("   ")
+        page.locator("#btnGenerate").click()
+        assert dialogs[-1] == message
+        assert requests == []
+        playwright_api.expect(page.locator("#btnGenerate")).to_be_enabled()
+
+    source.fill("  source-media-id  ")
+    page.locator("#promptInput").fill("Continue the scene")
+    page.locator("[data-language-select]").select_option("en")
+    assert source.input_value() == "  source-media-id  "
+    page.locator("#btnGenerate").click()
+    playwright_api.expect(page.locator("#outputResult pre")).to_have_text("completed")
+    assert len(requests) == 1
+    body = requests[0]
+    assert body["model"] == models[0]
+    assert body["stream"] is True
+    messages = [ChatMessage(**message) for message in body["messages"]]
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        prompt, images, media_id = executor.submit(
+            asyncio.run, _extract_prompt_and_images_from_openai_messages(messages)
+        ).result(timeout=5)
+    assert (prompt, images, media_id) == ("Continue the scene", [], "source-media-id")
+
+    page.locator(f'.model-item[data-model="{models[1]}"]').click()
+    playwright_api.expect(source).to_be_hidden()
+    assert source.input_value() == ""
+    playwright_api.expect(page.locator("#imageUploadGroup")).to_be_visible()
+    playwright_api.expect(page.locator("#imageLimit")).to_have_text("(0-3 images)")
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jNekAAAAASUVORK5CYII="
+    )
+    page.locator("#imageFileInput").set_input_files(
+        {"name": "image.png", "mimeType": "image/png", "buffer": image}
+    )
+    playwright_api.expect(page.locator(".image-preview-item")).to_have_count(1)
+    page.locator("#btnGenerate").click()
+    playwright_api.expect(page.locator("#outputResult pre")).to_have_text("completed")
+    playwright_api.expect(page.locator("#btnGenerate")).to_be_enabled()
+    assert len(requests) == 2
+    content = requests[-1]["messages"][0]["content"]
+    assert content[0] == {"type": "text", "text": "Continue the scene"}
+    assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+    page.locator(f'.model-item[data-model="{models[2]}"]').click()
+    playwright_api.expect(source).to_be_hidden()
+    playwright_api.expect(page.locator("#imageUploadGroup")).to_be_hidden()
+    page.locator("#btnGenerate").click()
+    playwright_api.expect(page.locator("#btnGenerate")).to_be_enabled()
+    assert len(requests) == 3
+    assert requests[-1]["messages"] == [
+        {"role": "user", "content": "Continue the scene"}
+    ]
+
+
+def test_model_tester_displays_all_published_models(browser_page):
+    from src.services.generation_handler import MODEL_CONFIG
+
+    page, base = browser_page
+    models = [
+        {"id": model, "description": config.get("display_name", model)}
+        for model, config in MODEL_CONFIG.items()
+        if config.get("listed", True)
+    ]
+    page.route(
+        "**/v1/models",
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps({"data": models})
+        ),
+    )
+    open_page(page, base + "/test")
+    page.locator("#apiKey").fill("local-test-key")
+    page.locator("#apiKey").press("Tab")
+    items = page.locator(".model-item")
+    playwright_api.expect(items).to_have_count(len(models))
+    assert sorted(
+        items.evaluate_all("items => items.map(item => item.dataset.model)")
+    ) == sorted(model["id"] for model in models)
