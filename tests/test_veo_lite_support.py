@@ -361,6 +361,30 @@ class VeoLiteFlowClientTests(unittest.IsolatedAsyncioTestCase):
             )
         self.client._call_flow_frontend_rpc.assert_awaited_once()
 
+    async def test_unusual_activity_retries_once_then_raises_and_reports(self):
+        unusual = RuntimeError(
+            "Flow frontend RPC rejected: rpc=eb1hJf, error=PUBLIC_ERROR_UNUSUAL_ACTIVITY"
+        )
+        self.client._call_flow_frontend_rpc = AsyncMock(side_effect=unusual)
+        self.client._notify_browser_captcha_error = AsyncMock()
+
+        with patch("src.services.flow_client.asyncio.sleep", new=AsyncMock()):
+            with self.assertRaisesRegex(RuntimeError, "UNUSUAL_ACTIVITY"):
+                await self.client.generate_video_start_image(
+                    at="at-token",
+                    project_id="22222222-2222-2222-2222-222222222222",
+                    prompt="猫猫",
+                    model_key="veo_3_1_i2v_s_fast",
+                    aspect_ratio="VIDEO_ASPECT_RATIO_LANDSCAPE",
+                    start_media_id="33333333-3333-3333-3333-333333333333",
+                    google_cookies="SID=session-cookie",
+                )
+
+        # 同账号只重试一次，剩下交给上层换号
+        self.assertEqual(self.client._call_flow_frontend_rpc.await_count, 2)
+        # 每次被拒都通知打码服务自愈
+        self.assertEqual(self.client._notify_browser_captcha_error.await_count, 2)
+
     async def test_transient_retry_keeps_original_model_key(self):
         operation_id = "11111111-1111-1111-1111-111111111111"
         project_id = "22222222-2222-2222-2222-222222222222"

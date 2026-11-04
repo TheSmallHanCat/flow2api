@@ -2,7 +2,8 @@
 
 import asyncio
 import random
-from typing import Optional, Dict
+import time
+from typing import Optional, Dict, Iterable
 from ..core.models import Token
 from ..core.config import config
 from ..core.account_tiers import (
@@ -13,6 +14,11 @@ from ..core.account_tiers import (
 )
 from .concurrency_manager import ConcurrencyManager
 from ..core.logger import debug_logger
+
+# 配额耗尽 (PUBLIC_ERROR_USER_QUOTA_REACHED) 后降低该 token 优先级的时长
+QUOTA_COOLDOWN_SECONDS = 3600
+# 风控拒绝 (PUBLIC_ERROR_UNUSUAL_ACTIVITY) 后降低该 token 优先级的时长
+RISK_COOLDOWN_SECONDS = 300
 
 
 class LoadBalancer:
@@ -32,6 +38,53 @@ class LoadBalancer:
             "default": None,
         }
         self._rr_lock = asyncio.Lock()
+        # (token_id, "image"/"video") -> monotonic expiry; quota-exhausted tokens sort last
+        self._quota_cooldown: Dict[tuple[int, str], float] = {}
+
+    @staticmethod
+    def _scope(for_image_generation: bool, for_video_generation: bool) -> Optional[str]:
+        if for_image_generation:
+            return "image"
+        if for_video_generation:
+            return "video"
+        return None
+
+    def mark_quota_cooldown(
+        self, token_id: int, scope: str, seconds: float = QUOTA_COOLDOWN_SECONDS
+    ):
+        """配额耗尽后让该 token 在一段时间内排在候选末尾（不剔除，避免全部冷却时无号可用）。"""
+        self._quota_cooldown[(token_id, scope)] = time.monotonic() + seconds
+        debug_logger.log_warning(
+            f"[LOAD_BALANCER] Token {token_id} {scope} 配额耗尽，冷却 {int(seconds)}s 内优先使用其他账号"
+        )
+
+    def mark_risk_cooldown(
+        self, token_id: int, scope: str, seconds: float = RISK_COOLDOWN_SECONDS
+    ):
+        """风控拒绝后短暂让该 token 排在候选末尾；不会缩短已有的配额冷却。"""
+        key = (token_id, scope)
+        expires_at = time.monotonic() + seconds
+        if self._quota_cooldown.get(key, 0) < expires_at:
+            self._quota_cooldown[key] = expires_at
+        debug_logger.log_warning(
+            f"[LOAD_BALANCER] Token {token_id} {scope} 触发风控，冷却 {int(seconds)}s 内优先使用其他账号"
+        )
+
+    def clear_quota_cooldown(self, token_id: int, scope: Optional[str] = None):
+        for key in list(self._quota_cooldown):
+            if key[0] == token_id and (scope is None or key[1] == scope):
+                self._quota_cooldown.pop(key, None)
+
+    def _in_quota_cooldown(self, token_id: int, scope: Optional[str]) -> bool:
+        if scope is None:
+            return False
+        expires_at = self._quota_cooldown.get((token_id, scope))
+        if expires_at is None:
+            return False
+        if time.monotonic() >= expires_at:
+            self._quota_cooldown.pop((token_id, scope), None)
+            return False
+        return True
 
     async def _get_pending_count(
         self, token_id: int, for_image_generation: bool, for_video_generation: bool
@@ -173,6 +226,7 @@ class LoadBalancer:
         reserve: bool = False,
         enforce_concurrency_filter: bool = True,
         track_pending: bool = False,
+        exclude_token_ids: Optional[Iterable[int]] = None,
     ) -> Optional[Token]:
         """
         Select a token using load-aware balancing
@@ -189,6 +243,7 @@ class LoadBalancer:
             track_pending:
                 Whether to count the selected token as a queued request immediately.
                 This smooths burst distribution before the hard concurrency slot is acquired.
+            exclude_token_ids: Tokens to skip (e.g. ones that already failed this request).
 
         Returns:
             Selected token or None if no available tokens
@@ -210,8 +265,13 @@ class LoadBalancer:
         available_tokens = []
         filtered_reasons = {}
         required_tier = get_required_paygate_tier_for_model(model)
+        excluded = set(exclude_token_ids or ())
+        scope = self._scope(for_image_generation, for_video_generation)
 
         for token in active_tokens:
+            if token.id in excluded:
+                filtered_reasons[token.id] = "本次请求已失败过"
+                continue
             normalized_tier = normalize_user_paygate_tier(token.user_paygate_tier)
             if model and not supports_model_for_tier(model, normalized_tier):
                 filtered_reasons[token.id] = (
@@ -265,6 +325,7 @@ class LoadBalancer:
                 "inflight": inflight,
                 "remaining": remaining,
                 "needs_refresh": self.token_manager.needs_at_refresh(token),
+                    "quota_cooldown": self._in_quota_cooldown(token.id, scope),
                     "random": random.random(),
                 }
             )
@@ -321,6 +382,9 @@ class LoadBalancer:
         if ready_candidates and refresh_candidates:
             available_tokens = ready_candidates + refresh_candidates
 
+        # 配额冷却中的 token 排到最后（稳定排序，保持上面的顺序）
+        available_tokens.sort(key=lambda item: 1 if item["quota_cooldown"] else 0)
+
         debug_logger.log_info("[LOAD_BALANCER] 候选Token负载:")
         for item in available_tokens:
             token = item["token"]
@@ -328,7 +392,8 @@ class LoadBalancer:
             debug_logger.log_info(
                 f"[LOAD_BALANCER]   - Token {token.id} ({token.email}) "
                 f"inflight={item['inflight']}, remaining={remaining}, "
-                f"needs_refresh={item['needs_refresh']}, credits={token.credits}"
+                f"needs_refresh={item['needs_refresh']}, "
+                f"quota_cooldown={item['quota_cooldown']}, credits={token.credits}"
             )
 
         # 只为候选列表中真正尝试到的 token 做 AT 校验，避免每次请求把所有 token 全扫一遍

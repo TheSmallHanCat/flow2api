@@ -15,6 +15,10 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from ..core.logger import debug_logger
 from .browser_cookie_utils import validate_flow_cookie_storage
 
+# 视频提交被 PUBLIC_ERROR_UNUSUAL_ACTIVITY 拒绝时，同账号最多再重试的次数；
+# 之后交给上层切换账号（同账号同 IP 立刻重试大概率仍被风控）。
+UNUSUAL_ACTIVITY_SAME_TOKEN_RETRIES = 1
+
 def _safe_updated_flow_cookies(owner, original) -> str:
     """读取 Cookie 最新快照，缺失实现时安全降级。
 
@@ -548,6 +552,7 @@ class CurrentFlowClientMixin:
             model_keys.append(model_keys[0].replace("_relaxed", ""))
         attempt_budget = max(max_retries, len(model_keys))
         fallback_model_key: Optional[str] = None
+        unusual_activity_hits = 0
         last_error: Optional[Exception] = None
         for retry_attempt in range(attempt_budget):
             browser_id = None
@@ -610,7 +615,37 @@ class CurrentFlowClientMixin:
                         f"{request_model_key} -> {model_keys[-1]}"
                     )
                     continue
-                if retry_attempt >= max_retries - 1:
+                retry_handler = getattr(
+                    self, "_handle_retryable_generation_error", None
+                )
+                if retry_handler is None:
+                    if retry_attempt >= max_retries - 1:
+                        raise
+                    continue
+                if "public_error_unusual_activity" in error_text:
+                    unusual_activity_hits += 1
+                if (
+                    retry_attempt >= max_retries - 1
+                    or unusual_activity_hits > UNUSUAL_ACTIVITY_SAME_TOKEN_RETRIES
+                ):
+                    # 不再同号重试，但仍需通知打码服务自愈（清缓存/重建浏览器）
+                    await self._notify_browser_captcha_error(
+                        browser_id=getattr(error, "browser_ref", None) or browser_id,
+                        project_id=project_id,
+                        error_reason=self._get_retry_reason(str(error))
+                        or str(error)[:120],
+                        error_message=str(error),
+                    )
+                    raise
+                should_retry = await retry_handler(
+                    error,
+                    retry_attempt,
+                    max_retries,
+                    browser_id,
+                    project_id,
+                    "[VIDEO] ",
+                )
+                if not should_retry:
                     raise
             finally:
                 await self._notify_browser_captcha_request_finished(browser_id)

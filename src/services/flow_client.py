@@ -4748,6 +4748,9 @@ class _FlowClientBase(FlowFrontendMixin):
             return 2
         if "recaptcha" in error_lower:
             return 2
+        if "public_error_unusual_activity" in error_lower:
+            # 风控拒绝后立刻重试几乎必然再次被拒，留出打码服务自愈时间
+            return 3
         return 1
 
     def _resolve_recaptcha_runtime_settings(
