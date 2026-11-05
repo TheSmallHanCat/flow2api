@@ -4,10 +4,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.services.generation_handler import (
+    MAX_RISK_FAILOVER_ATTEMPTS,
     MAX_TOKEN_FAILOVER_ATTEMPTS,
     GenerationHandler,
 )
-from src.services.load_balancer import LoadBalancer
+from src.services.load_balancer import (
+    RISK_COOLDOWN_MAX_SECONDS,
+    RISK_COOLDOWN_SECONDS,
+    LoadBalancer,
+)
 
 
 MODEL = "veo-3.1-fast-i2v-6s-landscape"
@@ -28,7 +33,7 @@ def _token(token_id):
     )
 
 
-def _build_handler(tokens, quota_token_ids, error=QUOTA_ERROR):
+def _build_handler(tokens, quota_token_ids, error=QUOTA_ERROR, errors_by_token=None):
     token_manager = MagicMock()
     token_manager.get_active_tokens = AsyncMock(return_value=tokens)
     token_manager.ensure_valid_token = AsyncMock(side_effect=lambda t: t)
@@ -37,6 +42,7 @@ def _build_handler(tokens, quota_token_ids, error=QUOTA_ERROR):
     token_manager.record_error = AsyncMock()
     token_manager.record_usage = AsyncMock()
     token_manager.record_success = AsyncMock()
+    token_manager.refresh_credits = AsyncMock(return_value=10)
 
     load_balancer = LoadBalancer(token_manager)
     load_balancer._check_extension_route = AsyncMock(return_value=(True, ""))
@@ -53,6 +59,8 @@ def _build_handler(tokens, quota_token_ids, error=QUOTA_ERROR):
 
     async def fake_video(token, *args, generation_result=None, **kwargs):
         attempted.append(token.id)
+        if errors_by_token and token.id in errors_by_token:
+            raise Exception(errors_by_token[token.id])
         if token.id in quota_token_ids:
             raise error() if callable(error) else Exception(error)
         handler._mark_generation_succeeded(generation_result)
@@ -84,7 +92,7 @@ class TokenQuotaFailoverTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(handler.load_balancer._in_quota_cooldown(2, "video"))
 
     async def test_gives_up_after_max_attempts(self):
-        tokens = [_token(i) for i in range(1, 6)]
+        tokens = [_token(i) for i in range(1, MAX_TOKEN_FAILOVER_ATTEMPTS + 3)]
         handler, attempted = _build_handler(tokens, {t.id for t in tokens})
 
         chunks = await _collect(handler)
@@ -93,7 +101,23 @@ class TokenQuotaFailoverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(set(attempted)), MAX_TOKEN_FAILOVER_ATTEMPTS)
         error = json.loads(chunks[-1])["error"]
         self.assertIn("PUBLIC_ERROR_USER_QUOTA_REACHED", error["message"])
+        self.assertIn(f"已尝试 {MAX_TOKEN_FAILOVER_ATTEMPTS} 个账号均失败", error["message"])
         self.assertEqual(handler._log_request.await_args.args[4], 500)
+        # 最后一个失败账号也要记录在性能追踪里
+        perf = handler._log_request.await_args.args[3]["performance"]
+        self.assertEqual(len(perf["token_failovers"]), MAX_TOKEN_FAILOVER_ATTEMPTS)
+
+    async def test_quota_error_records_refreshed_credits(self):
+        handler, _ = _build_handler([_token(1), _token(2)], {1})
+
+        with patch("src.services.load_balancer.random.random", side_effect=[0.1, 0.9] * 4):
+            await _collect(handler)
+
+        handler.token_manager.refresh_credits.assert_awaited_once_with(1)
+        lb = handler.load_balancer
+        self.assertTrue(lb._in_quota_cooldown(1, "video", 10))
+        # 余额回升（充值/额度刷新）后提前解除冷却
+        self.assertFalse(lb._in_quota_cooldown(1, "video", 500))
 
     async def test_reports_quota_error_when_no_token_left(self):
         handler, attempted = _build_handler([_token(1), _token(2)], {1, 2})
@@ -135,6 +159,58 @@ class TokenUnusualActivityFailoverTests(unittest.IsolatedAsyncioTestCase):
         quota_expiry = lb._quota_cooldown[(1, "video")]
         lb.mark_risk_cooldown(1, "video")
         self.assertEqual(lb._quota_cooldown[(1, "video")], quota_expiry)
+
+    async def test_risk_failures_have_their_own_budget(self):
+        tokens = [_token(i) for i in range(1, 7)]
+        handler, attempted = _build_handler(
+            tokens, set(), errors_by_token={t.id: UNUSUAL_ERROR for t in tokens}
+        )
+
+        chunks = await _collect(handler)
+
+        self.assertEqual(len(attempted), MAX_RISK_FAILOVER_ATTEMPTS)
+        error = json.loads(chunks[-1])["error"]["message"]
+        self.assertIn("PUBLIC_ERROR_UNUSUAL_ACTIVITY", error)
+        self.assertIn("触发风控", error)
+
+    async def test_quota_failures_do_not_use_risk_budget(self):
+        # 复现线上请求：两个账号风控、一个账号额度不足，第四个账号可用
+        errors = {7: UNUSUAL_ERROR, 9: UNUSUAL_ERROR, 1: QUOTA_ERROR}
+        tokens = [_token(i) for i in (7, 9, 1, 5)]
+        handler, attempted = _build_handler(tokens, set(), errors_by_token=errors)
+
+        # 固定打散顺序为 7 -> 9 -> 1 -> 5（每轮只对未排除的候选取随机数）
+        order = [0.1, 0.2, 0.3, 0.9, 0.2, 0.3, 0.9, 0.3, 0.9, 0.9]
+        with patch("src.services.load_balancer.random.random", side_effect=order):
+            chunks = await _collect(handler)
+
+        self.assertEqual(attempted, [7, 9, 1, 5])
+        self.assertNotIn("error", json.loads(chunks[-1]))
+
+    async def test_failure_summary_lists_each_account(self):
+        errors = {7: UNUSUAL_ERROR, 1: QUOTA_ERROR}
+        handler, _ = _build_handler(
+            [_token(7), _token(1)], set(), errors_by_token=errors
+        )
+
+        chunks = await _collect(handler)
+
+        error = json.loads(chunks[-1])["error"]["message"]
+        self.assertIn("已尝试 2 个账号均失败", error)
+        self.assertIn("#7 触发风控", error)
+        self.assertIn("#1 配额耗尽", error)
+
+    async def test_risk_cooldown_escalates_and_resets_on_success(self):
+        handler, _ = _build_handler([_token(1)], set())
+        lb = handler.load_balancer
+        durations = [lb.mark_risk_cooldown(1, "video") for _ in range(5)]
+        self.assertEqual(durations[0], RISK_COOLDOWN_SECONDS)
+        self.assertGreater(durations[1], durations[0])
+        self.assertEqual(durations[-1], RISK_COOLDOWN_MAX_SECONDS)
+
+        lb.clear_quota_cooldown(1, "video")
+        self.assertFalse(lb._in_quota_cooldown(1, "video"))
+        self.assertEqual(lb.mark_risk_cooldown(1, "video"), RISK_COOLDOWN_SECONDS)
 
     async def test_uncertain_submission_is_not_failed_over(self):
         def uncertain():

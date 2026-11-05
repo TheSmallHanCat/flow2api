@@ -33,8 +33,11 @@ def _video_poll_attempt_budget(
     return attempts * (3 if upsample else 1)
 
 
-# 账号配额耗尽时，单个请求最多尝试的账号数（含首个账号）
-MAX_TOKEN_FAILOVER_ATTEMPTS = 3
+# 账号配额耗尽/风控时，单个请求最多尝试的账号数（含首个账号）
+MAX_TOKEN_FAILOVER_ATTEMPTS = 6
+# 其中因风控 (UNUSUAL_ACTIVITY) 失败的账号数上限：每次风控要耗费两轮打码，
+# 而配额耗尽的账号会立即失败，不占用这部分额度
+MAX_RISK_FAILOVER_ATTEMPTS = 3
 
 
 # Model configuration
@@ -1658,6 +1661,8 @@ class GenerationHandler:
         # 2. 选择Token（账号配额耗尽时自动切换到其他账号重试）
         failed_token_ids: set = set()
         last_failover_error: Optional[str] = None
+        failover_summary: List[str] = []
+        risk_failures = 0
         for token_attempt in range(MAX_TOKEN_FAILOVER_ATTEMPTS):
             token = None
             generation_result = self._create_generation_result()
@@ -1702,8 +1707,8 @@ class GenerationHandler:
                     error_msg = self._get_no_token_error_message(generation_type)
                 if last_failover_error:
                     error_msg = (
-                        f"{last_failover_error}（已尝试 {len(failed_token_ids)} 个账号，"
-                        f"没有其他可切换的账号）"
+                        f"{last_failover_error}（已尝试 {len(failed_token_ids)} 个账号均失败: "
+                        f"{', '.join(failover_summary)}；没有其他可切换的账号）"
                     )
                 debug_logger.log_error(f"[GENERATION] {error_msg}")
                 record_generation_result(
@@ -1983,19 +1988,27 @@ class GenerationHandler:
                 ):
                     scope = "image" if generation_type == "image" else "video"
                     if is_quota_error:
-                        self.load_balancer.mark_quota_cooldown(token.id, scope)
+                        credits = await self._refresh_token_credits(token)
+                        self.load_balancer.mark_quota_cooldown(
+                            token.id, scope, credits=credits
+                        )
                         failover_reason = "配额耗尽"
                         failover_notice = "当前账号配额已用尽，正在切换其他账号重试...\n"
                     else:
+                        risk_failures += 1
                         self.load_balancer.mark_risk_cooldown(token.id, scope)
                         failover_reason = "触发风控"
                         failover_notice = "当前账号触发风控，正在切换其他账号重试...\n"
                     failed_token_ids.add(token.id)
                     last_failover_error = error_msg
-                    if token_attempt < MAX_TOKEN_FAILOVER_ATTEMPTS - 1:
-                        perf_trace.setdefault("token_failovers", []).append(
-                            {"token_id": token.id, "error": str(e)[:200]}
-                        )
+                    failover_summary.append(f"#{token.id} {failover_reason}")
+                    perf_trace.setdefault("token_failovers", []).append(
+                        {"token_id": token.id, "error": str(e)[:200]}
+                    )
+                    if (
+                        token_attempt < MAX_TOKEN_FAILOVER_ATTEMPTS - 1
+                        and risk_failures < MAX_RISK_FAILOVER_ATTEMPTS
+                    ):
                         debug_logger.log_warning(
                             f"[GENERATION] Token {token.id} {failover_reason}，切换账号重试 "
                             f"({token_attempt + 2}/{MAX_TOKEN_FAILOVER_ATTEMPTS})"
@@ -2003,6 +2016,11 @@ class GenerationHandler:
                         if stream:
                             yield self._create_stream_chunk(failover_notice)
                         continue
+                    if len(failover_summary) > 1:
+                        error_msg = (
+                            f"{error_msg}（已尝试 {len(failed_token_ids)} 个账号均失败: "
+                            f"{', '.join(failover_summary)}）"
+                        )
                 if token:
                     if self._should_count_token_error(e):
                         await self.token_manager.record_error(token.id)
@@ -2057,6 +2075,21 @@ class GenerationHandler:
     def _is_quota_exhausted_error(error: Exception) -> bool:
         """账号配额耗尽：换一个账号通常可以成功。"""
         return "public_error_user_quota_reached" in str(error or "").lower()
+
+    async def _refresh_token_credits(self, token) -> Optional[int]:
+        """配额耗尽后刷新并落库余额，作为冷却解除的基准；失败时退回已知余额。"""
+        try:
+            return int(
+                await asyncio.wait_for(
+                    self.token_manager.refresh_credits(token.id), timeout=15
+                )
+            )
+        except Exception as e:
+            debug_logger.log_warning(
+                f"[GENERATION] 刷新 Token {token.id} 余额失败: {str(e)[:200]}"
+            )
+            credits = getattr(token, "credits", None)
+            return credits if isinstance(credits, int) else None
 
     @staticmethod
     def _is_unusual_activity_error(error: Exception) -> bool:

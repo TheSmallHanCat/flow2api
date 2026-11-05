@@ -15,10 +15,14 @@ from ..core.account_tiers import (
 from .concurrency_manager import ConcurrencyManager
 from ..core.logger import debug_logger
 
-# 配额耗尽 (PUBLIC_ERROR_USER_QUOTA_REACHED) 后降低该 token 优先级的时长
-QUOTA_COOLDOWN_SECONDS = 3600
-# 风控拒绝 (PUBLIC_ERROR_UNUSUAL_ACTIVITY) 后降低该 token 优先级的时长
+# 配额耗尽 (PUBLIC_ERROR_USER_QUOTA_REACHED) 后降低该 token 优先级的最长时长；
+# 期间余额回升（充值/额度刷新）会提前解除
+QUOTA_COOLDOWN_SECONDS = 6 * 3600
+# 风控拒绝 (PUBLIC_ERROR_UNUSUAL_ACTIVITY) 后降低该 token 优先级的时长：
+# 连续被拒按倍数递增 (5m -> 15m -> 45m -> 60m)，成功一次即重置
 RISK_COOLDOWN_SECONDS = 300
+RISK_COOLDOWN_MULTIPLIER = 3
+RISK_COOLDOWN_MAX_SECONDS = 3600
 
 
 class LoadBalancer:
@@ -40,6 +44,10 @@ class LoadBalancer:
         self._rr_lock = asyncio.Lock()
         # (token_id, "image"/"video") -> monotonic expiry; quota-exhausted tokens sort last
         self._quota_cooldown: Dict[tuple[int, str], float] = {}
+        # 配额耗尽时记录的余额；余额高于该值说明已充值，解除冷却
+        self._quota_credits: Dict[tuple[int, str], int] = {}
+        # 连续风控次数，用于递增风控冷却
+        self._risk_streak: Dict[tuple[int, str], int] = {}
 
     @staticmethod
     def _scope(for_image_generation: bool, for_video_generation: bool) -> Optional[str]:
@@ -50,39 +58,76 @@ class LoadBalancer:
         return None
 
     def mark_quota_cooldown(
-        self, token_id: int, scope: str, seconds: float = QUOTA_COOLDOWN_SECONDS
+        self,
+        token_id: int,
+        scope: str,
+        seconds: float = QUOTA_COOLDOWN_SECONDS,
+        credits: Optional[int] = None,
     ):
-        """配额耗尽后让该 token 在一段时间内排在候选末尾（不剔除，避免全部冷却时无号可用）。"""
-        self._quota_cooldown[(token_id, scope)] = time.monotonic() + seconds
+        """配额耗尽后让该 token 排在候选末尾（不剔除，避免全部冷却时无号可用）。
+
+        传入当时的余额后，余额回升即提前解除冷却。
+        """
+        key = (token_id, scope)
+        self._quota_cooldown[key] = time.monotonic() + seconds
+        if credits is None:
+            self._quota_credits.pop(key, None)
+        else:
+            self._quota_credits[key] = credits
         debug_logger.log_warning(
-            f"[LOAD_BALANCER] Token {token_id} {scope} 配额耗尽，冷却 {int(seconds)}s 内优先使用其他账号"
+            f"[LOAD_BALANCER] Token {token_id} {scope} 配额耗尽 (余额: {credits})，"
+            f"冷却 {int(seconds)}s 内优先使用其他账号"
         )
 
     def mark_risk_cooldown(
-        self, token_id: int, scope: str, seconds: float = RISK_COOLDOWN_SECONDS
-    ):
-        """风控拒绝后短暂让该 token 排在候选末尾；不会缩短已有的配额冷却。"""
+        self, token_id: int, scope: str, seconds: Optional[float] = None
+    ) -> float:
+        """风控拒绝后让该 token 排在候选末尾，连续被拒时冷却递增；不会缩短已有的配额冷却。"""
         key = (token_id, scope)
+        streak = self._risk_streak.get(key, 0) + 1
+        self._risk_streak[key] = streak
+        if seconds is None:
+            seconds = min(
+                RISK_COOLDOWN_MAX_SECONDS,
+                RISK_COOLDOWN_SECONDS * RISK_COOLDOWN_MULTIPLIER ** (streak - 1),
+            )
         expires_at = time.monotonic() + seconds
         if self._quota_cooldown.get(key, 0) < expires_at:
             self._quota_cooldown[key] = expires_at
         debug_logger.log_warning(
-            f"[LOAD_BALANCER] Token {token_id} {scope} 触发风控，冷却 {int(seconds)}s 内优先使用其他账号"
+            f"[LOAD_BALANCER] Token {token_id} {scope} 连续第 {streak} 次触发风控，"
+            f"冷却 {int(seconds)}s 内优先使用其他账号"
         )
+        return seconds
 
     def clear_quota_cooldown(self, token_id: int, scope: Optional[str] = None):
-        for key in list(self._quota_cooldown):
-            if key[0] == token_id and (scope is None or key[1] == scope):
-                self._quota_cooldown.pop(key, None)
+        for state in (self._quota_cooldown, self._quota_credits, self._risk_streak):
+            for key in list(state):
+                if key[0] == token_id and (scope is None or key[1] == scope):
+                    state.pop(key, None)
 
-    def _in_quota_cooldown(self, token_id: int, scope: Optional[str]) -> bool:
+    def _in_quota_cooldown(
+        self, token_id: int, scope: Optional[str], credits: Optional[int] = None
+    ) -> bool:
         if scope is None:
             return False
-        expires_at = self._quota_cooldown.get((token_id, scope))
+        key = (token_id, scope)
+        expires_at = self._quota_cooldown.get(key)
         if expires_at is None:
             return False
         if time.monotonic() >= expires_at:
-            self._quota_cooldown.pop((token_id, scope), None)
+            self._quota_cooldown.pop(key, None)
+            self._quota_credits.pop(key, None)
+            return False
+        exhausted_credits = self._quota_credits.get(key)
+        if (
+            exhausted_credits is not None
+            and credits is not None
+            and credits > exhausted_credits
+        ):
+            # 余额比耗尽时高，说明已充值或额度已刷新
+            self._quota_cooldown.pop(key, None)
+            self._quota_credits.pop(key, None)
             return False
         return True
 
@@ -325,7 +370,9 @@ class LoadBalancer:
                 "inflight": inflight,
                 "remaining": remaining,
                 "needs_refresh": self.token_manager.needs_at_refresh(token),
-                    "quota_cooldown": self._in_quota_cooldown(token.id, scope),
+                    "quota_cooldown": self._in_quota_cooldown(
+                        token.id, scope, getattr(token, "credits", None)
+                    ),
                     "random": random.random(),
                 }
             )

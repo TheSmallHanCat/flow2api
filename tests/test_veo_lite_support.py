@@ -361,6 +361,28 @@ class VeoLiteFlowClientTests(unittest.IsolatedAsyncioTestCase):
             )
         self.client._call_flow_frontend_rpc.assert_awaited_once()
 
+    async def test_quota_reached_is_not_retried_on_same_account(self):
+        self.client._call_flow_frontend_rpc = AsyncMock(
+            side_effect=RuntimeError(
+                "Flow frontend RPC rejected: rpc=eb1hJf, error=PUBLIC_ERROR_USER_QUOTA_REACHED"
+            )
+        )
+        self.client._notify_browser_captcha_error = AsyncMock()
+
+        with patch("src.services.flow_client.asyncio.sleep", new=AsyncMock()):
+            with self.assertRaisesRegex(RuntimeError, "QUOTA_REACHED"):
+                await self.client.generate_video_start_image(
+                    at="at-token",
+                    project_id="22222222-2222-2222-2222-222222222222",
+                    prompt="猫猫",
+                    model_key="veo_3_1_i2v_s_fast",
+                    aspect_ratio="VIDEO_ASPECT_RATIO_LANDSCAPE",
+                    start_media_id="33333333-3333-3333-3333-333333333333",
+                    google_cookies="SID=session-cookie",
+                )
+
+        self.client._call_flow_frontend_rpc.assert_awaited_once()
+
     async def test_unusual_activity_retries_once_then_raises_and_reports(self):
         unusual = RuntimeError(
             "Flow frontend RPC rejected: rpc=eb1hJf, error=PUBLIC_ERROR_UNUSUAL_ACTIVITY"
