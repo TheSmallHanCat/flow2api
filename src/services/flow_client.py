@@ -4709,6 +4709,9 @@ class _FlowClientBase(FlowFrontendMixin):
         if "model_access_denied" in error_lower:
             # 账号无对应模型权限，重试不会改变结果
             return None
+        if "public_error_user_quota_reached" in error_lower:
+            # 账号额度不足，同号重试只会白白消耗打码；交给上层换号
+            return None
         if "403" in error_lower:
             return "403错误"
         if "429" in error_lower or "too many requests" in error_lower:
@@ -4748,6 +4751,9 @@ class _FlowClientBase(FlowFrontendMixin):
             return 2
         if "recaptcha" in error_lower:
             return 2
+        if "public_error_unusual_activity" in error_lower:
+            # 风控拒绝后立刻重试几乎必然再次被拒，留出打码服务自愈时间
+            return 3
         return 1
 
     def _resolve_recaptcha_runtime_settings(

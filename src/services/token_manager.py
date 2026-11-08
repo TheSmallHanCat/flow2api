@@ -1437,19 +1437,26 @@ class TokenManager:
 
     # ========== 余额刷新 ==========
 
-    async def refresh_credits(self, token_id: int) -> int:
+    async def refresh_credits(self, token_id: int, *, raise_on_error: bool = False) -> int:
         """刷新Token余额
+
+        Args:
+            raise_on_error: 刷新失败时抛出异常，避免将失败误认为真实零余额。
 
         Returns:
             credits
         """
         token = await self.db.get_token(token_id)
         if not token:
+            if raise_on_error:
+                raise ValueError("Token not found")
             return 0
 
         # 确保AT有效
         token = await self.ensure_valid_token(token)
         if not token:
+            if raise_on_error:
+                raise ValueError("Token validation failed")
             return 0
 
         try:
@@ -1473,4 +1480,6 @@ class TokenManager:
             debug_logger.log_error(
                 f"Failed to refresh credits for token {token_id}: {str(e)}"
             )
+            if raise_on_error:
+                raise
             return 0
