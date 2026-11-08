@@ -1728,6 +1728,10 @@ class GenerationHandler:
             token = None
             generation_result = self._create_generation_result()
             pending_token_state = {"active": False}
+            if token_attempt > 0 and hasattr(
+                self.flow_client, "clear_request_fingerprint"
+            ):
+                self.flow_client.clear_request_fingerprint()
             # 选择本次尝试的 Token
             debug_logger.log_info(f"[GENERATION] 正在选择可用Token...")
             token_select_started_at = time.time()
@@ -2142,7 +2146,8 @@ class GenerationHandler:
         try:
             return int(
                 await asyncio.wait_for(
-                    self.token_manager.refresh_credits(token.id), timeout=15
+                    self.token_manager.refresh_credits(token.id, raise_on_error=True),
+                    timeout=15,
                 )
             )
         except Exception as e:

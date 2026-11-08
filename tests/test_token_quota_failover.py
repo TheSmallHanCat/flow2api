@@ -1,7 +1,10 @@
 import json
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+
+from src.core.config import config
+from src.services.flow_client import FlowClient
 
 from src.services.generation_handler import (
     MAX_RISK_FAILOVER_ATTEMPTS,
@@ -13,6 +16,7 @@ from src.services.load_balancer import (
     RISK_COOLDOWN_SECONDS,
     LoadBalancer,
 )
+from src.services.token_manager import TokenManager
 
 
 MODEL = "veo-3.1-fast-i2v-6s-landscape"
@@ -113,7 +117,9 @@ class TokenQuotaFailoverTests(unittest.IsolatedAsyncioTestCase):
         with patch("src.services.load_balancer.random.random", side_effect=[0.1, 0.9] * 4):
             await _collect(handler)
 
-        handler.token_manager.refresh_credits.assert_awaited_once_with(1)
+        handler.token_manager.refresh_credits.assert_awaited_once_with(
+            1, raise_on_error=True
+        )
         lb = handler.load_balancer
         self.assertTrue(lb._in_quota_cooldown(1, "video", 10))
         # 余额回升（充值/额度刷新）后提前解除冷却
@@ -224,6 +230,142 @@ class TokenUnusualActivityFailoverTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(attempted), 1)
         self.assertIn("PUBLIC_ERROR_UNUSUAL_ACTIVITY", json.loads(chunks[-1])["error"]["message"])
+
+
+class TokenFailoverIsolationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_next_account_prepares_project_without_previous_fingerprint(self):
+        for error in (QUOTA_ERROR, UNUSUAL_ERROR):
+            with self.subTest(error=error):
+                handler, attempted = _build_handler(
+                    [_token(1), _token(2)], {1}, error
+                )
+                flow_client = FlowClient(proxy_manager=None)
+                flow_client.prefill_remote_browser_pool = AsyncMock()
+                handler.flow_client = flow_client
+                project_fingerprints = {}
+
+                async def prepare_project(token_id):
+                    project_fingerprints[token_id] = (
+                        flow_client.get_request_fingerprint()
+                    )
+                    return f"project-{token_id}"
+
+                generate_video = handler._handle_video_generation
+
+                async def video_with_fingerprint(token, *args, **kwargs):
+                    flow_client._set_request_fingerprint(
+                        {
+                            "session_cookies": {"OSID": f"session-{token.id}"},
+                            "proxy_url": f"http://proxy-{token.id}:8080",
+                        }
+                    )
+                    async for chunk in generate_video(token, *args, **kwargs):
+                        yield chunk
+
+                handler.token_manager.ensure_project_exists = AsyncMock(
+                    side_effect=prepare_project
+                )
+                handler._handle_video_generation = video_with_fingerprint
+                with patch(
+                    "src.services.load_balancer.random.random",
+                    side_effect=[0.1, 0.9] * 4,
+                ):
+                    chunks = await _collect(handler)
+
+                self.assertEqual(attempted, [1, 2])
+                self.assertNotIn("error", json.loads(chunks[-1]))
+                self.assertEqual(project_fingerprints, {1: None, 2: None})
+
+
+class TokenCreditRefreshTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.token = _token(1)
+        self.token.at = "unused"
+        self.token.google_cookies = ""
+        self.manager = TokenManager.__new__(TokenManager)
+        self.manager.db = MagicMock()
+        self.manager.db.get_token = AsyncMock(return_value=self.token)
+        self.manager.db.update_token = AsyncMock()
+        self.manager.ensure_valid_token = AsyncMock(return_value=self.token)
+        self.manager.flow_client = MagicMock()
+        self.manager.flow_client.get_credits = AsyncMock()
+        self.handler = GenerationHandler.__new__(GenerationHandler)
+        self.handler.token_manager = self.manager
+
+    async def test_refresh_failure_keeps_cooldown_with_cached_balance(self):
+        self.manager.flow_client.get_credits.side_effect = OSError("connection failed")
+
+        credits = await self.handler._refresh_token_credits(self.token)
+        lb = LoadBalancer(self.manager)
+        lb.mark_quota_cooldown(self.token.id, "video", credits=credits)
+
+        self.assertEqual(credits, self.token.credits)
+        self.manager.db.update_token.assert_not_awaited()
+        self.assertTrue(
+            lb._in_quota_cooldown(self.token.id, "video", self.token.credits)
+        )
+
+    async def test_successful_refresh_preserves_real_zero_balance(self):
+        self.manager.flow_client.get_credits.return_value = {
+            "credits": 0,
+            "userPaygateTier": "PAYGATE_TIER_ONE",
+        }
+
+        credits = await self.handler._refresh_token_credits(self.token)
+
+        self.assertEqual(credits, 0)
+        self.manager.db.update_token.assert_awaited_once_with(
+            self.token.id, credits=0, user_paygate_tier="PAYGATE_TIER_ONE"
+        )
+
+    async def test_default_refresh_keeps_existing_failure_contract(self):
+        self.manager.flow_client.get_credits.side_effect = OSError("connection failed")
+
+        self.assertEqual(await self.manager.refresh_credits(self.token.id), 0)
+        self.manager.db.update_token.assert_not_awaited()
+
+
+class TokenCooldownPollingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_polling_rotates_between_accounts_outside_cooldown(self):
+        for cooldown_method in ("mark_quota_cooldown", "mark_risk_cooldown"):
+            with self.subTest(cooldown_method=cooldown_method):
+                handler, _ = _build_handler([_token(i) for i in range(1, 5)], set())
+                lb = handler.load_balancer
+                for token_id in (2, 3):
+                    getattr(lb, cooldown_method)(token_id, "video")
+                lb._round_robin_state["video"] = 1
+
+                with patch.object(
+                    type(config),
+                    "call_logic_mode",
+                    new_callable=PropertyMock,
+                    return_value="polling",
+                ):
+                    selected = [
+                        (await lb.select_token(for_video_generation=True)).id
+                        for _ in range(4)
+                    ]
+
+                self.assertEqual(selected, [4, 1, 4, 1])
+
+    async def test_polling_keeps_cooled_accounts_as_fallback(self):
+        handler, _ = _build_handler([_token(1), _token(2)], set())
+        lb = handler.load_balancer
+        for token_id in (1, 2):
+            lb.mark_quota_cooldown(token_id, "video")
+
+        with patch.object(
+            type(config),
+            "call_logic_mode",
+            new_callable=PropertyMock,
+            return_value="polling",
+        ):
+            selected = [
+                (await lb.select_token(for_video_generation=True)).id
+                for _ in range(4)
+            ]
+
+        self.assertEqual(selected, [1, 2, 1, 2])
 
 
 if __name__ == "__main__":

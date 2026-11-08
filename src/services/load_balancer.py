@@ -398,7 +398,12 @@ class LoadBalancer:
                 scenario = "video"
 
             ordered_candidates = []
-            first_candidate = await self._select_round_robin(available_tokens, scenario)
+            round_robin_candidates = [
+                item for item in available_tokens if not item["quota_cooldown"]
+            ] or available_tokens
+            first_candidate = await self._select_round_robin(
+                round_robin_candidates, scenario
+            )
             if first_candidate is not None:
                 ordered_candidates.append(first_candidate)
                 ordered_candidates.extend(
