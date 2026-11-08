@@ -20,9 +20,9 @@
     <img src="https://useapi.net/assets/images/sponsor/useapi-banner.png" alt="useapi.net" width="150">
   </a>
 </td>
-<td valign="top">
-  感谢 <strong>useapi.net</strong> 赞助了本项目！<strong>一个订阅，全部 API</strong>：useapi.net 为你自己的 Google 账号提供托管 API：<strong>Google Flow</strong>（Veo 3.1、带原生音频的 Omni 1.1 Flash、Nano Banana Pro）、<strong>Google Vids</strong>（Gemini Omni 1.1 Flash 带配音数字人，<strong>无需验证码</strong>，额度与 Flow 分开，同一账号同时使用 Flow 和 Vids，Omni 产能约翻倍）、<strong>Google Flow Music</strong>（Lyria 3.5 整首歌曲）和 <strong>Gemini Notebook</strong>（NotebookLM）。新上线 <strong>Meta Muse</strong>（muse.ai）：用你自己的 Muse 账号生成图片和约 10 秒带台词配音的视频，免费账号可用。无需自己部署。同一订阅还包含 Dreamina、可灵 Kling、PixVerse、海螺 MiniMax、Mureka、Runway 等 API，每月固定 $15。<a href="https://useapi.net/docs/articles/google-flow-api-zh?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Flow 中文教程</a> · <a href="https://useapi.net/docs/articles/google-vids-api-zh?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Vids 中文教程</a> · <a href="https://useapi.net/docs/articles/muse-api-zh?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Muse 中文教程</a> · <a href="https://buy.stripe.com/8x2aEX4Bd8Vh9PMg4qeUU03?client_reference_id=flow2api">订阅</a><br><br>
-  Thanks to <strong>useapi.net</strong> for sponsoring this project! <strong>One subscription, every API</strong>: useapi.net runs hosted APIs on your own Google account: <strong>Google Flow</strong> (Veo 3.1, audio-native Omni 1.1 Flash, Nano Banana Pro), <strong>Google Vids</strong> (Gemini Omni 1.1 Flash with voiced avatars, <strong>no captcha</strong>, an allowance separate from Flow, so using both on one account roughly doubles your Omni capacity), <strong>Google Flow Music</strong> (full songs with Lyria 3.5) and <strong>Gemini Notebook</strong> (NotebookLM). New: <strong>Meta Muse</strong> (muse.ai): images and about 10-second videos with spoken dialogue on your own Muse account, free plan included. Nothing to self-host. The same flat $15/month also covers Dreamina, Kling, PixVerse, MiniMax, Mureka, Runway and more. <a href="https://useapi.net/docs/api-google-flow-v1?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Flow docs</a> · <a href="https://useapi.net/docs/api-google-vids-v1?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Vids docs</a> · <a href="https://useapi.net/docs/api-muse-v1?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Muse docs</a> · <a href="https://buy.stripe.com/8x2aEX4Bd8Vh9PMg4qeUU03?client_reference_id=flow2api">Subscribe</a>
+<td valign="middle">
+  感谢 <strong>useapi.net</strong> 赞助了本项目！<strong>一个订阅，全部 API</strong>：useapi.net 为你自己的 Google 账号提供托管 API：<strong>Google Flow</strong>（Veo 3.1、带原生音频的 <strong>Omni 1.2 Flash</strong>，3 到 15 秒，可带音色延长；Nano Banana Pro）、<strong>Google Vids</strong>（Omni 1.2 Flash 15 秒视频，一张照片生成 30 秒会说话的数字人视频，文字转语音，<strong>无需验证码</strong>，额度与 Flow 分开，同一账号同时使用 Flow 和 Vids，Omni 产能约翻倍）、<strong>Google Flow Music</strong>（Lyria 3.5 整首歌曲）和 <strong>Gemini Notebook</strong>（NotebookLM），还有 <strong>Meta Muse</strong>（muse.ai，免费账号可用）。无需自己部署。同一订阅还包含 Dreamina、可灵 Kling、PixVerse、海螺 MiniMax、Mureka、Runway 等 API，每月固定 $15。<a href="https://useapi.net/docs/articles/gemini-omni-1-2-flash-api-zh?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Omni 1.2 中文教程</a> · <a href="https://useapi.net/docs/articles/google-flow-api-zh?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Flow 中文教程</a> · <a href="https://useapi.net/docs/articles/google-vids-api-zh?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Vids 中文教程</a> · <a href="https://buy.stripe.com/8x2aEX4Bd8Vh9PMg4qeUU03?client_reference_id=flow2api">订阅</a><br><br>
+  Thanks to <strong>useapi.net</strong> for sponsoring this project! <strong>One subscription, every API</strong>: useapi.net runs hosted APIs on your own Google account: <strong>Google Flow</strong> (Veo 3.1, audio-native <strong>Omni 1.2 Flash</strong> at 3 to 15 seconds with extend and voices, Nano Banana Pro), <strong>Google Vids</strong> (Omni 1.2 Flash 15-second videos, 30-second talking avatar videos from a photo, text to speech, <strong>no captcha</strong>, an allowance separate from Flow, so using both on one account roughly doubles your Omni capacity), <strong>Google Flow Music</strong> (full songs with Lyria 3.5), <strong>Gemini Notebook</strong> (NotebookLM) and <strong>Meta Muse</strong> (muse.ai, free plan included). Nothing to self-host. The same flat $15/month also covers Dreamina, Kling, PixVerse, MiniMax, Mureka, Runway and more. <a href="https://useapi.net/docs/articles/gemini-omni-1-2-flash-api?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Omni 1.2 guide</a> · <a href="https://useapi.net/docs/api-google-flow-v1?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Flow docs</a> · <a href="https://useapi.net/docs/api-google-vids-v1?utm_source=flow2api&utm_medium=referral&utm_campaign=flow2api-sponsor">Vids docs</a> · <a href="https://buy.stripe.com/8x2aEX4Bd8Vh9PMg4qeUU03?client_reference_id=flow2api">Subscribe</a>
 </td>
 </tr>
 </table>
@@ -218,31 +218,34 @@ Nano Banana 2 Lite 使用 `gemini-3.1-flash-lite-image-*`，比例及分辨率�
 
 | 当前公开名称 | 上游模型族 | 能力 |
 |---|---|---|
-| `veo-3.1-lite` / `veo-3.1-fast` / `veo-3.1-quality` / `omni-1.1-flash` | 当前默认模型 | 8 秒横屏文生视频 |
+| `veo-3.1-lite` / `veo-3.1-fast` / `veo-3.1-quality` / `omni-1.2-flash` | 当前默认模型 | 8 秒横屏文生视频 |
 | `veo-3.1-lite-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Lite | 文生视频 |
 | `veo-3.1-fast-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Fast | 文生视频 |
 | `veo-3.1-quality-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Quality | 文生视频 |
-| `omni-1.1-flash-{4,6,8,10}s-{landscape,portrait}` | Omni 1.1 Flash (`abra`) | 文生/参考图视频 |
+| `omni-1.2-flash-{3..10}s-{landscape,portrait}`、`omni-1.2-flash-{11..15}s-portrait` | Omni 1.2 Flash (`macaron_cookie`) | 文生/参考图视频 |
+| `omni-1.1-flash-{4,6,8,10}s-{landscape,portrait}` | Omni 1.1 Flash (`abra`，上游 2026-12-05 下线) | 文生/参考图视频 |
 | `veo-3.1-{lite,fast,quality}-i2v-{4,6}s-{landscape,portrait}` | Veo 3.1 | 首帧/首尾帧视频 |
 | `veo-3.1-{lite,fast}-r2v-8s-{landscape,portrait}` | Veo 3.1 | 多参考图视频 |
 | `veo-3.1-{lite,fast,quality}-extend-8s-{landscape,portrait}` | Veo 3.1 | 视频续写 |
 
 表格中的花括号表示任选其中一个值。例如 `veo-3.1-fast-{4,6,8}s-{landscape,portrait}` 包含 4/6/8 秒与横屏/竖屏组合。
 
-#### Omni 1.1 Flash
+#### Omni 1.2 Flash
 
-`Omni 1.1 Flash` 同时支持文生视频和参考图视频。调用方使用同一组模型名，服务会根据请求中是否包含图片自动选择生成模式：
+`Omni 1.2 Flash` 是 Flow 当前的默认视频模型（2026-11-08 实测抓取），同时支持文生视频和参考图视频。调用方使用同一组模型名，服务会根据请求中是否包含图片自动选择生成模式：
 
-- `omni-1.1-flash` 是 `omni-1.1-flash-8s-landscape` 的默认别名。
-- 完整模型名为 `omni-1.1-flash-{4,6,8,10}s-{landscape,portrait}`，可选择 4、6、8、10 秒以及横屏或竖屏。
+- `omni-1.2-flash` 是 `omni-1.2-flash-8s-landscape` 的默认别名。
+- 完整模型名为 `omni-1.2-flash-{3..10}s-{landscape,portrait}`，可选择 3–10 秒以及横屏或竖屏。
+- 11–15 秒仅提供竖屏：`omni-1.2-flash-{11..15}s-portrait`（上游目录不提供长时长的横屏档）。
 - 仅传入文本时使用文生视频模式；传入 1–3 张 `image_url` 图片时使用参考图视频模式。
 - 时长和画面方向由模型名指定，无需额外传入同名参数。
+- 上一代 `omni-1.1-flash`（`abra`）上游已标记 2026-12-05 下线，下线前仍可继续调用。
 
 参考图视频请求示例：
 
 ```json
 {
-  "model": "omni-1.1-flash-8s-landscape",
+  "model": "omni-1.2-flash-8s-landscape",
   "messages": [
     {
       "role": "user",

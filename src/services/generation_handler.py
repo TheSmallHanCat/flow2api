@@ -712,36 +712,37 @@ MODEL_CONFIG = {
         "requires_video_id": True,
     },
     # ========== Gemini Omni Flash ==========
-    # 2026-05-26 实测上游真实请求：
-    # - 纯文本 -> YhhmEf, videoModelKey=abra_t2v_8s
-    # - 参考图 -> MZZa6b, videoModelKey=abra_r2v_8s
+    # 2026-11-08 实测上游真实请求：
+    # - 纯文本 -> YhhmEf, videoModelKey=macaron_cookie_t2v_8s
+    # - 参考图 -> MZZa6b, videoModelKey=macaron_cookie_r2v_8s
+    # - 上一代 Omni 1.1 (abra) 上游已标记 "Leaving Dec 5"，2026-12-05 下线
     "omni": {
         "type": "video",
         "video_type": "omni",
-        "model_key": "abra_t2v_8s",
+        "model_key": "macaron_cookie_t2v_8s",
         "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
         "supports_images": True,
         "min_images": 0,
         "max_images": 3,
         "use_v2_model_config": True,
         "allow_tier_upgrade": False,
-        "reference_model_key": "abra_r2v_8s",
+        "reference_model_key": "macaron_cookie_r2v_8s",
         "reference_duration": 8,
-        "reference_model_display_name": "Omni Flash",
+        "reference_model_display_name": "Omni 1.2 Flash",
     },
     "omni_portrait": {
         "type": "video",
         "video_type": "omni",
-        "model_key": "abra_t2v_8s",
+        "model_key": "macaron_cookie_t2v_8s",
         "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
         "supports_images": True,
         "min_images": 0,
         "max_images": 3,
         "use_v2_model_config": True,
         "allow_tier_upgrade": False,
-        "reference_model_key": "abra_r2v_8s",
+        "reference_model_key": "macaron_cookie_r2v_8s",
         "reference_duration": 8,
-        "reference_model_display_name": "Omni Flash",
+        "reference_model_display_name": "Omni 1.2 Flash",
     },
 }
 
@@ -1235,7 +1236,8 @@ def _apply_current_flow_model_catalog():
         )
 
     # Omni 1.1 Flash (upstream family key: abra). This is verified by a live
-    # generation using abra_t2v_4s.
+    # generation using abra_t2v_4s. Upstream marks this family "Leaving Dec 5"
+    # (removed on 2026-12-05); kept until then for existing callers.
     for seconds in (4, 6, 8, 10):
         for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
             register(
@@ -1255,6 +1257,48 @@ def _apply_current_flow_model_catalog():
                 },
                 f"Omni 1.1 Flash · {seconds}s · {orientation}",
             )
+
+    # Omni 1.2 Flash (upstream family key: macaron_cookie). Verified by a live
+    # generation captured on 2026-11-08: YhhmEf with videoModelKey
+    # macaron_cookie_t2v_8s. 3s-10s cover landscape and portrait; 11s-15s are
+    # portrait-only in the upstream catalog.
+    for seconds in (3, 4, 5, 6, 7, 8, 9, 10):
+        for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
+            register(
+                f"omni-1.2-flash-{seconds}s-{orientation}",
+                {
+                    "type": "video",
+                    "video_type": "omni",
+                    "model_key": f"macaron_cookie_t2v_{seconds}s",
+                    "reference_model_key": f"macaron_cookie_r2v_{seconds}s",
+                    "reference_duration": seconds,
+                    "aspect_ratio": ratio,
+                    "supports_images": True,
+                    "min_images": 0,
+                    "max_images": 3,
+                    "use_v2_model_config": True,
+                    "allow_tier_upgrade": False,
+                },
+                f"Omni 1.2 Flash · {seconds}s · {orientation}",
+            )
+    for seconds in (11, 12, 13, 14, 15):
+        register(
+            f"omni-1.2-flash-{seconds}s-portrait",
+            {
+                "type": "video",
+                "video_type": "omni",
+                "model_key": f"macaron_cookie_t2v_{seconds}s",
+                "reference_model_key": f"macaron_cookie_r2v_{seconds}s",
+                "reference_duration": seconds,
+                "aspect_ratio": portrait,
+                "supports_images": True,
+                "min_images": 0,
+                "max_images": 3,
+                "use_v2_model_config": True,
+                "allow_tier_upgrade": False,
+            },
+            f"Omni 1.2 Flash · {seconds}s · portrait",
+        )
 
     # Current image-to-video and reference-video variants.
     for seconds, lite_key, fast_key, quality_key in (
@@ -1362,6 +1406,23 @@ def _apply_current_flow_model_catalog():
             "allow_tier_upgrade": False,
         },
         "Omni 1.1 Flash · 8s · landscape",
+    )
+    register(
+        "omni-1.2-flash",
+        {
+            "type": "video",
+            "video_type": "omni",
+            "model_key": "macaron_cookie_t2v_8s",
+            "reference_model_key": "macaron_cookie_r2v_8s",
+            "reference_duration": 8,
+            "aspect_ratio": landscape,
+            "supports_images": True,
+            "min_images": 0,
+            "max_images": 3,
+            "use_v2_model_config": True,
+            "allow_tier_upgrade": False,
+        },
+        "Omni 1.2 Flash · 8s · landscape",
     )
 
 
@@ -2837,7 +2898,7 @@ class GenerationHandler:
                     at=token.at,
                     project_id=project_id,
                     prompt=prompt,
-                    model_key=model_config.get("reference_model_key", "abra_r2v_8s"),
+                    model_key=model_config.get("reference_model_key", "macaron_cookie_r2v_8s"),
                     aspect_ratio=model_config["aspect_ratio"],
                     reference_images=reference_images,
                     user_paygate_tier=normalized_tier,

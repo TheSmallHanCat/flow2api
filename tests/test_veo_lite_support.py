@@ -51,6 +51,38 @@ class VeoLiteModelResolverTests(unittest.TestCase):
             "veo_3_1_r2v_fast_portrait",
         )
 
+    def test_omni_1_2_flash_registered_with_live_upstream_keys(self):
+        # 2026-11-08 实测：Omni 1.2 Flash 上游 family key 为 macaron_cookie，
+        # 纯文本 YhhmEf 用 macaron_cookie_t2v_8s，参考图 MZZa6b 用 macaron_cookie_r2v_*。
+        listed = {item["id"] for item in _get_openai_model_catalog()}
+
+        self.assertIn("omni-1.2-flash", listed)
+        for seconds in (3, 4, 5, 6, 7, 8, 9, 10):
+            self.assertIn(f"omni-1.2-flash-{seconds}s-landscape", listed)
+            self.assertIn(f"omni-1.2-flash-{seconds}s-portrait", listed)
+        for seconds in (11, 12, 13, 14, 15):
+            self.assertIn(f"omni-1.2-flash-{seconds}s-portrait", listed)
+            self.assertNotIn(f"omni-1.2-flash-{seconds}s-landscape", listed)
+
+        landscape_8s = MODEL_CONFIG["omni-1.2-flash-8s-landscape"]
+        self.assertEqual(landscape_8s["model_key"], "macaron_cookie_t2v_8s")
+        self.assertEqual(landscape_8s["reference_model_key"], "macaron_cookie_r2v_8s")
+        self.assertEqual(landscape_8s["reference_duration"], 8)
+        self.assertEqual(landscape_8s["aspect_ratio"], "VIDEO_ASPECT_RATIO_LANDSCAPE")
+
+        portrait_15s = MODEL_CONFIG["omni-1.2-flash-15s-portrait"]
+        self.assertEqual(portrait_15s["model_key"], "macaron_cookie_t2v_15s")
+        self.assertEqual(portrait_15s["aspect_ratio"], "VIDEO_ASPECT_RATIO_PORTRAIT")
+
+        alias = MODEL_CONFIG["omni-1.2-flash"]
+        self.assertEqual(alias["model_key"], "macaron_cookie_t2v_8s")
+        self.assertEqual(alias["aspect_ratio"], "VIDEO_ASPECT_RATIO_LANDSCAPE")
+
+        legacy = MODEL_CONFIG["omni"]
+        self.assertEqual(legacy["model_key"], "macaron_cookie_t2v_8s")
+        legacy_portrait = MODEL_CONFIG["omni_portrait"]
+        self.assertEqual(legacy_portrait["aspect_ratio"], "VIDEO_ASPECT_RATIO_PORTRAIT")
+
     def test_resolve_t2v_lite_alias_to_portrait_variant(self):
         request = types.SimpleNamespace(
             generationConfig=types.SimpleNamespace(aspectRatio="portrait")
