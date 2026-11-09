@@ -1105,7 +1105,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
     def _get_control_plane_timeout(self) -> int:
         """控制轻量控制面请求的超时，避免认证/项目接口长时间挂起。"""
-        return max(5, min(int(self.timeout or 0) or 120, 10))
+        return max(5, min(int(self.timeout or 0) or 120, 30))
 
     def _get_video_submit_timeout(self) -> int:
         """视频提交接口应快速返回 operation，避免单次网络挂死拖满整条链路。"""
