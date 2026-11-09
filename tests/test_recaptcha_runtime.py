@@ -115,5 +115,57 @@ const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+    @unittest.skipUnless(
+        shutil.which("node"), "Node.js is required for the JavaScript contract"
+    )
+    def test_shared_execute_script_falls_back_to_direct_execute(self):
+        """新版 Flow 不再调用 execute.bind()，hook 捕获不到闭包时必须直接执行。"""
+        source = r"""
+const vm = require('vm');
+const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+(async () => {
+  const sandbox = { setTimeout, clearTimeout, location: { href: 'https://flow.google.com/project/example' } };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(input.hook, sandbox);
+  vm.runInContext(`
+    globalThis.calls = [];
+    globalThis.grecaptcha = { enterprise: {
+      execute: function(key, options) {
+        calls.push({ thisOK: this === grecaptcha.enterprise, key, action: options.action });
+        return Promise.resolve('captcha');
+      }
+    }};
+  `, sandbox);
+  if (sandbox.__flow2apiTrustedRecaptchaExecute) throw Error('closure should not be captured');
+  const result = await vm.runInContext(input.script, sandbox);
+  if (!result.ok || result.token !== 'captcha') throw Error('captcha execution failed: ' + JSON.stringify(result));
+  if (result.debug.captured !== false) throw Error('captured flag should be false');
+  if (sandbox.calls.length !== 1) throw Error('expected one execute call, got ' + sandbox.calls.length);
+  const call = sandbox.calls[0];
+  if (!call.thisOK) throw Error('execute must be invoked with enterprise as receiver');
+  if (call.key !== input.siteKey) throw Error('site key mismatch');
+  if (call.action !== input.action) throw Error('action mismatch');
+})().catch(error => { process.stderr.write(error.message); process.exitCode = 1; });
+"""
+        site_key = "site-key"
+        action = "IMAGE_GENERATION"
+        result = subprocess.run(
+            [shutil.which("node"), "-e", source],
+            input=json.dumps(
+                {
+                    "hook": TRUSTED_RECAPTCHA_HOOK_SOURCE,
+                    "script": build_recaptcha_execute_script(site_key, action, 1000),
+                    "siteKey": site_key,
+                    "action": action,
+                }
+            ),
+            text=True,
+            capture_output=True,
+            timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

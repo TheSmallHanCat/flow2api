@@ -2582,40 +2582,25 @@ class TokenBrowser:
                 )
                 await asyncio.sleep(warmup_seconds)
 
-            try:
-                await page.wait_for_function(wait_expression, timeout=15000)
-            except Exception as e:
+            if not await self._poll_enterprise_ready(page, 15000, wait_expression):
                 debug_logger.log_warning(
-                    f"[BrowserCaptcha] Token-{self.token_id} 自定义 grecaptcha 未就绪，尝试补注入脚本: {type(e).__name__}: {str(e)[:200]}"
+                    f"[BrowserCaptcha] Token-{self.token_id} 自定义 grecaptcha 未就绪，尝试补注入脚本"
                 )
-                try:
-                    await page.evaluate(
-                        f"""
-                        (primaryUrl, secondaryUrl) => {{
-                            const existing = Array.from(document.scripts || []).some((script) => {{
-                                const src = script?.src || "";
-                                return src.includes('/recaptcha/');
-                            }});
-                            if (existing) return;
-                            const urls = [primaryUrl, secondaryUrl];
-                            const loadScript = (index) => {{
-                                if (index >= urls.length) return;
-                                const script = document.createElement('script');
-                                script.src = urls[index];
-                                script.async = true;
-                                script.onerror = () => loadScript(index + 1);
-                                document.head.appendChild(script);
-                            }};
-                            loadScript(0);
-                        }}
-                    """,
-                        f"{primary_host}/{script_path}?render={website_key}",
-                        f"{secondary_host}/{script_path}?render={website_key}",
-                    )
-                    await page.wait_for_function(wait_expression, timeout=15000)
-                except Exception as inject_error:
+                injected = False
+                for script_host in (primary_host, secondary_host):
+                    script_url = f"{script_host}/{script_path}?render={website_key}"
+                    if await self._inject_recaptcha_script(
+                        page, script_url, "/recaptcha/"
+                    ):
+                        injected = True
+                    if await self._poll_enterprise_ready(
+                        page, 15000, wait_expression
+                    ):
+                        injected = True
+                        break
+                if not injected:
                     debug_logger.log_warning(
-                        f"[BrowserCaptcha] Token-{self.token_id} 自定义 grecaptcha 最终未就绪: {type(inject_error).__name__}: {str(inject_error)[:200]}"
+                        f"[BrowserCaptcha] Token-{self.token_id} 自定义 grecaptcha 最终未就绪"
                     )
                     return None
 
@@ -2706,6 +2691,86 @@ class TokenBrowser:
             return None
         return dict(self._last_fingerprint)
 
+    ENTERPRISE_READY_EXPRESSION = (
+        "() => typeof grecaptcha !== 'undefined' && "
+        "typeof grecaptcha.enterprise !== 'undefined' && "
+        "typeof grecaptcha.enterprise.execute === 'function'"
+    )
+
+    # 新版 Flow 页面启用了 Trusted Types
+    # (`require-trusted-types-for 'script'`)，直接给 script.src 赋值会抛
+    # "This document requires 'TrustedScriptURL' assignment"。
+    # 这里通过页面内创建的 Trusted Types policy 完成注入，避免使用
+    # Playwright 的 add_script_tag（它在 Trusted Types 下必然失败）。
+    INJECT_RECAPTCHA_SCRIPT_JS = r"""
+    ({url, marker}) => {
+        const scripts = Array.from(document.scripts || []);
+        const existing = scripts.some((script) => {
+            const src = script && script.src ? String(script.src) : '';
+            return src.includes(marker);
+        });
+        if (existing) return 'existing';
+        let policy = null;
+        try {
+            if (
+                window.trustedTypes &&
+                typeof window.trustedTypes.createPolicy === 'function'
+            ) {
+                policy = window.trustedTypes.createPolicy(
+                    'flow2api-recaptcha-' + Math.random().toString(36).slice(2),
+                    { createScriptURL: (value) => value }
+                );
+            }
+        } catch (error) {}
+        const script = document.createElement('script');
+        script.async = true;
+        try {
+            script.src = policy ? policy.createScriptURL(url) : url;
+        } catch (error) {
+            script.src = url;
+        }
+        (document.head || document.documentElement).appendChild(script);
+        return 'injected';
+    }
+    """
+
+    async def _poll_enterprise_ready(
+        self, page, timeout_ms: int, expression: Optional[str] = None
+    ) -> bool:
+        """用 page.evaluate 轮询 grecaptcha 就绪状态。
+
+        不使用 ``page.wait_for_function``：新版 Flow 的 Trusted Types CSP 会让
+        其中的字符串 eval 抛
+        "Evaluating a string as JavaScript violates this document's Trusted Type
+        assignment requirements"，导致就绪检测永远失败。
+        """
+        probe = expression or self.ENTERPRISE_READY_EXPRESSION
+        deadline = time.monotonic() + max(0.0, timeout_ms / 1000.0)
+        while True:
+            try:
+                if await page.evaluate(probe):
+                    return True
+            except Exception:
+                pass
+            if time.monotonic() >= deadline:
+                return False
+            await asyncio.sleep(0.25)
+
+    async def _inject_recaptcha_script(self, page, url: str, marker: str) -> bool:
+        """在页面内注入 reCAPTCHA 脚本（兼容 Trusted Types CSP）。"""
+        try:
+            await page.evaluate(
+                self.INJECT_RECAPTCHA_SCRIPT_JS,
+                {"url": url, "marker": marker},
+            )
+            return True
+        except Exception as e:
+            debug_logger.log_warning(
+                f"[BrowserCaptcha] Token-{self.token_id} 页面内注入脚本失败: "
+                f"{type(e).__name__}: {str(e)[:150]}"
+            )
+            return False
+
     async def _wait_for_enterprise_ready(
         self,
         page,
@@ -2715,69 +2780,27 @@ class TokenBrowser:
         *,
         timeout_ms: int = 15000,
         context_label: str = "",
+        script_path: str = "recaptcha/enterprise.js",
+        marker: str = "/recaptcha/enterprise.js",
     ) -> bool:
-        """等待 grecaptcha.enterprise 就绪，必要时补注入 enterprise.js。"""
-        wait_expression = (
-            "typeof grecaptcha !== 'undefined' && "
-            "typeof grecaptcha.enterprise !== 'undefined' && "
-            "typeof grecaptcha.enterprise.execute === 'function'"
-        )
+        """等待 grecaptcha.enterprise 就绪，必要时补注入脚本。"""
         label = f"{context_label} " if context_label else ""
-        try:
-            await page.wait_for_function(wait_expression, timeout=timeout_ms)
+        if await self._poll_enterprise_ready(page, timeout_ms):
             return True
-        except Exception as e:
-            debug_logger.log_warning(
-                f"[BrowserCaptcha] Token-{self.token_id} {label}grecaptcha 未就绪，尝试补注入脚本: "
-                f"{type(e).__name__}: {str(e)[:200]}"
-            )
 
-        try:
-            await page.evaluate(
-                """
-                (primaryUrl, secondaryUrl) => {
-                    const existing = Array.from(document.scripts || []).some((script) => {
-                        const src = script?.src || "";
-                        return src.includes('/recaptcha/enterprise.js');
-                    });
-                    if (existing) return;
-                    const urls = [primaryUrl, secondaryUrl];
-                    const loadScript = (index) => {
-                        if (index >= urls.length) return;
-                        const script = document.createElement('script');
-                        script.src = urls[index];
-                        script.async = true;
-                        script.onerror = () => loadScript(index + 1);
-                        document.head.appendChild(script);
-                    };
-                    loadScript(0);
-                }
-                """,
-                f"{primary_host}/recaptcha/enterprise.js?render={website_key}",
-                f"{secondary_host}/recaptcha/enterprise.js?render={website_key}",
-            )
-            await page.wait_for_function(wait_expression, timeout=timeout_ms)
-            return True
-        except Exception as inject_error:
-            debug_logger.log_warning(
-                f"[BrowserCaptcha] Token-{self.token_id} {label}页面内注入失败"
-                f"（新版 CSP 会拒绝动态 script），改用 Playwright add_script_tag: "
-                f"{type(inject_error).__name__}: {str(inject_error)[:150]}"
-            )
+        debug_logger.log_warning(
+            f"[BrowserCaptcha] Token-{self.token_id} {label}grecaptcha 未就绪，尝试补注入脚本"
+        )
 
-        # 最终兜底：Playwright add_script_tag（配合 CSP 剥除 route 生效）
         for script_host in (primary_host, secondary_host):
-            try:
-                await page.add_script_tag(
-                    url=f"{script_host}/recaptcha/enterprise.js?render={website_key}"
-                )
-                await page.wait_for_function(wait_expression, timeout=timeout_ms)
+            script_url = f"{script_host}/{script_path}?render={website_key}"
+            if not await self._inject_recaptcha_script(page, script_url, marker):
+                continue
+            if await self._poll_enterprise_ready(page, timeout_ms):
                 return True
-            except Exception as tag_error:
-                debug_logger.log_warning(
-                    f"[BrowserCaptcha] Token-{self.token_id} {label}add_script_tag({script_host}) 失败: "
-                    f"{type(tag_error).__name__}: {str(tag_error)[:150]}"
-                )
+            debug_logger.log_warning(
+                f"[BrowserCaptcha] Token-{self.token_id} {label}注入后仍未就绪: {script_url}"
+            )
         return False
 
     @staticmethod

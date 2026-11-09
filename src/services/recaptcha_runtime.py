@@ -59,118 +59,133 @@ TRUSTED_RECAPTCHA_HOOK_SOURCE = r"""
 })();
 """
 
+# Execution strategy (in order):
+#   1. the pre-hijack `enterprise.execute` closure captured by the bind hook
+#      (older Flow builds),
+#   2. `grecaptcha.enterprise.execute.call(enterprise, siteKey, {action})`
+#      (newer Flow builds no longer call `.bind()`, so nothing gets captured;
+#      this is the documented enterprise-v3 usage and works without a render),
+#   3. render into a *fresh empty* container and execute the widget id. The old
+#      code rendered into `document.documentElement`, which always contains
+#      children and makes reCAPTCHA throw
+#      "reCAPTCHA placeholder element must be empty".
 RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
             const storageKey = '__flow2apiTrustedRecaptchaExecute';
-            for (let attempt = 0; attempt < 40; attempt += 1) {
+
+            for (let attempt = 0; attempt < 20; attempt += 1) {
                 if (window[storageKey]) break;
                 await new Promise(resolve => setTimeout(resolve, 250));
             }
 
+            const enterprise = window.grecaptcha && window.grecaptcha.enterprise;
             const capturedExecute = !!window[storageKey];
-            let execute = window[storageKey];
-            let executeSource = '';
-            try {
-                executeSource = String(execute || '');
-            } catch (error) {}
+            const debug = {
+                hookInstalled: !!window.__flow2apiTrustedRecaptchaHookInstalled,
+                actionGuard: !!window.__flow2apiRecaptchaActionGuardInstalled,
+                captured: capturedExecute,
+                executeType: enterprise ? typeof enterprise.execute : 'missing',
+                renderType: enterprise ? typeof enterprise.render : 'missing',
+                url: location.href
+            };
+            const errors = [];
 
-            if (!execute) {
-                const enterprise = window.grecaptcha && window.grecaptcha.enterprise;
-                execute = enterprise && enterprise.execute;
+            const runExecute = async (label, factory) => {
                 try {
-                    executeSource = String(execute || '');
+                    const token = await new Promise((resolve, reject) => {
+                        let settled = false;
+                        const finish = (handler, value) => {
+                            if (settled) return;
+                            settled = true;
+                            clearTimeout(timer);
+                            handler(value);
+                        };
+                        const timer = setTimeout(() => {
+                            finish(reject, new Error('execute timeout'));
+                        }, timeoutMs);
+                        try {
+                            Promise.resolve(factory()).then(
+                                value => finish(resolve, value),
+                                error => finish(reject, error)
+                            );
+                        } catch (error) {
+                            finish(reject, error);
+                        }
+                    });
+                    const normalized = typeof token === 'string' ? token.trim() : '';
+                    if (normalized) return normalized;
+                    errors.push(label + ': empty token');
+                } catch (error) {
+                    errors.push(
+                        label + ': '
+                        + (error && error.message ? error.message : String(error))
+                    );
+                }
+                return null;
+            };
+
+            if (capturedExecute && typeof window[storageKey] === 'function') {
+                const token = await runExecute('captured', () => {
+                    return window[storageKey](siteKey, { action: requestedAction });
+                });
+                if (token) return { ok: true, token, debug };
+            }
+
+            if (enterprise && typeof enterprise.execute === 'function') {
+                let executeSource = '';
+                try {
+                    executeSource = String(enterprise.execute || '');
                 } catch (error) {}
                 if (
                     executeSource.includes('extension_hijack_detected') &&
                     !window.__flow2apiRecaptchaActionGuardInstalled
                 ) {
-                    return {
-                        ok: false,
-                        error: 'trusted reCAPTCHA action guard is unavailable',
-                        debug: {
-                            hookInstalled: !!window.__flow2apiTrustedRecaptchaHookInstalled,
-                            actionGuard: !!window.__flow2apiRecaptchaActionGuardInstalled,
-                            captured: !!window.__flow2apiTrustedRecaptchaExecute,
-                            url: location.href
-                        }
-                    };
+                    errors.push('direct: trusted reCAPTCHA action guard is unavailable');
+                } else {
+                    const token = await runExecute('direct', () => {
+                        return enterprise.execute.call(
+                            enterprise,
+                            siteKey,
+                            { action: requestedAction }
+                        );
+                    });
+                    if (token) return { ok: true, token, debug };
                 }
-            }
 
-            if (typeof execute !== 'function') {
-                return { ok: false, error: 'reCAPTCHA execute is unavailable' };
-            }
-
-            let executeTarget = siteKey;
-            try {
-                if (
-                    !capturedExecute &&
-                    window.grecaptcha &&
-                    window.grecaptcha.enterprise &&
-                    typeof window.grecaptcha.enterprise.render === 'function' &&
-                    window.__flow2apiRecaptchaClientId === undefined
-                ) {
-                    window.__flow2apiRecaptchaClientId =
-                        window.grecaptcha.enterprise.render(
-                            document.documentElement,
+                if (typeof enterprise.render === 'function') {
+                    try {
+                        const container = document.createElement('div');
+                        container.setAttribute('data-flow2api-recaptcha', '1');
+                        container.style.display = 'none';
+                        (document.body || document.documentElement)
+                            .appendChild(container);
+                        const clientId = enterprise.render(
+                            container,
                             { sitekey: siteKey, action: requestedAction }
                         );
+                        const token = await runExecute('render', () => {
+                            return enterprise.execute.call(
+                                enterprise,
+                                clientId,
+                                { action: requestedAction }
+                            );
+                        });
+                        if (token) return { ok: true, token, debug };
+                    } catch (renderError) {
+                        errors.push(
+                            'render: '
+                            + (renderError && renderError.message
+                                ? renderError.message
+                                : String(renderError))
+                        );
+                    }
                 }
-                if (window.__flow2apiRecaptchaClientId !== undefined) {
-                    executeTarget = window.__flow2apiRecaptchaClientId;
-                }
-            } catch (renderError) {
-                return {
-                    ok: false,
-                    error: renderError && renderError.message
-                        ? renderError.message
-                        : String(renderError)
-                };
             }
 
-            try {
-                const token = await new Promise((resolve, reject) => {
-                    let settled = false;
-                    const finish = (handler, value) => {
-                        if (settled) return;
-                        settled = true;
-                        handler(value);
-                    };
-                    const timer = setTimeout(() => {
-                        finish(reject, new Error('execute timeout'));
-                    }, timeoutMs);
-                    try {
-                        Promise.resolve(execute(executeTarget, { action: requestedAction }))
-                            .then(value => {
-                                clearTimeout(timer);
-                                finish(resolve, value);
-                            })
-                            .catch(error => {
-                                clearTimeout(timer);
-                                finish(reject, error);
-                            });
-                    } catch (error) {
-                        clearTimeout(timer);
-                        finish(reject, error);
-                    }
-                });
-                return { ok: true, token };
-            } catch (error) {
-                const debug = {
-                    captured: capturedExecute,
-                    actionGuard: !!window.__flow2apiRecaptchaActionGuardInstalled,
-                    renderType: window.grecaptcha && window.grecaptcha.enterprise
-                        ? typeof window.grecaptcha.enterprise.render
-                        : 'missing',
-                    clientId: String(window.__flow2apiRecaptchaClientId),
-                    executeTarget: String(executeTarget),
-                    url: location.href
-                };
-                return {
-                    ok: false,
-                    error: (error && error.message ? error.message : String(error))
-                        + ' | ' + JSON.stringify(debug)
-                };
-            }
+            return {
+                ok: false,
+                error: errors.join(' | ') || 'reCAPTCHA execute is unavailable',
+                debug
+            };
         })(__SITE_KEY__, __REQUESTED_ACTION__, __TIMEOUT_MS__)"""
 
 
