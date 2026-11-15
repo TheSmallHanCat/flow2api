@@ -1620,12 +1620,16 @@ class TokenBrowser:
                     f"[BrowserCaptcha] Token-{self.token_id} using custom browser executable: {browser_executable_path}"
                 )
 
-            browser = await playwright.chromium.launch(
-                headless=False,
-                executable_path=browser_executable_path,
-                proxy=proxy_option,
-                args=browser_args,
-            )
+            use_headless = bool(getattr(config, "browser_headless", False))
+            launch_kwargs = {
+                "headless": use_headless,
+                "executable_path": browser_executable_path,
+                "proxy": proxy_option,
+                "args": browser_args,
+            }
+            if use_headless and not browser_executable_path:
+                launch_kwargs["channel"] = "chromium"
+            browser = await playwright.chromium.launch(**launch_kwargs)
             context = await browser.new_context(
                 viewport=viewport,
                 locale="en-US",
