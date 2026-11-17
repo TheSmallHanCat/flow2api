@@ -59,128 +59,83 @@ TRUSTED_RECAPTCHA_HOOK_SOURCE = r"""
 })();
 """
 
-# Execution strategy (in order):
-#   1. the pre-hijack `enterprise.execute` closure captured by the bind hook
-#      (older Flow builds),
-#   2. `grecaptcha.enterprise.execute.call(enterprise, siteKey, {action})`
-#      (newer Flow builds no longer call `.bind()`, so nothing gets captured;
-#      this is the documented enterprise-v3 usage and works without a render),
-#   3. render into a *fresh empty* container and execute the widget id. The old
-#      code rendered into `document.documentElement`, which always contains
-#      children and makes reCAPTCHA throw
-#      "reCAPTCHA placeholder element must be empty".
 RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
             const storageKey = '__flow2apiTrustedRecaptchaExecute';
-
-            for (let attempt = 0; attempt < 20; attempt += 1) {
-                if (window[storageKey]) break;
-                await new Promise(resolve => setTimeout(resolve, 250));
-            }
-
+            const deadline = Date.now() + Math.max(0, timeoutMs);
+            const captured = window[storageKey];
             const enterprise = window.grecaptcha && window.grecaptcha.enterprise;
-            const capturedExecute = !!window[storageKey];
             const debug = {
                 hookInstalled: !!window.__flow2apiTrustedRecaptchaHookInstalled,
                 actionGuard: !!window.__flow2apiRecaptchaActionGuardInstalled,
-                captured: capturedExecute,
+                captured: typeof captured === 'function',
                 executeType: enterprise ? typeof enterprise.execute : 'missing',
-                renderType: enterprise ? typeof enterprise.render : 'missing',
-                url: location.href
+                renderType: enterprise ? typeof enterprise.render : 'missing'
             };
             const errors = [];
+            const strategies = [];
+            let container = null;
 
-            const runExecute = async (label, factory) => {
-                try {
-                    const token = await new Promise((resolve, reject) => {
-                        let settled = false;
-                        const finish = (handler, value) => {
-                            if (settled) return;
-                            settled = true;
-                            clearTimeout(timer);
-                            handler(value);
-                        };
-                        const timer = setTimeout(() => {
-                            finish(reject, new Error('execute timeout'));
-                        }, timeoutMs);
-                        try {
-                            Promise.resolve(factory()).then(
-                                value => finish(resolve, value),
-                                error => finish(reject, error)
-                            );
-                        } catch (error) {
-                            finish(reject, error);
-                        }
-                    });
-                    const normalized = typeof token === 'string' ? token.trim() : '';
-                    if (normalized) return normalized;
-                    errors.push(label + ': empty token');
-                } catch (error) {
-                    errors.push(
-                        label + ': '
-                        + (error && error.message ? error.message : String(error))
-                    );
-                }
-                return null;
-            };
-
-            if (capturedExecute && typeof window[storageKey] === 'function') {
-                const token = await runExecute('captured', () => {
-                    return window[storageKey](siteKey, { action: requestedAction });
-                });
-                if (token) return { ok: true, token, debug };
+            if (typeof captured === 'function') {
+                strategies.push(['captured', () => captured(siteKey, {action: requestedAction})]);
             }
-
             if (enterprise && typeof enterprise.execute === 'function') {
                 let executeSource = '';
-                try {
-                    executeSource = String(enterprise.execute || '');
-                } catch (error) {}
+                try { executeSource = String(enterprise.execute); } catch (error) {}
                 if (
                     executeSource.includes('extension_hijack_detected') &&
-                    !window.__flow2apiRecaptchaActionGuardInstalled
+                    !debug.actionGuard
                 ) {
-                    errors.push('direct: trusted reCAPTCHA action guard is unavailable');
+                    // Both public paths use the same wrapper and require the guard.
+                    errors.push('trusted reCAPTCHA action guard is unavailable');
                 } else {
-                    const token = await runExecute('direct', () => {
-                        return enterprise.execute.call(
-                            enterprise,
-                            siteKey,
-                            { action: requestedAction }
-                        );
-                    });
-                    if (token) return { ok: true, token, debug };
-                }
-
-                if (typeof enterprise.render === 'function') {
-                    try {
-                        const container = document.createElement('div');
-                        container.setAttribute('data-flow2api-recaptcha', '1');
-                        container.style.display = 'none';
-                        (document.body || document.documentElement)
-                            .appendChild(container);
-                        const clientId = enterprise.render(
-                            container,
-                            { sitekey: siteKey, action: requestedAction }
-                        );
-                        const token = await runExecute('render', () => {
-                            return enterprise.execute.call(
-                                enterprise,
-                                clientId,
-                                { action: requestedAction }
+                    strategies.push(['direct', () => enterprise.execute.call(
+                        enterprise, siteKey, {action: requestedAction}
+                    )]);
+                    if (typeof enterprise.render === 'function') {
+                        strategies.push(['render', () => {
+                            container = document.createElement('div');
+                            container.setAttribute('data-flow2api-recaptcha', '1');
+                            container.style.display = 'none';
+                            (document.body || document.documentElement).appendChild(container);
+                            const clientId = enterprise.render(
+                                container, {sitekey: siteKey, size: 'invisible', action: requestedAction}
                             );
-                        });
-                        if (token) return { ok: true, token, debug };
-                    } catch (renderError) {
-                        errors.push(
-                            'render: '
-                            + (renderError && renderError.message
-                                ? renderError.message
-                                : String(renderError))
-                        );
+                            return enterprise.execute.call(
+                                enterprise, clientId, {action: requestedAction}
+                            );
+                        }]);
                     }
                 }
             }
 
+            for (let index = 0; index < strategies.length; index += 1) {
+                const [label, factory] = strategies[index];
+                const remaining = deadline - Date.now();
+                if (remaining <= 0) {
+                    errors.push(label + ': total execute timeout');
+                    break;
+                }
+                // Reserve time for each remaining fallback within the caller's budget.
+                const attemptMs = Math.max(1, Math.floor(remaining / (strategies.length - index)));
+                let timer;
+                try {
+                    const token = await new Promise((resolve, reject) => {
+                        timer = setTimeout(() => reject(new Error('execute timeout')), attemptMs);
+                        Promise.resolve(factory()).then(resolve, reject);
+                    });
+                    const normalized = typeof token === 'string' ? token.trim() : '';
+                    if (normalized) return {ok: true, token: normalized, debug};
+                    errors.push(label + ': empty token');
+                } catch (error) {
+                    errors.push(label + ': ' + (error && error.message ? error.message : String(error)));
+                } finally {
+                    clearTimeout(timer);
+                    if (container) {
+                        container.remove();
+                        container = null;
+                    }
+                }
+            }
             return {
                 ok: false,
                 error: errors.join(' | ') || 'reCAPTCHA execute is unavailable',

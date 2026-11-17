@@ -253,7 +253,7 @@ Route = None
 BrowserContext = None
 PLAYWRIGHT_AVAILABLE = False
 
-if DOCKER_HEADED_BLOCKED:
+if DOCKER_HEADED_BLOCKED and not config.browser_headless:
     debug_logger.log_warning(
         "[BrowserCaptcha] 检测到 Docker 环境，默认禁用有头浏览器打码。"
         "如需启用请设置 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb。"
@@ -263,7 +263,7 @@ if DOCKER_HEADED_BLOCKED:
         "[BrowserCaptcha] 如需启用请设置 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb"
     )
 else:
-    if IS_DOCKER and ALLOW_DOCKER_HEADED:
+    if IS_DOCKER and ALLOW_DOCKER_HEADED and not config.browser_headless:
         debug_logger.log_warning(
             "[BrowserCaptcha] Docker 有头浏览器打码白名单已启用，请确保 DISPLAY/Xvfb 可用"
         )
@@ -1620,12 +1620,16 @@ class TokenBrowser:
                     f"[BrowserCaptcha] Token-{self.token_id} using custom browser executable: {browser_executable_path}"
                 )
 
-            browser = await playwright.chromium.launch(
-                headless=False,
-                executable_path=browser_executable_path,
-                proxy=proxy_option,
-                args=browser_args,
-            )
+            use_headless = bool(getattr(config, "browser_headless", False))
+            launch_kwargs = {
+                "headless": use_headless,
+                "executable_path": browser_executable_path,
+                "proxy": proxy_option,
+                "args": browser_args,
+            }
+            if use_headless and not browser_executable_path:
+                launch_kwargs["channel"] = "chromium"
+            browser = await playwright.chromium.launch(**launch_kwargs)
             context = await browser.new_context(
                 viewport=viewport,
                 locale="en-US",
@@ -2478,24 +2482,11 @@ class TokenBrowser:
                 if primary_host == "https://www.recaptcha.net"
                 else "https://www.recaptcha.net"
             )
-            script_path = (
-                "recaptcha/enterprise.js" if enterprise else "recaptcha/api.js"
-            )
             execute_target = (
                 "grecaptcha.enterprise.execute" if enterprise else "grecaptcha.execute"
             )
             ready_target = (
                 "grecaptcha.enterprise.ready" if enterprise else "grecaptcha.ready"
-            )
-            wait_expression = (
-                (
-                "typeof grecaptcha !== 'undefined' && typeof grecaptcha.enterprise !== 'undefined' && "
-                "typeof grecaptcha.enterprise.execute === 'function'"
-                )
-                if enterprise
-                else (
-                "typeof grecaptcha !== 'undefined' && typeof grecaptcha.execute === 'function'"
-            )
             )
             api_label = "enterprise.js" if enterprise else "api.js"
 
@@ -2582,27 +2573,15 @@ class TokenBrowser:
                 )
                 await asyncio.sleep(warmup_seconds)
 
-            if not await self._poll_enterprise_ready(page, 15000, wait_expression):
-                debug_logger.log_warning(
-                    f"[BrowserCaptcha] Token-{self.token_id} 自定义 grecaptcha 未就绪，尝试补注入脚本"
-                )
-                injected = False
-                for script_host in (primary_host, secondary_host):
-                    script_url = f"{script_host}/{script_path}?render={website_key}"
-                    if await self._inject_recaptcha_script(
-                        page, script_url, "/recaptcha/"
-                    ):
-                        injected = True
-                    if await self._poll_enterprise_ready(
-                        page, 15000, wait_expression
-                    ):
-                        injected = True
-                        break
-                if not injected:
-                    debug_logger.log_warning(
-                        f"[BrowserCaptcha] Token-{self.token_id} 自定义 grecaptcha 最终未就绪"
-                    )
-                    return None
+            if not await self._wait_for_enterprise_ready(
+                page,
+                website_key,
+                primary_host,
+                secondary_host,
+                context_label="自定义",
+                enterprise=enterprise,
+            ):
+                return None
 
             await self._capture_page_fingerprint(page)
 
@@ -2697,77 +2676,95 @@ class TokenBrowser:
         "typeof grecaptcha.enterprise.execute === 'function'"
     )
 
-    # 新版 Flow 页面启用了 Trusted Types
-    # (`require-trusted-types-for 'script'`)，直接给 script.src 赋值会抛
-    # "This document requires 'TrustedScriptURL' assignment"。
-    # 这里通过页面内创建的 Trusted Types policy 完成注入，避免使用
-    # Playwright 的 add_script_tag（它在 Trusted Types 下必然失败）。
     INJECT_RECAPTCHA_SCRIPT_JS = r"""
-    ({url, marker}) => {
-        const scripts = Array.from(document.scripts || []);
-        const existing = scripts.some((script) => {
-            const src = script && script.src ? String(script.src) : '';
-            return src.includes(marker);
-        });
-        if (existing) return 'existing';
-        let policy = null;
-        try {
-            if (
-                window.trustedTypes &&
-                typeof window.trustedTypes.createPolicy === 'function'
-            ) {
-                policy = window.trustedTypes.createPolicy(
-                    'flow2api-recaptcha-' + Math.random().toString(36).slice(2),
-                    { createScriptURL: (value) => value }
-                );
-            }
-        } catch (error) {}
+    ({url, timeoutMs}) => new Promise((resolve, reject) => {
         const script = document.createElement('script');
+        // The nonce attribute is hidden by browsers; its property retains the value.
+        const nonceSource = Array.from(document.scripts).find(node => node.nonce);
+        if (nonceSource) script.nonce = nonceSource.nonce;
         script.async = true;
+        let settled = false;
+        const finish = (error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            script.onload = null;
+            script.onerror = null;
+            if (error) {
+                script.remove();
+                reject(error);
+            } else {
+                resolve(true);
+            }
+        };
+        const timer = setTimeout(() => {
+            finish(new Error('reCAPTCHA script load timeout'));
+        }, timeoutMs);
+        script.onload = () => finish();
+        script.onerror = () => finish(new Error('reCAPTCHA script failed to load'));
         try {
-            script.src = policy ? policy.createScriptURL(url) : url;
+            try {
+                script.src = url;
+            } catch (error) {
+                const policyKey = '__flow2apiRecaptchaScriptURLPolicy';
+                if (!window[policyKey]) {
+                    window[policyKey] = window.trustedTypes.createPolicy(
+                        'flow2api-recaptcha',
+                        {createScriptURL: value => value}
+                    );
+                }
+                script.src = window[policyKey].createScriptURL(url);
+            }
+            (document.head || document.documentElement).appendChild(script);
         } catch (error) {
-            script.src = url;
+            finish(error);
         }
-        (document.head || document.documentElement).appendChild(script);
-        return 'injected';
-    }
+    })
     """
 
     async def _poll_enterprise_ready(
         self, page, timeout_ms: int, expression: Optional[str] = None
     ) -> bool:
-        """用 page.evaluate 轮询 grecaptcha 就绪状态。
-
-        不使用 ``page.wait_for_function``：新版 Flow 的 Trusted Types CSP 会让
-        其中的字符串 eval 抛
-        "Evaluating a string as JavaScript violates this document's Trusted Type
-        assignment requirements"，导致就绪检测永远失败。
-        """
+        """用 evaluate 检测就绪，避免 wait_for_function 在页面内触发字符串 eval。"""
         probe = expression or self.ENTERPRISE_READY_EXPRESSION
         deadline = time.monotonic() + max(0.0, timeout_ms / 1000.0)
+        last_error = None
         while True:
             try:
-                if await page.evaluate(probe):
+                ready = await page.evaluate(probe)
+                last_error = None
+                if ready:
                     return True
-            except Exception:
-                pass
-            if time.monotonic() >= deadline:
+            except Exception as e:
+                last_error = f"{type(e).__name__}: {str(e)[:150]}"
+                if page.is_closed():
+                    return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                if last_error:
+                    debug_logger.log_warning(
+                        f"[BrowserCaptcha] Token-{self.token_id} reCAPTCHA 就绪检测失败: {last_error}"
+                    )
                 return False
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(min(0.25, remaining))
 
-    async def _inject_recaptcha_script(self, page, url: str, marker: str) -> bool:
-        """在页面内注入 reCAPTCHA 脚本（兼容 Trusted Types CSP）。"""
+    async def _inject_recaptcha_script(
+        self, page, url: str, *, timeout_ms: int = 15000
+    ) -> bool:
+        """等待脚本加载结果；失败时清理本次节点，允许备用域名继续加载。"""
         try:
-            await page.evaluate(
-                self.INJECT_RECAPTCHA_SCRIPT_JS,
-                {"url": url, "marker": marker},
+            await asyncio.wait_for(
+                page.evaluate(
+                    self.INJECT_RECAPTCHA_SCRIPT_JS,
+                    {"url": url, "timeoutMs": timeout_ms},
+                ),
+                timeout=max(0.0, timeout_ms / 1000.0) + 1.0,
             )
             return True
         except Exception as e:
             debug_logger.log_warning(
-                f"[BrowserCaptcha] Token-{self.token_id} 页面内注入脚本失败: "
-                f"{type(e).__name__}: {str(e)[:150]}"
+                f"[BrowserCaptcha] Token-{self.token_id} reCAPTCHA 脚本加载失败 "
+                f"({urlparse(url).netloc}): {type(e).__name__}: {str(e)[:150]}"
             )
             return False
 
@@ -2780,26 +2777,34 @@ class TokenBrowser:
         *,
         timeout_ms: int = 15000,
         context_label: str = "",
-        script_path: str = "recaptcha/enterprise.js",
-        marker: str = "/recaptcha/enterprise.js",
+        enterprise: bool = True,
     ) -> bool:
-        """等待 grecaptcha.enterprise 就绪，必要时补注入脚本。"""
+        """等待 reCAPTCHA 就绪，并在主域名加载失败后尝试备用域名。"""
+        wait_expression = self.ENTERPRISE_READY_EXPRESSION if enterprise else (
+            "() => typeof grecaptcha !== 'undefined' && "
+            "typeof grecaptcha.execute === 'function'"
+        )
         label = f"{context_label} " if context_label else ""
-        if await self._poll_enterprise_ready(page, timeout_ms):
+        if await self._poll_enterprise_ready(page, timeout_ms, wait_expression):
             return True
 
         debug_logger.log_warning(
             f"[BrowserCaptcha] Token-{self.token_id} {label}grecaptcha 未就绪，尝试补注入脚本"
         )
-
+        script_path = "recaptcha/enterprise.js" if enterprise else "recaptcha/api.js"
         for script_host in (primary_host, secondary_host):
-            script_url = f"{script_host}/{script_path}?render={website_key}"
-            if not await self._inject_recaptcha_script(page, script_url, marker):
+            deadline = time.monotonic() + max(0.0, timeout_ms / 1000.0)
+            if not await self._inject_recaptcha_script(
+                page, f"{script_host}/{script_path}?render={website_key}",
+                timeout_ms=timeout_ms,
+            ):
                 continue
-            if await self._poll_enterprise_ready(page, timeout_ms):
+            remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
+            if await self._poll_enterprise_ready(page, remaining_ms, wait_expression):
                 return True
             debug_logger.log_warning(
-                f"[BrowserCaptcha] Token-{self.token_id} {label}注入后仍未就绪: {script_url}"
+                f"[BrowserCaptcha] Token-{self.token_id} {label}脚本已加载但 grecaptcha 仍未就绪 "
+                f"({urlparse(script_host).netloc})"
             )
         return False
 
@@ -3425,12 +3430,13 @@ class BrowserCaptchaService:
     
     def _check_available(self):
         """检查服务是否可用"""
-        if DOCKER_HEADED_BLOCKED:
+        use_headless = config.browser_headless
+        if DOCKER_HEADED_BLOCKED and not use_headless:
             raise RuntimeError(
                 "检测到 Docker 环境，默认禁用有头浏览器打码。"
                 "如需启用请设置环境变量 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb。"
             )
-        if IS_DOCKER and not os.environ.get("DISPLAY"):
+        if IS_DOCKER and not use_headless and not os.environ.get("DISPLAY"):
             raise RuntimeError(
                 "Docker 有头浏览器打码已启用，但 DISPLAY 未设置。"
                 "请设置 DISPLAY（例如 :99）并启动 Xvfb。"

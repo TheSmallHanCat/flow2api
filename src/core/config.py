@@ -427,6 +427,11 @@ class Config:
         """有头浏览器打码是否默认后台启动，避免抢占前台窗口。"""
         return self._config.get("captcha", {}).get("browser_launch_background", True)
 
+    @property
+    def browser_headless(self) -> bool:
+        """browser 模式是否启用无头模式（--headless=new / channel=chromium）。"""
+        return bool(self._config.get("captcha", {}).get("browser_headless", False))
+
     def set_browser_launch_background(self, enabled: bool):
         """设置有头浏览器打码是否后台启动。"""
         if "captcha" not in self._config:

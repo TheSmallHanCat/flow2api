@@ -54,6 +54,7 @@ base_url = ""   # 缓存文件访问的基础URL, 留空则使用服务器地址
 
 [captcha]
 captcha_method = "yescaptcha"  # 打码方式: yescaptcha/flow2api_team(内置团队打码，地址与密钥固定)/captcharun/twocaptcha/capsolver/ezcaptcha/browser/personal/remote_browser
+browser_headless = false  # browser 模式是否启用无头 Chromium；启用后 Docker 无需 DISPLAY/Xvfb
 browser_recaptcha_settle_seconds = 3.0  # 自定义站点分数测试在 reload/clr 就绪后的额外稳态等待
 browser_flow_page_warmup_seconds = 6.0  # browser harvest 打开 Flow 页面后的稳定等待
 browser_count = 1  # browser 模式的有头浏览器实例数量
