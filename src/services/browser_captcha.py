@@ -2799,7 +2799,7 @@ class TokenBrowser:
         for script_host in (primary_host, secondary_host):
             deadline = time.monotonic() + max(0.0, timeout_ms / 1000.0)
             if not await self._inject_recaptcha_script(
-                page, f"{script_host}/{script_path}?render={website_key}",
+                page, f"{script_host}/{script_path}?render={website_key}&trustedtypes=true",
                 timeout_ms=timeout_ms,
             ):
                 continue

@@ -251,6 +251,94 @@ const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             virtual_time=True,
         )
 
+    def test_late_captured_success_survives_failed_fallbacks(self):
+        self.run_contract(
+            r"""
+            globalThis.__flow2apiTrustedRecaptchaExecute = () => new Promise(
+              resolve => setTimeout(() => resolve(' captcha '), 300)
+            );
+            globalThis.grecaptcha = { enterprise: {
+              execute() { return Promise.reject(new Error('public unavailable')); },
+              render() { return 7; }
+            }};
+            """,
+            r"""
+            if (!result.ok || result.token !== 'captcha') throw Error(JSON.stringify(result));
+            if (nodes.length) throw Error('render container leaked');
+            """,
+            timeout_ms=600,
+        )
+
+    def test_late_captured_success_interrupts_pending_fallback(self):
+        self.run_contract(
+            r"""
+            globalThis.renders = 0;
+            globalThis.__flow2apiTrustedRecaptchaExecute = () => new Promise(
+              resolve => setTimeout(() => resolve('captcha'), 300)
+            );
+            globalThis.grecaptcha = { enterprise: {
+              execute() { return new Promise(() => {}); },
+              render() { renders += 1; return 7; }
+            }};
+            """,
+            r"""
+            if (!result.ok || result.token !== 'captcha') throw Error(JSON.stringify(result));
+            if (renders !== 0) throw Error('render launched after a valid captured result');
+            """,
+            timeout_ms=600,
+        )
+
+    def test_late_direct_success_survives_render_failure(self):
+        self.run_contract(
+            r"""
+            globalThis.__flow2apiTrustedRecaptchaExecute = () => new Promise(() => {});
+            globalThis.grecaptcha = { enterprise: {
+              execute(target) {
+                if (target === 7) return Promise.reject(new Error('widget unavailable'));
+                return new Promise(resolve => setTimeout(() => resolve('captcha'), 250));
+              },
+              render() { return 7; }
+            }};
+            """,
+            r"""
+            if (!result.ok || result.token !== 'captcha') throw Error(JSON.stringify(result));
+            if (nodes.length) throw Error('render container leaked');
+            """,
+            timeout_ms=600,
+        )
+
+    def test_all_pending_strategies_obey_total_timeout_and_clean_container(self):
+        self.run_contract(
+            r"""
+            globalThis.__flow2apiTrustedRecaptchaExecute = () => new Promise(() => {});
+            globalThis.grecaptcha = { enterprise: {
+              execute() { return new Promise(() => {}); },
+              render() { return 7; }
+            }};
+            """,
+            r"""
+            if (result.ok || !result.error.includes('timeout')) throw Error(JSON.stringify(result));
+            if (elapsed > 150) throw Error('total timeout exceeded: ' + elapsed);
+            if (nodes.length) throw Error('timed-out render container leaked');
+            """,
+            virtual_time=True,
+        )
+
+    def test_late_rejection_does_not_break_successful_fallback(self):
+        self.run_contract(
+            r"""
+            globalThis.__flow2apiTrustedRecaptchaExecute = () => new Promise(
+              (resolve, reject) => setTimeout(() => reject(new Error('late capture failure')), 300)
+            );
+            globalThis.grecaptcha = { enterprise: {
+              execute() { return Promise.resolve('captcha'); },
+              render() { throw Error('render must not run'); }
+            }};
+            """,
+            "if (!result.ok || result.token !== 'captcha') throw Error(JSON.stringify(result));",
+            timeout_ms=600,
+        )
+
     def test_failures_preserve_each_strategy_error_and_clean_container(self):
         self.run_contract(
             r"""

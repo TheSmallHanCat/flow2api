@@ -108,39 +108,73 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
                 }
             }
 
-            for (let index = 0; index < strategies.length; index += 1) {
-                const [label, factory] = strategies[index];
-                const remaining = deadline - Date.now();
-                if (remaining <= 0) {
-                    errors.push(label + ': total execute timeout');
-                    break;
-                }
-                // Reserve time for each remaining fallback within the caller's budget.
-                const attemptMs = Math.max(1, Math.floor(remaining / (strategies.length - index)));
+            const attempts = [];
+            let successfulToken = null;
+            let resolveSuccess;
+            const successPromise = new Promise(resolve => { resolveSuccess = resolve; });
+            const waitForResult = async (completion, waitMs) => {
                 let timer;
                 try {
-                    const token = await new Promise((resolve, reject) => {
-                        timer = setTimeout(() => reject(new Error('execute timeout')), attemptMs);
-                        Promise.resolve(factory()).then(resolve, reject);
-                    });
-                    const normalized = typeof token === 'string' ? token.trim() : '';
-                    if (normalized) return {ok: true, token: normalized, debug};
-                    errors.push(label + ': empty token');
-                } catch (error) {
-                    errors.push(label + ': ' + (error && error.message ? error.message : String(error)));
+                    await Promise.race([
+                        successPromise,
+                        completion,
+                        new Promise(resolve => {
+                            timer = setTimeout(resolve, Math.max(0, waitMs));
+                        })
+                    ]);
                 } finally {
                     clearTimeout(timer);
-                    if (container) {
-                        container.remove();
-                        container = null;
-                    }
                 }
-            }
-            return {
-                ok: false,
-                error: errors.join(' | ') || 'reCAPTCHA execute is unavailable',
-                debug
             };
+
+            try {
+                for (let index = 0; index < strategies.length; index += 1) {
+                    const [label, factory] = strategies[index];
+                    const remaining = deadline - Date.now();
+                    if (remaining <= 0) {
+                        errors.push(label + ': total execute timeout');
+                        break;
+                    }
+                    const attempt = {label, settled: false};
+                    attempt.promise = Promise.resolve().then(factory).then(token => {
+                        attempt.settled = true;
+                        const normalized = typeof token === 'string' ? token.trim() : '';
+                        if (!normalized) {
+                            errors.push(label + ': empty token');
+                        } else if (Date.now() >= deadline) {
+                            errors.push(label + ': total execute timeout');
+                        } else if (!successfulToken) {
+                            successfulToken = normalized;
+                            resolveSuccess(normalized);
+                        }
+                    }, error => {
+                        attempt.settled = true;
+                        errors.push(label + ': ' + (error && error.message ? error.message : String(error)));
+                    });
+                    attempts.push(attempt);
+                    // Launch fallbacks without discarding earlier pending results.
+                    const attemptMs = Math.max(1, Math.floor(remaining / (strategies.length - index)));
+                    await waitForResult(attempt.promise, attemptMs);
+                    if (successfulToken) return {ok: true, token: successfulToken, debug};
+                }
+                const remaining = deadline - Date.now();
+                if (remaining > 0 && attempts.some(attempt => !attempt.settled)) {
+                    await waitForResult(
+                        Promise.all(attempts.map(attempt => attempt.promise)), remaining
+                    );
+                }
+                if (successfulToken) return {ok: true, token: successfulToken, debug};
+                for (const attempt of attempts) {
+                    if (!attempt.settled) errors.push(attempt.label + ': total execute timeout');
+                }
+                return {
+                    ok: false,
+                    error: errors.join(' | ') || 'reCAPTCHA execute is unavailable',
+                    debug
+                };
+            } finally {
+                if (container) container.remove();
+            }
         })(__SITE_KEY__, __REQUESTED_ACTION__, __TIMEOUT_MS__)"""
 
 

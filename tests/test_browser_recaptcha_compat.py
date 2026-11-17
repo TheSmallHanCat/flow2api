@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 with patch.dict(os.environ, {"DOCKER_CONTAINER": "1", "ALLOW_DOCKER_HEADED_CAPTCHA": "false"}):
     from src.services.browser_captcha import TokenBrowser
@@ -139,7 +139,7 @@ class RecaptchaCspBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.solver = object.__new__(TokenBrowser)
         self.solver.token_id = 7
 
-    async def make_page(self, *, failed_hosts=(), native_failed_script=False, enterprise=True):
+    async def make_page(self, *, failed_hosts=(), native_failed_script=False, enterprise=True, nested_script=False):
         page = await self.browser.new_page()
         requests = []
         primary = "https://www.google.com/recaptcha/enterprise.js?render=site-key"
@@ -159,10 +159,26 @@ class RecaptchaCspBrowserTests(unittest.IsolatedAsyncioTestCase):
                 if parsed.hostname in failed_hosts:
                     await route.abort("failed")
                 else:
-                    body = "window.grecaptcha={enterprise:{execute:()=>Promise.resolve('captcha')}}" if enterprise else (
-                        "window.grecaptcha={execute:()=>Promise.resolve('captcha')}"
-                    )
+                    if nested_script:
+                        use_trusted_types = parse_qs(parsed.query).get("trustedtypes") == ["true"]
+                        source = '"https://www.gstatic.com/recaptcha/runtime.js"'
+                        if use_trusted_types:
+                            source = "trustedTypes.createPolicy('recaptcha', {createScriptURL: value => value}).createScriptURL(" + source + ")"
+                        body = (
+                            "window.grecaptcha={enterprise:{}};"
+                            "const dependency=document.createElement('script');"
+                            "dependency.nonce=document.currentScript.nonce;"
+                            f"dependency.src={source};"
+                            "document.head.appendChild(dependency);"
+                        )
+                    else:
+                        body = "window.grecaptcha={enterprise:{execute:()=>Promise.resolve('captcha')}}" if enterprise else (
+                            "window.grecaptcha={execute:()=>Promise.resolve('captcha')}"
+                        )
                     await route.fulfill(content_type="text/javascript", body=body)
+            elif parsed.hostname == "www.gstatic.com" and parsed.path == "/recaptcha/runtime.js":
+                requests.append(route.request.url)
+                await route.fulfill(content_type="text/javascript", body="window.grecaptcha.enterprise.execute=()=>Promise.resolve('captcha')")
             else:
                 await route.abort()
 
@@ -178,6 +194,16 @@ class RecaptchaCspBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.solver._poll_enterprise_ready(page, 100))
         self.assertEqual(len(requests), 1)
         self.assertEqual(await page.locator("script[src]").evaluate("node => node.nonce"), "captcha-test")
+
+    async def test_bootstrap_loads_dependency_under_trusted_types_csp(self):
+        page, requests = await self.make_page(nested_script=True)
+        errors = []
+        page.on("pageerror", lambda error: errors.append(error))
+        self.assertTrue(await self.solver._wait_for_enterprise_ready(
+            page, "site-key", "https://www.google.com", "https://www.recaptcha.net", timeout_ms=1000
+        ))
+        self.assertIn("https://www.gstatic.com/recaptcha/runtime.js", requests)
+        self.assertFalse(errors)
 
     async def test_failed_native_tag_does_not_suppress_secondary_host(self):
         page, requests = await self.make_page(failed_hosts=("www.google.com",), native_failed_script=True)
