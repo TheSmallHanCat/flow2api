@@ -109,10 +109,13 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
                     typeof window.grecaptcha.enterprise.render === 'function' &&
                     window.__flow2apiRecaptchaClientId === undefined
                 ) {
+                    const holder = document.createElement('div');
+                    holder.style.display = 'none';
+                    (document.body || document.documentElement).appendChild(holder);
                     window.__flow2apiRecaptchaClientId =
                         window.grecaptcha.enterprise.render(
-                            document.documentElement,
-                            { sitekey: siteKey, action: requestedAction }
+                            holder,
+                            { sitekey: siteKey, size: 'invisible', action: requestedAction }
                         );
                 }
                 if (window.__flow2apiRecaptchaClientId !== undefined) {

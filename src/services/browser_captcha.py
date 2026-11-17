@@ -253,7 +253,7 @@ Route = None
 BrowserContext = None
 PLAYWRIGHT_AVAILABLE = False
 
-if DOCKER_HEADED_BLOCKED:
+if DOCKER_HEADED_BLOCKED and not config.browser_headless:
     debug_logger.log_warning(
         "[BrowserCaptcha] 检测到 Docker 环境，默认禁用有头浏览器打码。"
         "如需启用请设置 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb。"
@@ -263,7 +263,7 @@ if DOCKER_HEADED_BLOCKED:
         "[BrowserCaptcha] 如需启用请设置 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb"
     )
 else:
-    if IS_DOCKER and ALLOW_DOCKER_HEADED:
+    if IS_DOCKER and ALLOW_DOCKER_HEADED and not config.browser_headless:
         debug_logger.log_warning(
             "[BrowserCaptcha] Docker 有头浏览器打码白名单已启用，请确保 DISPLAY/Xvfb 可用"
         )
@@ -1620,12 +1620,16 @@ class TokenBrowser:
                     f"[BrowserCaptcha] Token-{self.token_id} using custom browser executable: {browser_executable_path}"
                 )
 
-            browser = await playwright.chromium.launch(
-                headless=False,
-                executable_path=browser_executable_path,
-                proxy=proxy_option,
-                args=browser_args,
-            )
+            use_headless = bool(getattr(config, "browser_headless", False))
+            launch_kwargs = {
+                "headless": use_headless,
+                "executable_path": browser_executable_path,
+                "proxy": proxy_option,
+                "args": browser_args,
+            }
+            if use_headless and not browser_executable_path:
+                launch_kwargs["channel"] = "chromium"
+            browser = await playwright.chromium.launch(**launch_kwargs)
             context = await browser.new_context(
                 viewport=viewport,
                 locale="en-US",
@@ -3402,12 +3406,13 @@ class BrowserCaptchaService:
     
     def _check_available(self):
         """检查服务是否可用"""
-        if DOCKER_HEADED_BLOCKED:
+        use_headless = config.browser_headless
+        if DOCKER_HEADED_BLOCKED and not use_headless:
             raise RuntimeError(
                 "检测到 Docker 环境，默认禁用有头浏览器打码。"
                 "如需启用请设置环境变量 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb。"
             )
-        if IS_DOCKER and not os.environ.get("DISPLAY"):
+        if IS_DOCKER and not use_headless and not os.environ.get("DISPLAY"):
             raise RuntimeError(
                 "Docker 有头浏览器打码已启用，但 DISPLAY 未设置。"
                 "请设置 DISPLAY（例如 :99）并启动 Xvfb。"
