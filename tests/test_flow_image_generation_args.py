@@ -43,9 +43,15 @@ class FlowClientImageGenerationArgumentTests(unittest.TestCase):
         self.assertIsNone(request[2])
         self.assertIsNone(request[9])
 
-    def test_image_requests_follow_fourteen_slot_layout(self):
+    def test_image_requests_follow_frontend_slot_layout(self):
         for model_name in ("BELUGA", "HARBOR_SEAL", "GEM_PIX_2"):
-            for image_inputs in (None, [{"name": MEDIA_ID}]):
+            for image_inputs in (
+                None,
+                [],
+                [{"name": MEDIA_ID}],
+                [{"mediaId": MEDIA_ID}],
+                [{"name": MEDIA_ID}, {"mediaId": "second-reference"}],
+            ):
                 with self.subTest(model=model_name, references=bool(image_inputs)):
                     argument = self.client._build_frontend_image_generation_argument(
                         project_id=PROJECT_ID,
@@ -57,12 +63,33 @@ class FlowClientImageGenerationArgumentTests(unittest.TestCase):
                         image_inputs=image_inputs,
                     )
                     request = argument[1][0]
-                    self.assertEqual(len(request), 14)
+                    self.assertEqual(len(request), 15 if image_inputs else 14)
+                    self.assertEqual(request[14:], [4] if image_inputs else [])
                     self.assertEqual(request[5], model_name)
                     self.assertEqual(request[9:12], [None, None, None])
                     self.assertEqual(request[12], "session-id")
                     self.assertRegex(request[13], r"^[0-9A-F-]{36}$")
                     self.assertEqual(argument[4], ["session-id"])
+
+    def test_empty_reference_ids_keep_text_only_layout(self):
+        for image_inputs in (
+            [{}],
+            [{"name": " "}],
+            [{"mediaId": None}, None],
+        ):
+            with self.subTest(image_inputs=image_inputs):
+                argument = self.client._build_frontend_image_generation_argument(
+                    project_id=PROJECT_ID,
+                    prompt="an apple",
+                    model_name="BELUGA",
+                    aspect_ratio="IMAGE_ASPECT_RATIO_LANDSCAPE",
+                    recaptcha_token="recaptcha-token",
+                    session_id="session-id",
+                    image_inputs=image_inputs,
+                )
+                request = argument[1][0]
+                self.assertIsNone(request[2])
+                self.assertEqual(len(request), 14)
 
 
 if __name__ == "__main__":

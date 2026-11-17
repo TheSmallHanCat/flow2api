@@ -233,6 +233,8 @@ class FlowFrontendMixin:
             session_id,
             str(uuid.uuid4()).upper(),
         ]
+        if reference_media_ids:
+            request.append(4)
         return [
             None,
             [request],

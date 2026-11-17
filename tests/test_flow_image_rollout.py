@@ -302,6 +302,8 @@ class ImageModelRolloutTests(unittest.IsolatedAsyncioTestCase):
                             ][1][0]
                             self.assertEqual(request[5], model)
                             self.assertEqual(request[4], aspect_enum)
+                            self.assertEqual(len(request), 15 if references else 14)
+                            self.assertEqual(request[14:], [4] if references else [])
                             self.assertEqual(
                                 request[2],
                                 [["reference", None, None, None, 1]]
