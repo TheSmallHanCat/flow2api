@@ -62,7 +62,7 @@ class VeoLiteModelResolverTests(unittest.TestCase):
             self.assertIn(f"omni-1.2-flash-{seconds}s-portrait", listed)
         for seconds in (11, 12, 13, 14, 15):
             self.assertIn(f"omni-1.2-flash-{seconds}s-portrait", listed)
-            self.assertNotIn(f"omni-1.2-flash-{seconds}s-landscape", listed)
+            self.assertIn(f"omni-1.2-flash-{seconds}s-landscape", listed)
 
         landscape_8s = MODEL_CONFIG["omni-1.2-flash-8s-landscape"]
         self.assertEqual(landscape_8s["model_key"], "macaron_cookie_t2v_8s")
@@ -82,6 +82,19 @@ class VeoLiteModelResolverTests(unittest.TestCase):
         self.assertEqual(legacy["model_key"], "macaron_cookie_t2v_8s")
         legacy_portrait = MODEL_CONFIG["omni_portrait"]
         self.assertEqual(legacy_portrait["aspect_ratio"], "VIDEO_ASPECT_RATIO_PORTRAIT")
+
+    def test_omni_1_2_long_landscape_uses_matching_text_and_reference_keys(self):
+        for seconds in (11, 12, 13, 14, 15):
+            with self.subTest(seconds=seconds):
+                model_id = f"omni-1.2-flash-{seconds}s-landscape"
+                resolved = resolve_model_name(model_id, model_config=MODEL_CONFIG)
+                self.assertEqual(resolved, model_id)
+                model = MODEL_CONFIG[resolved]
+                self.assertEqual(model["model_key"], f"macaron_cookie_t2v_{seconds}s")
+                self.assertEqual(model["reference_model_key"], f"macaron_cookie_r2v_{seconds}s")
+                self.assertEqual(model["reference_duration"], seconds)
+                self.assertEqual(model["aspect_ratio"], "VIDEO_ASPECT_RATIO_LANDSCAPE")
+                self.assertTrue(model["supports_images"])
 
     def test_resolve_t2v_lite_alias_to_portrait_variant(self):
         request = types.SimpleNamespace(

@@ -35,6 +35,61 @@ class RecaptchaReadinessTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await browser._poll_enterprise_ready(page, 1000))
         page.wait_for_function.assert_not_awaited()
 
+    async def test_poll_times_out_and_cancels_stalled_evaluation(self):
+        browser = object.__new__(TokenBrowser)
+        browser.token_id = 7
+        cancelled = asyncio.Event()
+
+        async def stalled_evaluate(*args):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        page = SimpleNamespace(
+            evaluate=AsyncMock(side_effect=stalled_evaluate),
+            is_closed=Mock(return_value=False),
+        )
+        result = await asyncio.wait_for(
+            browser._poll_enterprise_ready(page, 10), timeout=1.0
+        )
+        self.assertFalse(result)
+        self.assertTrue(cancelled.is_set())
+        page.evaluate.assert_awaited_once()
+
+    async def test_poll_skips_evaluation_when_budget_is_exhausted(self):
+        browser = object.__new__(TokenBrowser)
+        browser.token_id = 7
+        page = SimpleNamespace(evaluate=AsyncMock(return_value=True))
+        self.assertFalse(await browser._poll_enterprise_ready(page, 0))
+        page.evaluate.assert_not_awaited()
+
+    async def test_cancelling_poll_cancels_pending_evaluation(self):
+        browser = object.__new__(TokenBrowser)
+        browser.token_id = 7
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def stalled_evaluate(*args):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        page = SimpleNamespace(
+            evaluate=AsyncMock(side_effect=stalled_evaluate),
+            is_closed=Mock(return_value=False),
+        )
+        task = asyncio.create_task(browser._poll_enterprise_ready(page, 1000))
+        try:
+            await asyncio.wait_for(started.wait(), timeout=1.0)
+        finally:
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        self.assertTrue(cancelled.is_set())
+
     async def test_custom_captcha_stops_when_runtime_is_not_ready(self):
         for enterprise in (False, True):
             with self.subTest(enterprise=enterprise):

@@ -27,20 +27,6 @@
 </tr>
 </table>
 
-<table>
-<tr>
-<td width="180" align="center" valign="middle">
-  <a href="https://proxylane.dev/?utm_source=flow2api&utm_medium=partnership&utm_campaign=flow2api_sponsor_202610&utm_content=github_readme">
-    <img src="static/sponsors/proxylane-flow2api.png" alt="ProxyLane" width="150">
-  </a>
-</td>
-<td valign="top">
-  感谢 <strong>ProxyLane</strong> 赞助了本项目！ProxyLane 是住宅代理服务，覆盖 195 个国家，95%+ IP 获 Scamalytics 低风险评级，支持 HTTP / SOCKS5 和账号密码认证。在 Token 的「协议代理」「打码代理」或全局「请求代理地址」里填入代理，用户名中写上城市和会话名，每个 Token 最长 72 小时使用同一个住宅 IP，换 IP 也留在同一城市。中文界面，支持 USDT 付款，首次购买使用优惠码 <strong>FLOW2API30</strong> 享 7 折，通过<a href="https://proxylane.dev/?utm_source=flow2api&utm_medium=partnership&utm_campaign=flow2api_sponsor_202610&utm_content=github_readme">此链接</a>注册即可。<br><br>
-  Thanks to <strong>ProxyLane</strong> for sponsoring this project! ProxyLane is a residential proxy service in 195 countries, with 95%+ of IPs rated low risk by Scamalytics and HTTP / SOCKS5 with username and password. Put the proxy into a Token's protocol or captcha proxy, or into the global request proxy, with a city and a session name in the username: each Token keeps one residential IP for up to 72 hours, and a replacement IP stays in the same city. New customers get 30% off the first purchase with code <strong>FLOW2API30</strong>. <a href="https://proxylane.dev/?utm_source=flow2api&utm_medium=partnership&utm_campaign=flow2api_sponsor_202610&utm_content=github_readme_en">Sign up here</a> to get started.
-</td>
-</tr>
-</table>
-
 ## ✨ 核心特性
 
 - 🎨 **文生图** / **图生图**
@@ -222,7 +208,7 @@ Nano Banana 2 Lite 使用 `gemini-3.1-flash-lite-image-*`，比例及分辨率�
 | `veo-3.1-lite-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Lite | 文生视频 |
 | `veo-3.1-fast-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Fast | 文生视频 |
 | `veo-3.1-quality-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Quality | 文生视频 |
-| `omni-1.2-flash-{3..10}s-{landscape,portrait}`、`omni-1.2-flash-{11..15}s-portrait` | Omni 1.2 Flash (`macaron_cookie`) | 文生/参考图视频 |
+| `omni-1.2-flash-{3..15}s-{landscape,portrait}` | Omni 1.2 Flash (`macaron_cookie`) | 文生/参考图视频 |
 | `omni-1.1-flash-{4,6,8,10}s-{landscape,portrait}` | Omni 1.1 Flash (`abra`，上游 2026-12-05 下线) | 文生/参考图视频 |
 | `veo-3.1-{lite,fast,quality}-i2v-{4,6}s-{landscape,portrait}` | Veo 3.1 | 首帧/首尾帧视频 |
 | `veo-3.1-{lite,fast}-r2v-8s-{landscape,portrait}` | Veo 3.1 | 多参考图视频 |
@@ -235,8 +221,8 @@ Nano Banana 2 Lite 使用 `gemini-3.1-flash-lite-image-*`，比例及分辨率�
 `Omni 1.2 Flash` 是 Flow 当前的默认视频模型（2026-11-08 实测抓取），同时支持文生视频和参考图视频。调用方使用同一组模型名，服务会根据请求中是否包含图片自动选择生成模式：
 
 - `omni-1.2-flash` 是 `omni-1.2-flash-8s-landscape` 的默认别名。
-- 完整模型名为 `omni-1.2-flash-{3..10}s-{landscape,portrait}`，可选择 3–10 秒以及横屏或竖屏。
-- 11–15 秒仅提供竖屏：`omni-1.2-flash-{11..15}s-portrait`（上游目录不提供长时长的横屏档）。
+- 完整模型名为 `omni-1.2-flash-{3..15}s-{landscape,portrait}`，可选择 3–15 秒以及横屏或竖屏，例如 `omni-1.2-flash-15s-landscape`。
+- 无订阅账号支持 3–10 秒；11–15 秒的横屏和竖屏均需要 Google AI Plus、Pro 或 Ultra 订阅，详见 [Flow 官方支持范围](https://support.google.com/flow/answer/16352836?hl=en)。
 - 仅传入文本时使用文生视频模式；传入 1–3 张 `image_url` 图片时使用参考图视频模式。
 - 时长和画面方向由模型名指定，无需额外传入同名参数。
 - 上一代 `omni-1.1-flash`（`abra`）上游已标记 2026-12-05 下线，下线前仍可继续调用。

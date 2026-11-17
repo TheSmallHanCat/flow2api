@@ -1260,9 +1260,9 @@ def _apply_current_flow_model_catalog():
 
     # Omni 1.2 Flash (upstream family key: macaron_cookie). Verified by a live
     # generation captured on 2026-11-08: YhhmEf with videoModelKey
-    # macaron_cookie_t2v_8s. 3s-10s cover landscape and portrait; 11s-15s are
-    # portrait-only in the upstream catalog.
-    for seconds in (3, 4, 5, 6, 7, 8, 9, 10):
+    # macaron_cookie_t2v_8s. Both orientations support 3s-15s; 11s-15s require
+    # a Google AI Plus, Pro, or Ultra subscription.
+    for seconds in range(3, 16):
         for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
             register(
                 f"omni-1.2-flash-{seconds}s-{orientation}",
@@ -1281,25 +1281,6 @@ def _apply_current_flow_model_catalog():
                 },
                 f"Omni 1.2 Flash · {seconds}s · {orientation}",
             )
-    for seconds in (11, 12, 13, 14, 15):
-        register(
-            f"omni-1.2-flash-{seconds}s-portrait",
-            {
-                "type": "video",
-                "video_type": "omni",
-                "model_key": f"macaron_cookie_t2v_{seconds}s",
-                "reference_model_key": f"macaron_cookie_r2v_{seconds}s",
-                "reference_duration": seconds,
-                "aspect_ratio": portrait,
-                "supports_images": True,
-                "min_images": 0,
-                "max_images": 3,
-                "use_v2_model_config": True,
-                "allow_tier_upgrade": False,
-            },
-            f"Omni 1.2 Flash · {seconds}s · portrait",
-        )
-
     # Current image-to-video and reference-video variants.
     for seconds, lite_key, fast_key, quality_key in (
         (

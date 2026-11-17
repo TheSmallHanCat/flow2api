@@ -2730,8 +2730,11 @@ class TokenBrowser:
         deadline = time.monotonic() + max(0.0, timeout_ms / 1000.0)
         last_error = None
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             try:
-                ready = await page.evaluate(probe)
+                ready = await asyncio.wait_for(page.evaluate(probe), timeout=remaining)
                 last_error = None
                 if ready:
                     return True
@@ -2741,12 +2744,13 @@ class TokenBrowser:
                     return False
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                if last_error:
-                    debug_logger.log_warning(
-                        f"[BrowserCaptcha] Token-{self.token_id} reCAPTCHA 就绪检测失败: {last_error}"
-                    )
-                return False
+                break
             await asyncio.sleep(min(0.25, remaining))
+        if last_error:
+            debug_logger.log_warning(
+                f"[BrowserCaptcha] Token-{self.token_id} reCAPTCHA 就绪检测失败: {last_error}"
+            )
+        return False
 
     async def _inject_recaptcha_script(
         self, page, url: str, *, timeout_ms: int = 15000
