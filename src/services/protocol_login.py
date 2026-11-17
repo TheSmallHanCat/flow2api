@@ -16,6 +16,7 @@ from .browser_cookie_utils import (
     cookie_pairs_for_url,
     normalize_cookie_storage_text,
     parse_browser_cookie_payload,
+    serialize_cookie_header_for_url,
     validate_flow_cookie_storage,
 )
 
@@ -156,12 +157,16 @@ class ProtocolLogin:
             session_kwargs["proxy"] = normalized_proxy
 
         try:
+            cookie_hdr = serialize_cookie_header_for_url(
+                google_cookies_raw, f"{FLOW_BASE}/projects"
+            )
+            req_headers = {"Referer": f"{FLOW_BASE}/"}
+            if cookie_hdr:
+                req_headers["Cookie"] = cookie_hdr
             async with AsyncSession(**session_kwargs) as session:
                 response = await session.get(
                     f"{FLOW_BASE}/projects",
-                    headers={
-                        "Referer": f"{FLOW_BASE}/",
-                    },
+                    headers=req_headers,
                 )
                 # The Python session jar only merges updates; a fresh snapshot also
                 # honors cookies deleted by Set-Cookie, including during redirects.

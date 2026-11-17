@@ -110,7 +110,12 @@ class ProtocolCookieRefreshTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(cookies["SID"]["hostOnly"])
         self.assertNotIn("deleted", cookies)
         self.assertEqual(factory.call_args.kwargs["proxy"], "http://127.0.0.1:7890")
-        self.assertNotIn("Cookie", session.get.call_args.kwargs["headers"])
+        # 续期请求必须显式带上浏览器会发的那份 Cookie 头：
+        # path=/project 的 deleted 不属于 /projects 的作用域，不应出现在这里。
+        self.assertEqual(
+            session.get.call_args.kwargs["headers"]["Cookie"],
+            "OSID=session-old; SID=account-cookie",
+        )
 
     async def test_anonymous_frontend_does_not_count_as_refresh(self):
         result, _, _ = await self.call_login(page="boq_labs-ai-sandbox-frontend_")
