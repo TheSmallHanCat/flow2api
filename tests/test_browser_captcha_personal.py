@@ -1008,5 +1008,90 @@ class BrowserCaptchaPersonalTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(getattr(connection, "_flow2api_send_patched", False))
 
 
+class PersonalCookieTargetTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def _flow_cookie_export():
+        return json.dumps(
+            [
+                {
+                    "name": "__Secure-OSID",
+                    "value": "osid-secure",
+                    "domain": "flow.google.com",
+                    "hostOnly": True,
+                    "path": "/",
+                    "secure": True,
+                },
+                {
+                    "name": "SID",
+                    "value": "sid",
+                    "domain": ".google.com",
+                    "hostOnly": False,
+                    "path": "/",
+                    "secure": True,
+                },
+            ]
+        )
+
+    @staticmethod
+    def _targets(cookies, name):
+        return sorted(
+            cookie.get("url") or cookie.get("domain")
+            for cookie in cookies
+            if cookie["name"] == name
+        )
+
+    def test_host_only_flow_cookie_is_injected_for_flow(self):
+        for builder in (
+            BrowserCaptchaService._build_personal_cookie_targets,
+            BrowserCaptchaService._build_configured_browser_cookie_targets,
+        ):
+            with self.subTest(builder=builder.__name__):
+                cookies = builder(self._flow_cookie_export())
+                self.assertIn(
+                    "https://flow.google.com/",
+                    self._targets(cookies, "__Secure-OSID"),
+                )
+                self.assertIn(".google.com", self._targets(cookies, "SID"))
+
+    def test_raw_cookie_header_reaches_flow_google_and_recaptcha(self):
+        cookies = BrowserCaptchaService._build_personal_cookie_targets("SID=sid")
+        self.assertEqual(
+            self._targets(cookies, "SID"),
+            [
+                "https://flow.google.com/",
+                "https://www.google.com/",
+                "https://www.recaptcha.net/",
+            ],
+        )
+        google_cookies = [
+            cookie
+            for cookie in cookies
+            if cookie["url"] != "https://flow.google.com/"
+        ]
+        self.assertTrue(all(c["sameSite"] == "None" for c in google_cookies))
+
+    async def test_warmup_initializes_browser_and_binds_project_token(self):
+        db = MagicMock()
+        db.get_project_by_id = AsyncMock(
+            side_effect=lambda pid: types.SimpleNamespace(token_id=7)
+            if pid == "p1"
+            else None
+        )
+        service = BrowserCaptchaService(db)
+        service.initialize = AsyncMock()
+        service._ensure_resident_tab = AsyncMock(
+            side_effect=[("slot-1", object()), ("slot-2", object())]
+        )
+
+        warmed = await service.warmup_resident_tabs(["p1", "p2"], limit=2)
+
+        self.assertEqual(warmed, ["slot-1", "slot-2"])
+        service.initialize.assert_awaited_once()
+        self.assertEqual(
+            [c.kwargs["token_id"] for c in service._ensure_resident_tab.await_args_list],
+            [7, None],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -86,6 +86,9 @@ PERSONAL_GOOGLE_FAMILY_COOKIE_MIRROR_URLS = (
     "https://www.google.com/",
     "https://www.recaptcha.net/",
 )
+PERSONAL_GOOGLE_FAMILY_COOKIE_MIRROR_HOSTS = frozenset(
+    urlparse(url).hostname for url in PERSONAL_GOOGLE_FAMILY_COOKIE_MIRROR_URLS
+)
 # Session cookie cache for computed captcha relay
 # Personal browser writes Google session cookies here after each successful solve.
 _recaptcha_session_cookies: Optional[Dict[str, str]] = None
@@ -6925,25 +6928,15 @@ class BrowserCaptchaService:
         )
 
     @classmethod
-    def _build_personal_cookie_targets(
-        cls, raw_cookie: Optional[str]
+    def _expand_google_family_cookie_targets(
+        cls, browser_cookies: list[Dict[str, Any]]
     ) -> list[Dict[str, Any]]:
-        """为 personal 内置浏览器构建 cookie 注入列表。
+        """将 Google 系 Cookie 以 `SameSite=None` 镜像到 google/recaptcha 目标。
 
-        说明：
-        - 原始 Cookie 头没有 domain 元数据时，直接扩展到 labs/google/recaptcha 三个目标。
-        - 即使 token.google_cookies 已经带有显式的 google.com 域，也额外镜像一份到
-          `www.recaptcha.net`，保证 enterprise reload 首轮请求也能命中 cookie。
-        - 对 Google/reCAPTCHA Cookie 强制使用 `SameSite=None`
-          场景下第三方 anchor/reload 请求继续丢 cookie。
+        以下 Cookie 保留原样注入：带显式 domain 的、非 Google 系的，以及仅作用于
+        镜像目标之外主机的 hostOnly Cookie（如 flow.google.com 的 OSID），
+        否则这些 Cookie 会在注入时丢失，导致 Flow 页面登录态失效。
         """
-        browser_cookies = build_browser_cookie_targets(
-            raw_cookie,
-            fallback_urls=list(PERSONAL_COOKIE_TARGET_URLS),
-        )
-        if not browser_cookies:
-            return []
-
         expanded: list[Dict[str, Any]] = []
         seen: set[str] = set()
 
@@ -6961,7 +6954,11 @@ class BrowserCaptchaService:
             explicit_domain = str(cookie.get("domain") or "").strip()
             google_family_scope = cls._is_google_family_cookie_host(scope_host)
 
-            if explicit_domain or not google_family_scope:
+            if (
+                explicit_domain
+                or not google_family_scope
+                or scope_host not in PERSONAL_GOOGLE_FAMILY_COOKIE_MIRROR_HOSTS
+            ):
                 append_cookie(cookie)
 
             if not google_family_scope:
@@ -6983,6 +6980,28 @@ class BrowserCaptchaService:
                 )
 
         return expanded
+
+    @classmethod
+    def _build_personal_cookie_targets(
+        cls, raw_cookie: Optional[str]
+    ) -> list[Dict[str, Any]]:
+        """为 personal 内置浏览器构建 cookie 注入列表。
+
+        说明：
+        - 原始 Cookie 头没有 domain 元数据时，直接扩展到 labs/google/recaptcha 三个目标。
+        - 即使 token.google_cookies 已经带有显式的 google.com 域，也额外镜像一份到
+          `www.recaptcha.net`，保证 enterprise reload 首轮请求也能命中 cookie。
+        - 对 Google/reCAPTCHA Cookie 强制使用 `SameSite=None`
+          场景下第三方 anchor/reload 请求继续丢 cookie。
+        """
+        browser_cookies = build_browser_cookie_targets(
+            raw_cookie,
+            fallback_urls=list(PERSONAL_COOKIE_TARGET_URLS),
+        )
+        if not browser_cookies:
+            return []
+
+        return cls._expand_google_family_cookie_targets(browser_cookies)
 
     def _get_configured_browser_startup_cookie_text(self) -> Optional[str]:
         if not bool(getattr(config, "browser_startup_cookie_enabled", False)):
@@ -7004,45 +7023,7 @@ class BrowserCaptchaService:
         if not browser_cookies:
             return []
 
-        expanded: list[Dict[str, Any]] = []
-        seen: set[str] = set()
-
-        def append_cookie(cookie: Dict[str, Any]) -> None:
-            stable_key = json.dumps(
-                cookie, ensure_ascii=True, sort_keys=True, separators=(",", ":")
-            )
-            if stable_key in seen:
-                return
-            seen.add(stable_key)
-            expanded.append(cookie)
-
-        for cookie in browser_cookies:
-            scope_host = cls._extract_cookie_scope_host(cookie)
-            explicit_domain = str(cookie.get("domain") or "").strip()
-            google_family_scope = cls._is_google_family_cookie_host(scope_host)
-
-            if explicit_domain or not google_family_scope:
-                append_cookie(cookie)
-
-            if not google_family_scope:
-                continue
-
-            mirrored_cookie = dict(cookie)
-            mirrored_cookie.pop("domain", None)
-            mirrored_cookie["path"] = (
-                str(mirrored_cookie.get("path") or "/").strip() or "/"
-            )
-            mirrored_cookie["sameSite"] = "None"
-            mirrored_cookie["secure"] = True
-            for target_url in PERSONAL_GOOGLE_FAMILY_COOKIE_MIRROR_URLS:
-                append_cookie(
-                    {
-                    **mirrored_cookie,
-                    "url": target_url,
-                    }
-                )
-
-        return expanded
+        return cls._expand_google_family_cookie_targets(browser_cookies)
 
     def _forget_token_affinity_for_slot_locked(
         self,
@@ -14135,13 +14116,17 @@ class BrowserCaptchaService:
         """
         if not project_ids:
             return []
+        await self.initialize()
         warmed: list[Optional[str]] = []
         for pid in project_ids:
             if len(warmed) >= limit:
                 break
             try:
+                # 预热需绑定项目所属 Token 的 Cookie，否则引导页会落到未登录页面
+                project = await self.db.get_project_by_id(pid)
                 _slot_id, _info = await self._ensure_resident_tab(
                     project_id=pid,
+                    token_id=project.token_id if project else None,
                     force_create=False,
                     return_slot_key=True,
                 )
